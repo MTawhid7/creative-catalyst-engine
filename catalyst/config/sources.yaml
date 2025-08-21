@@ -1,0 +1,98 @@
+# catalyst/config/sources.yaml
+# Master curated sources for the Creative Catalyst Engine.
+# A professional taxonomy of the fashion intelligence ecosystem.
+# Last Updated: 2025-08-20
+
+# --- Vector 1: Market Pulse ---
+# Sources for understanding the current state of the market, runways, and street style.
+
+market_pulse:
+  # Tier 1A: Top-tier global publications for runway reviews and industry news.
+  global_authorities:
+    - "Vogue Runway"
+    - "Business of Fashion"
+    - "WWD"
+    - "The Impression"
+    - "System Magazine"
+
+  # Tier 1B: Key regional publications for culturally-specific trends.
+  regional_authorities:
+    Southeast_Asia: ["Dewi Magazine (Indonesia)", "Harper's Bazaar Indonesia", "Vogue Singapore"]
+    East_Asia: ["Vogue Korea", "Vogue Japan", "Vogue China", "W Korea"]
+    South_Asia: ["Vogue India", "Elle India"]
+    Middle_East: ["Vogue Arabia", "Harper's Bazaar Arabia"]
+    Europe: ["Vogue France", "Vogue Italia", "Dazed", "i-D Magazine", "SHOWstudio"]
+    Latin_America: ["Vogue México y Latinoamérica", "Vogue Brasil"]
+    Africa: ["Nataal", "Vogue South Africa"]
+
+  # Tier 1C: Major global fashion weeks for show analysis.
+  fashion_weeks:
+    - "Paris Fashion Week"
+    - "Milan Fashion Week"
+    - "New York Fashion Week"
+    - "London Fashion Week"
+    - "Copenhagen Fashion Week"
+    - "Tokyo Fashion Week"
+    - "Seoul Fashion Week"
+
+  # Tier 1D: High-quality visual platforms for street style and mood board analysis.
+  visual_platforms:
+    - "Style Du Monde street style"
+    - "The Sartorialist"
+    - "Getty Images Fashion"
+    - "Pinterest Trends"
+    - "Behance Moodboards"
+
+  # Tier 1E: Youth culture and streetwear media.
+  youth_culture_media:
+    - "Highsnobiety"
+    - "Hypebeast"
+    - "SSENSE Editorial"
+    - "The Face"
+
+# --- Vector 2: Cultural Deep Dive ---
+# Sources for finding revolutionary inspiration outside the immediate fashion cycle.
+
+cultural_deep_dive:
+  # Tier 2A: Abstract concepts to spark non-linear creative thinking.
+  abstract_concepts:
+    - "contemporary art movements"
+    - "avant-garde architecture"
+    - "global music subcultures"
+    - "digital art and virtual worlds"
+    - "film and costume design history"
+    - "industrial design and material innovation"
+    - "biomimicry in design"
+
+  # Tier 2B: Institutional archives for deep historical research.
+  archives_and_museums:
+    - "The Costume Institute at The Met"
+    - "Victoria and Albert Museum Fashion Collection"
+    - "Kyoto Costume Institute"
+    - "The Museum at FIT"
+
+# --- Vector 3: Industry & Commercial Intelligence ---
+# Sources for grounding creative concepts in commercial reality.
+
+commercial_intelligence:
+  # Tier 3A: Professional trend forecasting and color authorities.
+  forecasting_agencies:
+    - "WGSN trend forecast"
+    - "Pantone Color Institute"
+    - "Peclers Paris"
+    - "Trend Union Li Edelkoort"
+
+  # Tier 3B: Business and market data sources.
+  market_data_sources:
+    - "McKinsey State of Fashion report"
+    - "Bain & Company luxury goods report"
+    - "Fashion Network business"
+    - "Statista fashion industry data"
+
+  # Tier 3C: Brand archetypes for targeted market analysis.
+  brand_archetypes:
+    Luxury_Houses: ["Hermès", "Chanel", "Loro Piana", "The Row"]
+    Italian_Luxury: ["Gucci", "Prada", "Bottega Veneta", "Fendi"]
+    Avant_Garde: ["Comme des Garçons", "Maison Margiela", "Yohji Yamamoto", "Rick Owens"]
+    Contemporary_It_Brands: ["Jacquemus", "Ganni", "Telfar", "Marine Serre"]
+    Streetwear_Pioneers: ["Supreme", "Off-White", "Fear of God", "A-COLD-WALL*"]

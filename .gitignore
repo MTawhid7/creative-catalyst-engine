@@ -1,0 +1,22 @@
+# Python virtual environment
+venv/
+*.venv
+.env
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# User-generated output files
+results/
+logs/
+
+# Database cache
+chroma_cache/
+
+# IDE and OS-specific files
+.idea/
+.vscode/
+.DS_Store

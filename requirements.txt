@@ -1,0 +1,24 @@
+# ===================================================================
+#  Creative Catalyst Engine - Python Dependencies
+# ===================================================================
+#
+# To install all dependencies, run the following command in your
+# activated virtual environment:
+# pip install -r requirements.txt
+#
+
+# --- Core AI & API Communication ---
+google-genai      # The official Python SDK for the Google Gemini API.
+pydantic          # For robust data modeling, validation, and settings management.
+
+# --- Configuration & Environment ---
+python-dotenv     # For loading environment variables from the .env file.
+PyYAML            # For parsing the sources.yaml configuration file.
+
+# --- Utilities ---
+requests          # For making simple, robust HTTP requests (used in the geolocation utility).
+python-json-logger # For creating structured, machine-readable JSON logs.
+
+
+# --- Vector Database Caching ---
+chromadb
