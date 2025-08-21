@@ -61,7 +61,7 @@ BRIEF_SCHEMA = [
 ]
 
 
-# --- (_deconstruct_passage_async and _validate_and_apply_defaults remain the same) ---
+# --- (_deconstruct_passage_async remains the same) ---
 async def _deconstruct_passage_async(user_passage: str) -> Optional[Dict]:
     """
     Uses a schema-driven prompt to deconstruct the user's passage into a structured dictionary.
@@ -130,8 +130,22 @@ def _validate_and_apply_defaults(extracted_data: Optional[Dict]) -> Optional[Dic
             "Spring/Summer" if 4 <= current_month <= 9 else "Fall/Winter"
         )
 
-    if final_brief.get("year") == "auto":
+    # --- START OF CORRECTION ---
+    # This block ensures the 'year' field is always an integer.
+    year_value = final_brief.get("year")
+    if year_value == "auto" or not year_value:
         final_brief["year"] = datetime.now().year
+    else:
+        try:
+            # Attempt to cast the extracted value to an integer.
+            final_brief["year"] = int(year_value)
+        except (ValueError, TypeError):
+            # If casting fails, log a warning and fall back to the current year.
+            logger.warning(
+                f"Could not parse '{year_value}' as a year. Defaulting to current year."
+            )
+            final_brief["year"] = datetime.now().year
+    # --- END OF CORRECTION ---
 
     for item in BRIEF_SCHEMA:
         if item.get("is_required") and not final_brief.get(item["name"]):
@@ -143,9 +157,7 @@ def _validate_and_apply_defaults(extracted_data: Optional[Dict]) -> Optional[Dic
     return final_brief
 
 
-# --- START OF NEW AND REFACTORED FUNCTIONS ---
-
-
+# --- (Remaining functions _get_enrichment_data_async, _parse_llm_creative_output, _enrich_brief_async, create_enriched_brief_async are unchanged) ---
 async def _get_enrichment_data_async(
     initial_prompt: str,
     correction_prompt_template: str,
@@ -218,7 +230,6 @@ def _parse_llm_creative_output(text: Optional[str], expected_key: str) -> Any:
         return cleaned_text
 
 
-# --- Main Function ---
 async def _enrich_brief_async(brief: Dict) -> Dict:
     """
     Expands the brief with AI-driven creative concepts, a strategic antagonist,
@@ -311,9 +322,6 @@ async def _enrich_brief_async(brief: Dict) -> Dict:
     )
 
     return brief
-
-
-# --- END OF NEW AND REFACTORED FUNCTIONS ---
 
 
 async def create_enriched_brief_async(user_passage: str) -> Optional[Dict]:

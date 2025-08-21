@@ -71,16 +71,20 @@ def _generate_image_prompts(report: FashionTrendReport) -> Dict[str, Any]:
     model_ethnicity = getattr(report, "target_model_ethnicity", "diverse")
 
     for piece in report.detailed_key_pieces:
-        main_fabric = (
-            piece.fabrics[0].material if piece.fabrics else "a high-quality fabric"
-        )
-        main_color = piece.colors[0].name if piece.colors else "a core color"
+        # --- START OF CORRECTION ---
+        # Correctly access elements from a simple list of strings, not a list of objects.
+        main_fabric = piece.fabrics[0] if piece.fabrics else "a high-quality fabric"
+        main_color = piece.colors[0] if piece.colors else "a core color"
+        # --- END OF CORRECTION ---
         silhouette = (
             piece.silhouettes[0] if piece.silhouettes else "a modern silhouette"
         )
 
-        color_names = ", ".join([c.name for c in piece.colors])
-        fabric_names = ", ".join([f.material for f in piece.fabrics])
+        # --- START OF CORRECTION ---
+        # Correctly join strings from a simple list.
+        color_names = ", ".join(piece.colors)
+        fabric_names = ", ".join(piece.fabrics)
+        # --- END OF CORRECTION ---
         details_trims = ", ".join(piece.details_trims)
 
         cultural_pattern = (

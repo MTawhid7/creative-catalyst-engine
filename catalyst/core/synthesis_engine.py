@@ -2,9 +2,10 @@
 The Synthesis Engine: The Creative Director AI for the Catalyst Engine.
 (Final version with a three-stage synthesis: Extract, Organize, Structure)
 """
-import re
+
 import json
 import asyncio
+import re
 from typing import Optional, Dict, List, Coroutine, Any
 
 from pydantic import BaseModel, ValidationError
@@ -16,13 +17,12 @@ from ..clients import gemini_client
 from ..prompts import prompt_library
 from ..models.trend_report import FashionTrendReport, KeyPieceDetail
 from ..services import reporting_service
-from ..utilities.logger import get_logger
+from ..utilities.logger import get_logger, get_run_id
 
 logger = get_logger(__name__)
 
 # --- Configuration Constants ---
-URL_PROCESSING_LIMIT = 20
-RPM_LIMIT = 10
+RPM_LIMIT = 10  # Flash model has a higher limit
 DELAY_BETWEEN_REQUESTS = 60 / RPM_LIMIT
 
 
@@ -35,46 +35,40 @@ async def _run_with_delay(coro: Coroutine, delay: float) -> Any:
 def _extract_section_from_context(
     context: str, start_keyword: str, end_keywords: List[str]
 ) -> str:
-    """
-    A robust helper to extract a specific section from the pre-structured text
-    using regular expressions.
-    """
-    # Create a pattern that looks for the start keyword and captures everything
-    # until it hits one of the end keywords or the end of the string.
+    """A robust helper to extract a specific section from the pre-structured text."""
     end_pattern = "|".join(re.escape(k) for k in end_keywords)
     pattern = re.compile(
         rf"{re.escape(start_keyword)}(.*?)(?={end_pattern}|$)",
         re.DOTALL | re.IGNORECASE,
     )
     match = pattern.search(context)
-    if match:
-        return match.group(1).strip()
-    return ""
+    return match.group(1).strip() if match else ""
 
 
-async def _extract_insights_from_urls_async(
-    brief: Dict, urls: List[str]
+async def _extract_insights_from_single_url_async(
+    brief: Dict, url: str
 ) -> Optional[str]:
-    """Stage 3a: Uses the Gemini 'url_context' tool to read a BATCH of URLs."""
-    if not urls:
-        return None
-    logger.info(f"Starting insight extraction task for {len(urls)} URLs...")
+    """
+    Stage 3a (Unit of Work): Uses the Gemini 'url_context' tool to read a SINGLE URL.
+    This provides maximum fault isolation.
+    """
+    logger.info(f"Starting insight extraction task for URL: {url[:80]}...")
     prompt = prompt_library.URL_INSIGHTS_EXTRACTION_PROMPT.format(
         theme_hint=brief.get("theme_hint", ""),
         garment_type=brief.get("garment_type", ""),
-        urls_list="\n".join(f"- {url}" for url in urls),
+        urls_list=f"- {url}",
     )
     tools = [types.Tool(url_context=types.UrlContext())]
     response = await gemini_client.generate_content_async(
         prompt_parts=[prompt], tools=tools
     )
     if response and response.get("text"):
-        logger.info(
-            f"Successfully extracted insights from a batch of {len(urls)} URLs."
-        )
+        logger.info(f"Successfully extracted insights from URL: {url[:80]}")
         return response["text"]
     else:
-        logger.error(f"Failed to extract insights from a batch of {len(urls)} URLs.")
+        logger.error(
+            f"Failed to extract insights from URL: {url[:80]}. It may have been blocked by safety filters."
+        )
         return None
 
 
@@ -102,15 +96,14 @@ async def _structure_report_divide_and_conquer_async(
     brief: Dict, research_context: str
 ) -> Optional[Dict]:
     """
-    The final, most robust structuring method. It divides the INPUT context for
-    each smaller, more reliable API call.
+    The final, most robust structuring method. It breaks the task into smaller,
+    more reliable API calls, each with a focused response schema.
     """
     logger.info("Starting the final 'divide and conquer' structuring process...")
     final_report = {}
 
     # --- STEP 1: Generate Top-Level Fields ---
     logger.info("Step 1: Generating top-level fields...")
-    # Extract only the relevant context for this step
     top_level_context = _extract_section_from_context(
         research_context, "Overarching Theme:", ["Accessories:", "Key Piece 1 Name:"]
     )
@@ -126,6 +119,7 @@ async def _structure_report_divide_and_conquer_async(
 
         top_level_response = await gemini_client.generate_content_async(
             prompt_parts=[top_level_prompt],
+            model_name=settings.GEMINI_MODEL_NAME,  # Use Flash for speed
             response_schema=TopLevelModel,
         )
         if top_level_response:
@@ -135,8 +129,7 @@ async def _structure_report_divide_and_conquer_async(
             logger.critical("Failed to generate top-level fields.")
             return None
     else:
-        logger.warning("Could not find top-level context in organized research.")
-        # Create empty fields so validation doesn't fail
+        logger.warning("Could not find top-level context. Using defaults.")
         final_report.update(
             {
                 "overarching_theme": brief.get("theme_hint", ""),
@@ -160,6 +153,7 @@ async def _structure_report_divide_and_conquer_async(
 
         accessories_response = await gemini_client.generate_content_async(
             prompt_parts=[accessories_prompt],
+            model_name=settings.GEMINI_MODEL_NAME,  # Use Flash for speed
             response_schema=AccessoriesModel,
         )
         if accessories_response:
@@ -171,7 +165,7 @@ async def _structure_report_divide_and_conquer_async(
             )
             final_report["accessories"] = {}
     else:
-        logger.warning("Could not find accessories context in organized research.")
+        logger.warning("Could not find accessories context.")
         final_report["accessories"] = {}
 
     # --- STEP 3: Generate Key Pieces Individually ---
@@ -189,9 +183,11 @@ async def _structure_report_divide_and_conquer_async(
             key_piece_prompt = prompt_library.KEY_PIECE_SYNTHESIS_PROMPT.format(
                 key_piece_context=section
             )
+
             piece_response = await gemini_client.generate_content_async(
                 prompt_parts=[key_piece_prompt],
                 response_schema=KeyPieceDetail,
+                model_name=settings.GEMINI_MODEL_NAME,  # Use Pro for the most complex part
             )
             if piece_response:
                 try:
@@ -210,14 +206,28 @@ async def _structure_report_divide_and_conquer_async(
 
     final_report["detailed_key_pieces"] = processed_pieces
 
-    # --- STEP 4: Add remaining boilerplate and brief-specific fields ---
+    # --- STEP 4: Add remaining boilerplate fields ---
     final_report["season"] = brief.get("season", "")
     final_report["year"] = brief.get("year", 0)
     final_report["region"] = brief.get("region", "Global")
     final_report["target_model_ethnicity"] = "Diverse"
     final_report["visual_analysis"] = []
 
-    # --- STEP 5: Final Validation of the Assembled Report ---
+    # --- START OF CORRECTION ---
+    # This block defensively checks if the 'accessories' field is a string.
+    # If it is, it parses the string as JSON, correcting the data type before final validation.
+    if "accessories" in final_report and isinstance(final_report["accessories"], str):
+        try:
+            logger.warning("Accessories field was a string. Attempting to parse JSON.")
+            final_report["accessories"] = json.loads(final_report["accessories"])
+        except json.JSONDecodeError:
+            logger.error(
+                "Failed to parse accessories string into a dictionary. Defaulting to empty."
+            )
+            final_report["accessories"] = {}
+    # --- END OF CORRECTION ---
+
+    # --- STEP 5: Final Validation ---
     try:
         FashionTrendReport.model_validate(final_report)
         logger.info("Successfully assembled and validated the final trend report.")
@@ -236,24 +246,19 @@ async def synthesize_report_async(
     """
     logger.info("Starting the creative synthesis process...")
 
-    # Stage 3a: Research & Insight Extraction
+    # Stage 3a: Research & Insight Extraction (Individual & Throttled)
     all_urls_to_process = [
         source["url"] for source in processed_sources if "url" in source
     ]
     extracted_insights = ""
     if all_urls_to_process:
-        url_batches = [
-            all_urls_to_process[i : i + URL_PROCESSING_LIMIT]
-            for i in range(0, len(all_urls_to_process), URL_PROCESSING_LIMIT)
-        ]
-        logger.info(
-            f"Processing {len(all_urls_to_process)} URLs in {len(url_batches)} batches."
-        )
+        logger.info(f"Processing {len(all_urls_to_process)} URLs individually.")
         logger.info(
             f"Pacing API calls to respect {RPM_LIMIT} RPM limit (1 call every {DELAY_BETWEEN_REQUESTS:.1f}s)."
         )
         extraction_coroutines = [
-            _extract_insights_from_urls_async(brief, batch) for batch in url_batches
+            _extract_insights_from_single_url_async(brief, url)
+            for url in all_urls_to_process
         ]
         delayed_tasks = [
             _run_with_delay(coro, i * DELAY_BETWEEN_REQUESTS)
@@ -264,10 +269,10 @@ async def synthesize_report_async(
         if successful_insights:
             extracted_insights = "\n\n---\n\n".join(successful_insights)
             logger.info(
-                f"Successfully combined insights from {len(successful_insights)} of {len(url_batches)} URL batches."
+                f"Successfully combined insights from {len(successful_insights)} of {len(all_urls_to_process)} URLs."
             )
         else:
-            logger.warning("All URL processing batches failed to return insights.")
+            logger.warning("All URL processing tasks failed to return insights.")
 
     # Combine with Cached Knowledge
     cached_summaries = []

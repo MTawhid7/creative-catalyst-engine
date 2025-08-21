@@ -259,8 +259,8 @@ _JSON_EXAMPLE_STRUCTURE = """
       "key_piece_name": "The Sculpted Parka", "description": "An oversized parka with clean lines.",
       "inspired_by_designers": ["Jil Sander", "Helmut Lang"], "wearer_profile": "The urban creative.",
       "cultural_patterns": [],
-      "fabrics": [{{"material": "Recycled Nylon", "texture": "Matte", "sustainable": true, "sustainability_comment": "Made from reclaimed ocean plastics."}}],
-      "colors": [{{"name": "Glacial Blue", "pantone_code": "14-4122 TCX", "hex_value": "#A2C4D1"}}],
+      "fabrics": ["Recycled Nylon", "Matte Cotton", "Technical Wool"],
+      "colors": ["Glacial Blue", "Charcoal Gray", "Off-White"],
       "silhouettes": ["Oversized", "A-Line"], "details_trims": ["Magnetic closures", "Waterproof zippers"],
       "suggested_pairings": ["Technical knit leggings", "Chunky sole boots"]
     }}

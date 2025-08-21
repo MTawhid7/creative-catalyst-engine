@@ -52,9 +52,9 @@ if not SEARCH_ENGINE_ID:
 # --- 3. LLM & Search Configuration ---
 # Tunable parameters for the AI and research engine.
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
-SEARCH_NUM_RESULTS = 5
+SEARCH_NUM_RESULTS = 2
 # Add a new setting to control the maximum number of search queries per run.
-MAX_QUERIES = 15
+MAX_QUERIES = 10
 
 # --- 4. Embedding & Caching Configuration ---
 # --- START OF CORRECTION ---

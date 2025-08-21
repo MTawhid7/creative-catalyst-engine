@@ -1,38 +1,14 @@
 """
 Pydantic Models for the Creative Catalyst Engine.
-(Final, generation-friendly version with complex constraints removed for API compatibility)
+(Final, simplified version for maximum generation reliability)
 """
 
 from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, ConfigDict
 
-# This strict configuration is still essential to prevent additional properties.
 strict_config = ConfigDict(extra="forbid")
 
-
-class ColorTrend(BaseModel):
-    model_config = strict_config
-    name: str = Field(..., description="The common name of the color.")
-    pantone_code: Optional[str] = Field(
-        None, description="The official Pantone TCX code."
-    )
-    hex_value: Optional[str] = Field(
-        None, description="The hexadecimal representation."
-    )
-
-
-class FabricTrend(BaseModel):
-    model_config = strict_config
-    material: str = Field(..., description="The base material of the fabric.")
-    texture: Optional[str] = Field(
-        None, description="The surface texture of the fabric."
-    )
-    sustainable: bool = Field(
-        ..., description="Indicates if the primary material is sustainable."
-    )
-    sustainability_comment: Optional[str] = Field(
-        None, description="An insightful comment on the fabric's sustainability."
-    )
+# --- REMOVED ColorTrend and FabricTrend classes ---
 
 
 class ImageAnalysis(BaseModel):
@@ -45,8 +21,10 @@ class ImageAnalysis(BaseModel):
     style_keywords: List[str] = Field(
         ..., description="Keywords describing the aesthetic."
     )
-    main_colors: List[ColorTrend] = Field(
-        ..., description="List of main colors detected."
+    # Simplified from a list of objects to a list of strings.
+    main_colors: List[str] = Field(
+        ...,
+        description="List of main colors detected (e.g., 'Glacial Blue', 'Matte Black').",
     )
     detected_fabrics: List[str] = Field(..., description="Inferred fabrics.")
     silhouette: str = Field(..., description="The overall shape and cut.")
@@ -65,15 +43,19 @@ class KeyPieceDetail(BaseModel):
         ..., description="A short description of the person who would wear this piece."
     )
     cultural_patterns: List[str] = Field(
-        default=[],
-        description="Specific cultural or heritage patterns identified for this piece (e.g., 'Batik', 'Tartan').",
+        default=[], description="Specific cultural or heritage patterns identified."
     )
-    fabrics: List[FabricTrend] = Field(
-        ..., description="Recommended fabrics for the piece."
+    # --- START OF CHANGE ---
+    # Simplified from a list of complex objects to a simple list of strings.
+    fabrics: List[str] = Field(
+        ...,
+        description="Recommended fabrics for the piece (e.g., 'Recycled Nylon', 'Matte Cotton').",
     )
-    colors: List[ColorTrend] = Field(
-        ..., description="Curated list of suitable colors."
+    colors: List[str] = Field(
+        ...,
+        description="Curated list of suitable colors (e.g., 'Glacial Blue', 'Charcoal Gray').",
     )
+    # --- END OF CHANGE ---
     silhouettes: List[str] = Field(..., description="Specific cuts and shapes.")
     details_trims: List[str] = Field(
         ..., description="Specific design details or trims."
@@ -91,8 +73,7 @@ class FashionTrendReport(BaseModel):
         None, description="The geographical region for the trend report."
     )
     target_model_ethnicity: str = Field(
-        ...,
-        description="The appropriate model ethnicity for the target region (e.g., 'Indonesian or Southeast Asian').",
+        ..., description="The appropriate model ethnicity for the target region."
     )
     overarching_theme: str = Field(
         ..., description="The high-level, evocative theme of the collection."
@@ -104,14 +85,11 @@ class FashionTrendReport(BaseModel):
         ..., description="Style icons or archetypes who embody the trend."
     )
     accessories: Dict[str, List[str]] = Field(
-        ...,
-        description="Key accessories grouped by category (Bags, Footwear, Jewelry, Other).",
+        ..., description="Key accessories grouped by category."
     )
     detailed_key_pieces: List[KeyPieceDetail] = Field(
-        ...,
-        description="A detailed breakdown of each of the core garments in the collection.",
+        ..., description="A detailed breakdown of each of the core garments."
     )
     visual_analysis: List[ImageAnalysis] = Field(
-        default=[],
-        description="Structured analysis of key inspirational images found during research.",
+        default=[], description="Structured analysis of key inspirational images."
     )
