@@ -1,49 +1,44 @@
 """
 Configures a centralized, structured logger for the application.
-This logger is designed for deep observability, writing JSON logs that
-include rich contextual information for easier debugging and monitoring.
+This logger is designed for deep observability and improved readability.
 """
 
 import logging
 import logging.config
 import sys
-import uuid
 import threading
-
-from pythonjsonlogger import jsonlogger
 from .. import settings
 
-# --- Thread-safe context for storing the run_id ---
-# This is the professional way to handle request-specific context.
+# Thread-safe context for storing the run_id.
 log_context = threading.local()
 
 
 class ContextFilter(logging.Filter):
-    """A filter to add a unique run_id from the thread-local context to every log record."""
+    """A filter to add a unique run_id from the thread-local context."""
 
     def filter(self, record):
-        # Get the run_id from our thread-safe context, with a fallback.
-        record.run_id = getattr(log_context, "run_id", "no-run-id")
+        record.run_id = getattr(
+            log_context, "run_id", "init"
+        )  # Use 'init' for pre-run logs
         return True
 
 
-# --- Structured Logging Configuration ---
+# --- START OF LOGGING REFACTOR ---
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
     "filters": {
-        "context_filter": {
-            "()": ContextFilter,
-        },
+        "context_filter": {"()": ContextFilter},
     },
     "formatters": {
         "json_formatter": {
             "class": "pythonjsonlogger.jsonlogger.JsonFormatter",
             "format": "%(asctime)s %(levelname)s %(name)s %(funcName)s %(lineno)d %(run_id)s %(message)s",
         },
+        # New, cleaner console formatter
         "console_formatter": {
-            "format": "%(asctime)s - %(levelname)s - [%(name)s:%(lineno)d] (%(run_id)s) - %(message)s",
-            "datefmt": "%Y-%m-%d %H:%M:%S",
+            "format": "%(asctime)s | %(levelname)-8s | [%(run_id)s] %(name)s:%(lineno)d - %(message)s",
+            "datefmt": "%H:%M:%S",
         },
     },
     "handlers": {
@@ -56,7 +51,7 @@ LOGGING_CONFIG = {
         "file_json": {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": settings.LOG_FILE_PATH,
-            "maxBytes": 1024 * 1024 * 5,  # 5 MB
+            "maxBytes": 1024 * 1024 * 5,
             "backupCount": 5,
             "formatter": "json_formatter",
             "filters": ["context_filter"],
@@ -67,6 +62,13 @@ LOGGING_CONFIG = {
         "handlers": ["console", "file_json"],
     },
 }
+# --- END OF LOGGING REFACTOR ---
+
+
+def setup_logging_run_id(run_id: str):
+    """Sets the unique run_id for the current application run."""
+    log_context.run_id = run_id
+
 
 # Apply the configuration
 logging.config.dictConfig(LOGGING_CONFIG)
@@ -77,25 +79,13 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
-def setup_logging_run_id():
-    """Generates and sets a unique run_id for the current application run."""
-    # Generate a short, unique ID for this run.
-    run_id = str(uuid.uuid4()).split("-")[0]
-    # Set the run_id on our thread-safe context.
-    log_context.run_id = run_id
-    return run_id
-
-
-# --- START OF CHANGE ---
+# --- START OF FIX ---
 def get_run_id() -> str:
-    """
-    Safely retrieves the current run_id from the thread-local context.
-    Provides a fallback if the run_id is not set.
-    """
-    return getattr(log_context, "run_id", "no-run-id")
+    """Safely retrieves the current run_id from the thread-local context."""
+    return getattr(log_context, "run_id", "no-id-set")
 
 
-# --- END OF CHANGE ---
+# --- END OF FIX ---
 
-# A central logger instance for general use if needed, though get_logger is preferred
+# (The module-level logger for main.py remains)
 logger = get_logger(__name__)

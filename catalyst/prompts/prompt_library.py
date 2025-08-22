@@ -113,6 +113,47 @@ JSON OUTPUT EXAMPLE:
 
 # --- Stage 3 & 4 Prompts ---
 
+WEB_RESEARCH_PROMPT = """
+You are a world-class fashion research assistant. Your primary task is to perform a comprehensive web search based on the provided creative brief and synthesize your findings into a single, detailed, unstructured text block.
+
+**CRITICAL INSTRUCTIONS:**
+1.  **Perform a Deep Web Search:** Use your built-in search tools to find the most current and relevant articles, runway analyses, interviews, and cultural discussions related to the key concepts in the brief.
+2.  **Synthesize, Do Not List:** Do not simply list URLs or snippets. Synthesize all the information you find into a cohesive, well-organized, and comprehensive summary.
+3.  **Unstructured Text Output:** Your final output MUST be ONLY the detailed text block. Do not use JSON or Markdown headings. The text should be rich with details on themes, concepts, colors, fabrics, silhouettes, and designers.
+4.  **Handle Failure:** If you cannot find information on a specific concept, note it and move on. Do not let a single failed search stop you from providing a summary of what you *did* find.
+
+---
+**CREATIVE BRIEF TO RESEARCH:**
+- **Core Theme:** {theme_hint}
+- **Garment Type:** {garment_type}
+- **Key Search Concepts:** {search_keywords}
+---
+
+**SYNTHESIZED RESEARCH SUMMARY:**
+"""
+
+WEB_CORPUS_SYNTHESIS_PROMPT = """
+You are the Director of Strategy for 'The Future of Fashion'. Your primary task is to generate a complete, comprehensive, and data-rich fashion trend report in a structured JSON format.
+
+**CRITICAL INSTRUCTIONS:**
+1.  **Perform a Web Search:** You MUST perform a comprehensive web search using your built-in tools based on the concepts in the Creative Brief. Your goal is to find the most current and relevant articles, runway analyses, and cultural discussions.
+2.  **Synthesize and Enrich:** Do not just copy information. You MUST synthesize the data you find from the web with your own extensive pre-trained knowledge of fashion history, textile science, and color theory. Where the web provides incomplete data (e.g., a fabric name without a texture), you must enrich it with your own logical and creative insights.
+3.  **Strict JSON Output:** Your final output MUST be ONLY the single, valid JSON object that conforms to the provided `response_schema`. Do not include any other text, markdown, or explanations.
+4.  **Garment Generation Rule:** {garment_generation_instruction}
+
+---
+**CREATIVE BRIEF:**
+- **Core Theme:** {theme_hint}
+- **Garment Type:** {garment_type}
+- **Target Audience:** {target_audience}
+- **Season:** {season} {year}
+- **Creative Antagonist (for inspiration):** {creative_antagonist}
+- **Key Search Concepts:** {search_keywords}
+---
+
+Based on your web research and internal knowledge, generate the single, valid JSON object for the report.
+"""
+
 URL_INSIGHTS_EXTRACTION_PROMPT = """
 You are a world-class fashion research assistant. Your task is to analyze the content of the provided URLs and synthesize a comprehensive, unstructured summary of all key findings related to the creative brief.
 **CREATIVE BRIEF:**
@@ -125,6 +166,15 @@ You are a world-class fashion research assistant. Your task is to analyze the co
 **CURATED URLS FOR ANALYSIS:**
 {urls_list}
 **SYNTHESIZED RESEARCH SUMMARY:**
+"""
+
+NARRATIVE_SETTING_PROMPT = """
+You are a world-class art director and storyteller. Based on the following core concepts, write a single, evocative paragraph describing the ideal setting for a fashion editorial photoshoot. The setting must tell the story of the collection's theme.
+
+- Overarching Theme: {overarching_theme}
+- Cultural Drivers: {cultural_drivers}
+
+The response MUST be a single paragraph of text. Do not use JSON. Describe the lighting, the environment, and the mood.
 """
 
 # --- START OF CORRECTION ---
@@ -179,25 +229,32 @@ Now, generate the JSON object based on the research.
 """
 
 KEY_PIECE_SYNTHESIS_PROMPT = """
-You are a fashion data analyst. Your task is to extract the details for a single fashion garment from the provided text and structure it as a valid JSON object.
+You are a fashion data analyst and creative consultant. Your task is to extract and enrich the details for a single fashion garment from the provided text and structure it as a valid JSON object.
 
 **CRITICAL RULES:**
-- You MUST use the exact field names and data types from the JSON OUTPUT EXAMPLE.
-- The output MUST be ONLY the single, valid JSON object for this one key piece.
+1.  You MUST use the exact field names and data types from the JSON OUTPUT EXAMPLE.
+2.  **Analyze and Enrich:** If the context lacks specific details (e.g., fabric textures, Pantone/HEX codes), you MUST use your internal knowledge of fashion, textile science, and color theory to provide creative, insightful, and relevant suggestions that fit the theme.
+3.  The output MUST be ONLY the single, valid JSON object for this one key piece.
 
 --- KEY PIECE CONTEXT ---
 {key_piece_context}
 ---
 
---- JSON OUTPUT EXAMPLE ---
+--- JSON OUTPUT EXAMPLE (Structure to Follow) ---
 {{
   "key_piece_name": "The Sculpted Parka",
-  "description": "An oversized parka with clean lines.",
+  "description": "An oversized parka with clean lines that embodies quiet strength.",
   "inspired_by_designers": ["Jil Sander", "Helmut Lang"],
-  "wearer_profile": "The urban creative.",
+  "wearer_profile": "The urban creative who values form and function.",
   "cultural_patterns": [],
-  "fabrics": [{{"material": "Recycled Nylon", "texture": "Matte", "sustainable": true, "sustainability_comment": "Made from reclaimed ocean plastics."}}],
-  "colors": [{{"name": "Glacial Blue", "pantone_code": "14-4122 TCX", "hex_value": "#A2C4D1"}}],
+  "fabrics": [
+    {{"material": "Recycled Nylon", "texture": "Matte", "sustainable": true}},
+    {{"material": "Technical Wool", "texture": "Brushed", "sustainable": true}}
+  ],
+  "colors": [
+    {{"name": "Glacial Blue", "pantone_code": "14-4122 TCX", "hex_value": "#A2C4D1"}},
+    {{"name": "Charcoal Gray", "pantone_code": "18-0601 TCX", "hex_value": "#5B5E5E"}}
+  ],
   "silhouettes": ["Oversized", "A-Line"],
   "details_trims": ["Magnetic closures", "Waterproof zippers"],
   "suggested_pairings": ["Technical knit leggings", "Chunky sole boots"]
@@ -208,12 +265,14 @@ Now, generate the JSON object for the key piece described in the context.
 """
 
 STRUCTURING_PREP_PROMPT = """
-You are a data structuring analyst. Your task is to take a creative brief and a large, unstructured block of research text and organize the key findings into a clean, bulleted list. The headings for the list MUST match the sections of the final report.
+You are a data structuring analyst. Your task is to take a creative brief and a large, unstructured block of research text and organize the key findings into a clean, bulleted list.
+
 **YOUR PROCESS:**
 1.  Read the Creative Brief to understand the core goals.
 2.  Read the Synthesized Research Context to identify all key details.
-3.  Organize the extracted details under the following specific headings.
-4.  For each "Key Piece", create a separate section (e.g., Key Piece 1, Key Piece 2).
+3.  Organize the extracted details under the specific headings provided below.
+4.  **Garment Generation Rule:** {garment_generation_instruction}
+
 ---
 **CREATIVE BRIEF:**
 - **Theme:** {theme_hint}
@@ -245,7 +304,7 @@ You are a data structuring analyst. Your task is to take a creative brief and a 
 - **Silhouettes:** [List of silhouettes]
 - **Details & Trims:** [List of details]
 - **Suggested Pairings:** [List of pairings]
-(Continue for all identified key pieces)
+(Continue for all identified key pieces based on the Garment Generation Rule)
 """
 
 _JSON_EXAMPLE_STRUCTURE = """
@@ -321,41 +380,93 @@ Now, provide only the corrected, valid JSON object.
 """
 )
 
-# --- Phase 4: Image Prompt Generation Templates (UPGRADED) ---
+_JSON_EXAMPLE_FOR_DIRECT_KNOWLEDGE = """
+{
+  "season": "Fall/Winter", "year": 2026, "region": "Global",
+  "target_model_ethnicity": "Diverse",
+  "narrative_setting_description": "An ancient, misty forest with towering, moss-covered stones. The air is cool and silent, with soft, diffused light filtering through the canopy. The mood is one of timeless mystery and quiet strength.",
+  "overarching_theme": "Example: Goblincore Mysticism",
+  "cultural_drivers": ["Example: Return to Nature", "Example: Anti-Perfectionism"],
+  "influential_models": ["Example: Lord of the Rings Elves", "Example: Pre-Raphaelite paintings"],
+  "accessories": {"Bags": ["Worn leather pouches"], "Footwear": ["Soft, moss-colored boots"], "Jewelry": ["Silver amulets with unpolished stones"]},
+  "detailed_key_pieces": [
+    {
+      "key_piece_name": "The Moss-Stitched Cloak", "description": "A heavy, flowing cloak made from textured, organic materials.",
+      "inspired_by_designers": ["Rick Owens", "Yohji Yamamoto"], "wearer_profile": "The modern druid.",
+      "cultural_patterns": [],
+      "fabrics": [{"material": "Brushed Wool", "texture": "Felted", "sustainable": true}],
+      "colors": [{"name": "Forest Floor Brown", "pantone_code": "19-1118 TCX", "hex_value": "#5B4D3D"}],
+      "silhouettes": ["Asymmetrical", "Draped"], "details_trims": ["Raw edges", "Antler toggles"],
+      "suggested_pairings": ["Linen trousers", "Leather accessories"]
+    }
+  ],
+  "visual_analysis": []
+}
+"""
+
+# This prompt uses .format() and includes a JSON example, so it MUST be a regular string.
+DIRECT_KNOWLEDGE_SYNTHESIS_PROMPT = (
+    """
+You are the Director of Strategy for 'The Future of Fashion'. Your task is to generate a complete, comprehensive fashion trend report based solely on the provided creative brief and your own extensive internal knowledge. Do not use any external tools. You must create the entire JSON object in one single response.
+
+**CRITICAL RULES:**
+- You MUST rely entirely on your pre-trained knowledge of fashion history, cultural trends, textile science, and color theory.
+- You MUST use the exact field names and data types as defined in the `response_schema`.
+- You MUST follow the structure of the JSON example.
+- You MUST provide a value for every required field, inventing creative and relevant details where necessary.
+
+---
+**CREATIVE BRIEF:**
+- **Core Theme:** {theme_hint}
+- **Garment Type:** {garment_type}
+- **Target Audience:** {target_audience}
+- **Season:** {season} {year}
+- **Creative Antagonist (for inspiration):** {creative_antagonist}
+---
+--- JSON OUTPUT EXAMPLE (Structure to Follow) ---
+"""
+    + _JSON_EXAMPLE_FOR_DIRECT_KNOWLEDGE
+    + """
+---
+Based on the **CREATIVE BRIEF** and your internal knowledge, generate a single, valid JSON object.
+"""
+)
+
+# --- Phase 4: UPGRADED Image Prompt Generation Templates ---
+
+# This template now focuses on the broader story and tangible elements.
 INSPIRATION_BOARD_PROMPT_TEMPLATE = """
 Create a hyper-detailed, atmospheric flat lay of a professional fashion designer's physical inspiration board. The board must be a sophisticated blend of historical research and contemporary market awareness.
 
 **Core Concept:**
 - Theme: '{theme}'
-- Aesthetic Focus: The conceptual idea of a '{key_piece_name}'
-- Muse: The style of {model_style}
-
-**Regional & Cultural Elements (CRITICAL):**
-- This collection is for the '{region}' market. The board MUST include specific, authentic visual references to this region, such as: {regional_context}
+- Aesthetic Focus: The conceptual idea of a '{key_piece_name}' that embodies the idea of '{description_snippet}'
+- Muse / Archetype: The style of {model_style}
 
 **Core Color Story:**
 - The board features a clear and intentional color palette, represented by neatly pinned Pantone-style color chips for: {color_names}.
 
 **Composition & Included Items:**
-The board is an artfully arranged collage that juxtaposes historical and modern elements. It MUST include a mix of the following:
-1.  **Archival & Textural Layer:** Torn pages from vintage art books, faded historical photographs, rough charcoal sketches of garment details (collars, seams), and handwritten notes on aged paper.
-2.  **Modern Context Layer:** High-quality, candid street style photos from '{region}', glossy tear sheets from contemporary fashion magazines (like Vogue Korea or Ginza Magazine if relevant), and screenshots of modern digital art that reflect the theme.
-3.  **Material Layer:** Physical, tactile swatches of key fabrics like {fabric_names} with frayed edges, alongside close-up photos of specific hardware, trims, or embroidery techniques.
+The board is an artfully arranged collage that MUST include a mix of the following:
+1.  **Archival & Textural Layer:** Torn pages from vintage art books, faded historical photographs, rough charcoal sketches of garment details (collars, seams), and handwritten notes.
+2.  **Modern Context Layer:** High-quality, candid street style photos, glossy tear sheets from contemporary fashion magazines, and screenshots of modern digital art that reflect the theme.
+3.  **Material Layer:** Physical, tactile swatches of key fabrics like {fabric_names} with frayed edges, alongside close-up photos of specific hardware or trims.
 
 **Overall Mood:**
-A dynamic synthesis of old and new. Tactile, authentic, intellectual, culturally-aware, contemporary, and cinematic.
+Tactile, authentic, intellectual, culturally-aware, contemporary, and cinematic.
 
 **Style:**
 Ultra-realistic photograph, top-down perspective, shot on a Hasselblad camera, soft but dramatic lighting with deep shadows, extreme detail, 8k.
 """
 
+# This template remains focused on the specifics of the garment.
 MOOD_BOARD_PROMPT_TEMPLATE = """
 Create a professional fashion designer's mood board, meticulously organized on a raw concrete or linen surface. The board must be a sophisticated and focused tool for defining a specific garment.
 
-**Focus:** Defining the materials, details, and styling for a '{key_piece_name}' for the '{region}' market.
+**Focus:** Defining the materials, details, and styling for a '{key_piece_name}'.
 
 **1. Material & Color Story:**
-- **Fabric Swatches:** The board features hyper-realistic, neatly cut physical fabric swatches of: {fabric_names}. The texture and drape must be clearly visible. MUST include a prominent swatch of '{culturally_specific_fabric}' to anchor the regional identity.
+- **Fabric Swatches:** The board features hyper-realistic, neatly cut physical fabric swatches of: {fabric_names}. The texture and drape must be clearly visible.
 - **Color Palette:** A focused color story is arranged with official Pantone-style color chips for: {color_names}.
 
 **2. Detail & Craftsmanship:**
@@ -364,31 +475,26 @@ Create a professional fashion designer's mood board, meticulously organized on a
 **3. Styling & Accessories:**
 - **Key Accessories:** The board MUST feature 2-3 key physical accessories or high-quality photos of them, such as: {key_accessories}. This provides essential styling context.
 
-**4. Cultural & Demographic Context:**
-- **Contextual Images:** To ground the design in its target market, the board MUST include 2-3 smaller, high-quality photographs: a candid street style photo of a young, stylish woman in '{region}', and a close-up of a relevant cultural motif like '{regional_context}'.
-
 **Style:**
 Professional studio photography, top-down view (flat lay), soft and diffused lighting, extreme detail, macro photography, 8k.
 """
 
+# --- THIS IS THE MOST IMPORTANT UPGRADE ---
+# It now uses the narrative setting and enriched description.
 FINAL_GARMENT_PROMPT_TEMPLATE = """
-Full-body editorial fashion photograph for a Vogue Arabia or a high-end Indonesian fashion magazine lookbook.
+Full-body editorial fashion photograph for a high-end fashion magazine lookbook.
 
-**Model:**
-- A young, professional {model_ethnicity} runway model with the confident, elegant, and stylish presence of {model_style}.
-
-**Garment & Cultural Integration:**
-- The model is wearing a stunning '{main_color} {key_piece_name}' crafted from hyper-realistic {main_fabric}.
-- **CRITICAL:** Key parts of the garment, such as the sleeves, bodice, or trim, MUST be adorned with a subtle, elegant, tone-on-tone '{cultural_pattern}' pattern, reflecting the design heritage of the region.
-- **CRITICAL:** The design strictly adheres to modern modest fashion principles, featuring a high, elegant neckline (no plunging V-necks or shoulder cutouts) and full-length, non-transparent sleeves.
+**Model & Garment:**
+- A professional runway model with the confident, elegant, and stylish presence of {model_style}.
+- The model is wearing the '{key_piece_name}', a stunning garment that embodies the concept of '{description_snippet}'. It is crafted from hyper-realistic {main_fabric} in a rich '{main_color}'.
 
 **Silhouette & Details:**
-- The silhouette is a modern '{silhouette}', subtly influenced by traditional '{region}' garments.
+- The silhouette is a modern '{silhouette}'.
 - Macro details are visible, showcasing the exquisite craftsmanship, such as: {details_trims}.
 
 **Pose & Setting:**
-- The model has a confident, poised, and powerful pose.
-- Setting: Shot in a minimalist, contemporary architectural setting with dramatic natural light and soft shadows.
+- The model has a confident, poised, and powerful pose that complements the environment.
+- **Setting:** {narrative_setting}
 
 **Style:**
 - Cinematic fashion photography, shot on a 50mm lens, hyper-detailed, professional color grading, 8k.

@@ -1,28 +1,26 @@
 """
 The Main Entry Point for the Creative Catalyst Engine.
 
-This file serves as the single, user-facing entry point to run the application.
-It is responsible for:
-1.  Setting up the structured, traceable logging for the run.
-2.  Capturing the user's high-level creative request.
-3.  Initiating the main creative workflow via the orchestrator.
-4.  Logging the final outcome and total execution time.
+This file initializes the pipeline, creates the RunContext, and starts the
+orchestrator to execute the end-to-end workflow.
 """
 
 import asyncio
 import time
 
-# Import the high-level orchestrator and the logger setup utility
-from .services import orchestrator
+from . import settings
+from .context import RunContext
+from .pipeline.orchestrator import PipelineOrchestrator
 from .utilities.logger import get_logger, setup_logging_run_id
 
-# Initialize a logger specific to this main module
+# --- START OF FIX ---
+# Initialize the logger at the module level, as recommended for best practice.
+# This makes it available for the top-level exception handler.
+# It will initially log with the default 'init' run_id.
 logger = get_logger(__name__)
+# --- END OF FIX ---
 
-# --- USER INTERFACE: The Natural Language Brief -----------------------------
 # This is the single point of interaction for the user.
-# The user provides a high-level creative goal in natural language.
-# The system's "Intelligent Brief" engine will handle the rest.
 USER_PASSAGE = """
 I need to design a collection of women's outerwear for Fall/Winter 2026.
 The core theme is 'Arctic Minimalism', inspired by the stark beauty of polar landscapes
@@ -30,47 +28,42 @@ and the functional design of Inuit clothing. The brand category is luxury, and t
 target audience is a sophisticated, urban consumer who values both style and sustainability.
 """
 
-# --- Main Application Logic --------------------------------------------------
-
 
 async def main():
-    """The main asynchronous function that orchestrates the application run."""
+    """The main asynchronous function that sets up and runs the pipeline."""
 
-    # --- 1. Setup Logging ---
-    # This is the very first step. It generates a unique ID for this specific run,
-    # which will be attached to every log message for easy tracing.
-    run_id = setup_logging_run_id()
+    # 1. Create the RunContext to hold all data for this run
+    context = RunContext(user_passage=USER_PASSAGE, results_dir=settings.RESULTS_DIR)
 
-    logger.info(f"================== RUN ID: {run_id} ==================")
+    # 2. Setup the logging context IMMEDIATELY. After this line, all subsequent
+    #    logs from our module-level 'logger' will correctly use the run_id.
+    setup_logging_run_id(context.run_id)
+
+    logger.info("================== RUN ID: %s ==================", context.run_id)
     logger.info("      CREATIVE CATALYST ENGINE - PROCESS STARTED         ")
     logger.info("=========================================================")
 
+    # 3. Instantiate the orchestrator.
+    orchestrator = PipelineOrchestrator()
+
+    # 4. Run the orchestrator's main process
     start_time = time.time()
+    await orchestrator.run(context)
+    duration = time.time() - start_time
 
-    try:
-        # --- 2. Initiate the Workflow ---
-        # The main entry point calls the high-level 'run' function in the orchestrator,
-        # passing the raw user passage. All complexity is handled by the services.
-        await orchestrator.run(USER_PASSAGE)
-
-    except Exception as e:
-        # This is a final safety net. The orchestrator should handle its own
-        # errors, but this will catch any truly catastrophic, unhandled failures.
-        logger.critical(
-            "A critical, unhandled error propagated up to the main entry point.",
-            exc_info=True,
-        )
-    finally:
-        # --- 3. Log Final Outcome ---
-        duration = time.time() - start_time
-        logger.info("=========================================================")
-        logger.info(f"      CREATIVE PROCESS FINISHED in {duration:.2f} seconds")
-        logger.info(f"================== END RUN ID: {run_id} ==================")
+    logger.info("=========================================================")
+    logger.info("      CREATIVE PROCESS FINISHED in %.2f seconds", duration)
+    logger.info("================== END RUN ID: %s ==================", context.run_id)
 
 
 if __name__ == "__main__":
-    # Standard, robust way to run the main async function.
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Process interrupted by user.")
+    except Exception as e:
+        # The module-level logger is now available to catch any catastrophic
+        # failures that happen during the asyncio.run() call itself.
+        logger.critical(
+            "A top-level, unhandled exception occurred: %s", e, exc_info=True
+        )

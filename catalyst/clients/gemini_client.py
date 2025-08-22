@@ -296,12 +296,13 @@ def _generate_content_sync(
 ) -> Optional[Dict]:
     """
     The core synchronous function that makes the actual API call with retry logic.
+    This version is enhanced to treat empty responses as retryable, transient errors.
     """
     if not client:
         logger.error("Cannot generate content: Gemini client is not configured.")
         return None
 
-    # Build the safety settings using the correct enum values
+    # (Safety settings and config params setup remains the same)
     safety_settings = [
         types.SafetySetting(
             category=HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -320,27 +321,19 @@ def _generate_content_sync(
             threshold=HarmBlockThreshold.BLOCK_NONE,
         ),
     ]
+    config_params = {"temperature": 0.2, "safety_settings": safety_settings}
 
-    # Build the generation config
-    config_params = {
-        "temperature": 0.2,
-        "safety_settings": safety_settings,
-    }
-
-    # Process response schema if provided
     processed_schema = None
     if response_schema:
         processed_schema = _process_response_schema(response_schema)
         if processed_schema:
             config_params["response_mime_type"] = "application/json"
             config_params["response_schema"] = processed_schema
-            logger.info("Successfully processed response schema for Gemini API")
         else:
             logger.warning(
-                "Failed to process response schema, continuing without structured output"
+                "Failed to process schema, continuing without structured output"
             )
 
-    # Add tools if provided
     if tools:
         config_params["tools"] = tools
 
@@ -348,73 +341,63 @@ def _generate_content_sync(
 
     for attempt in range(5):
         try:
-            # Use the client.models.generate_content method
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt_parts,
                 config=generation_config,
             )
 
+            # --- START OF FIX ---
+            # Treat an empty response body as a transient, retryable error.
             if not hasattr(response, "text") or response.text is None:
-                raise RuntimeError(
-                    "Empty or invalid response from API (missing text part)"
+                logger.warning(
+                    f"Attempt {attempt+1}: API call to {model_name} returned an empty response. Retrying..."
                 )
+                # By continuing, we allow the backoff delay to trigger before the next attempt.
+                time.sleep(_calculate_backoff_delay(attempt))
+                continue
+            # --- END OF FIX ---
 
             response_text = response.text.strip()
             if not response_text:
-                raise RuntimeError("Empty response text from API")
+                logger.warning(
+                    f"Attempt {attempt+1}: API call to {model_name} returned empty text content. Retrying..."
+                )
+                time.sleep(_calculate_backoff_delay(attempt))
+                continue
 
             logger.info(f"Successfully received response from model: {model_name}")
 
-            # This logic works for both Pydantic models and dicts
             if response_schema and processed_schema:
-                # Clean up any markdown formatting
                 if response_text.startswith("```json"):
-                    response_text = response_text[7:]
-                if response_text.endswith("```"):
-                    response_text = response_text[:-3]
-
+                    response_text = response_text[7:-3].strip()
                 try:
                     return json.loads(response_text)
                 except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse JSON response: {e}")
-                    logger.debug(f"Raw response: {response_text}")
+                    logger.error(
+                        f"Failed to parse JSON response: {e}",
+                        extra={"raw_response": response_text},
+                    )
                     return None
             else:
                 return {"text": response_text}
 
-        except ValueError as e:
-            error_msg = str(e)
-            if "additional_properties parameter is not supported" in error_msg:
-                logger.error(
-                    f"Schema compatibility error: {error_msg}. "
-                    f"This should not happen with the fixed schema processing."
-                )
-                return None
-            elif "invalid schema" in error_msg.lower():
-                logger.error(f"Invalid schema error: {error_msg}")
-                return None
-            else:
-                logger.error(f"ValueError in API call: {error_msg}")
-                if not _should_retry(e) or attempt == 4:
-                    return None
         except Exception as e:
             logger.error(
                 f"Attempt {attempt+1}: API call failed for model {model_name}",
                 exc_info=True,
             )
             if not _should_retry(e) or attempt == 4:
-                logger.critical(
-                    f"Could not get response after multiple retries. Final error: {e}"
-                )
-                return None
+                break
 
-        # Calculate delay and retry
-        if attempt < 4:  # Don't sleep on the last attempt
+        if attempt < 4:
             delay = _calculate_backoff_delay(attempt)
             logger.warning(f"Retrying in {delay:.2f} seconds...")
             time.sleep(delay)
 
+    logger.error(
+        f"Could not get a valid response from model {model_name} after multiple attempts."
+    )
     return None
 
 

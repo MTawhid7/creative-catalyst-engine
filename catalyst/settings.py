@@ -55,6 +55,8 @@ GEMINI_MODEL_NAME = "gemini-2.5-flash"
 SEARCH_NUM_RESULTS = 2
 # Add a new setting to control the maximum number of search queries per run.
 MAX_QUERIES = 10
+SEARCH_CONCURRENCY_LIMIT = 3
+SEARCH_REQUEST_DELAY = 0.5
 
 # --- 4. Embedding & Caching Configuration ---
 # --- START OF CORRECTION ---
