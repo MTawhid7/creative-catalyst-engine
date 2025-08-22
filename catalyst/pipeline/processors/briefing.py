@@ -18,40 +18,32 @@ from ...prompts import prompt_library
 BRIEF_SCHEMA = [
     {
         "name": "theme_hint",
-        "description": "The core creative idea or aesthetic. This is the most important variable.",
+        "description": "The core creative idea or aesthetic.",
         "default": None,
         "is_required": True,
     },
+    {"name": "garment_type", "description": "The type of clothing.", "default": None},
     {
-        "name": "garment_type",
-        "description": "A specific type of clothing (e.g., 'T-shirt', 'Evening Gown', 'Denim Jacket').",
+        "name": "brand_category",
+        "description": "The market tier of the fashion brand.",
         "default": None,
     },
     {
-        "name": "brand_category",
-        "description": "The market tier of the fashion brand (e.g., 'Fast Fashion', 'Contemporary', 'Luxury').",
-        "default": "Luxury",
-    },
-    {
         "name": "target_audience",
-        "description": "The intended wearer of the fashion (e.g., 'Gen-Z teenagers', 'Professional women').",
-        "default": "Young Women",
+        "description": "The intended wearer of the fashion.",
+        "default": None,
     },
     {
         "name": "region",
-        "description": "The geographical location or cultural context.",
+        "description": "The geographical or cultural context.",
         "default": None,
     },
     {
         "name": "key_attributes",
-        "description": "A list of specific, descriptive attributes or constraints.",
-        "default": ["elegant", "stylish"],
+        "description": "A list of specific, descriptive attributes.",
+        "default": None,
     },
-    {
-        "name": "season",
-        "description": "The fashion season, normalized to 'Spring/Summer' or 'Fall/Winter'.",
-        "default": "auto",
-    },
+    {"name": "season", "description": "The fashion season.", "default": "auto"},
     {
         "name": "year",
         "description": "The target year for the collection.",
@@ -62,30 +54,32 @@ BRIEF_SCHEMA = [
 
 class BriefDeconstructionProcessor(BaseProcessor):
     """
-    Pipeline Step 1: Parses the user's natural language passage into a
-    structured, validated, and default-applied initial brief.
+    Pipeline Step 1: Intelligently deconstructs the user's passage into a
+    structured brief, inferring missing creative details from the core theme.
     """
 
     async def process(self, context: RunContext) -> RunContext:
-        self.logger.info("⚙️ Deconstructing user passage into a structured brief...")
-        extracted_data = await self._deconstruct_passage_async(context.user_passage)
-        initial_brief = self._validate_and_apply_defaults(extracted_data)
+        self.logger.info("⚙️ Performing intelligent deconstruction of user passage...")
+
+        extracted_data = await self._deconstruct_and_infer_async(context.user_passage)
+        initial_brief = self._validate_and_apply_operational_defaults(extracted_data)
+
         if not initial_brief:
             self.logger.critical(
-                "❌ Deconstruction failed to produce a valid initial brief. Halting pipeline."
+                "❌ Intelligent deconstruction failed to produce a valid initial brief. Halting pipeline."
             )
             raise ValueError("Brief deconstruction failed. Check logs for details.")
+
         context.enriched_brief = initial_brief
-        self.logger.info("✅ Success: Deconstructed and validated the initial brief.")
+        self.logger.info(
+            "✅ Success: Deconstructed and inferred a complete initial brief."
+        )
         return context
 
-    async def _deconstruct_passage_async(self, user_passage: str) -> Optional[Dict]:
-        """Uses a schema-driven prompt to turn natural language into a dictionary."""
-        variable_rules = "\n".join(
-            [f"- **{item['name']}**: {item['description']}" for item in BRIEF_SCHEMA]
-        )
-        prompt = prompt_library.SCHEMA_DRIVEN_DECONSTRUCTION_PROMPT.format(
-            variable_rules=variable_rules, user_passage=user_passage
+    async def _deconstruct_and_infer_async(self, user_passage: str) -> Optional[Dict]:
+        """Uses the intelligent prompt to extract and infer a complete brief."""
+        prompt = prompt_library.INTELLIGENT_DECONSTRUCTION_PROMPT.format(
+            user_passage=user_passage
         )
 
         response_data = await gemini_client.generate_content_async(
@@ -94,7 +88,7 @@ class BriefDeconstructionProcessor(BaseProcessor):
 
         if not response_data or "text" not in response_data:
             self.logger.error(
-                "AI failed to deconstruct the brief. Model returned an empty or invalid response.",
+                "AI failed to deconstruct/infer the brief. Model returned an empty or invalid response.",
                 extra={"response": response_data},
             )
             return None
@@ -112,47 +106,41 @@ class BriefDeconstructionProcessor(BaseProcessor):
             )
             return None
 
-    def _validate_and_apply_defaults(
+    def _validate_and_apply_operational_defaults(
         self, extracted_data: Optional[Dict]
     ) -> Optional[Dict]:
-        """Applies default values and ensures the extracted data has the correct types."""
+        """Applies essential, non-creative defaults (like date/time) and validates the structure."""
         if not isinstance(extracted_data, dict):
-            extracted_data = {}
+            self.logger.error("Deconstruction did not return a dictionary.")
+            return None
 
-        final_brief = {}
-        for item in BRIEF_SCHEMA:
-            key = item["name"]
-            value = extracted_data.get(key)
-            if value is None or (isinstance(value, str) and not value.strip()):
-                final_brief[key] = item["default"]
-            else:
-                final_brief[key] = value
-
-        if final_brief.get("season") == "auto":
+        # Handle operational defaults for season and year
+        if extracted_data.get("season") == "auto":
             current_month = datetime.now().month
-            final_brief["season"] = (
+            extracted_data["season"] = (
                 "Spring/Summer" if 4 <= current_month <= 9 else "Fall/Winter"
             )
 
-        year_value = final_brief.get("year")
+        year_value = extracted_data.get("year")
         if year_value == "auto" or not year_value:
-            final_brief["year"] = datetime.now().year
+            extracted_data["year"] = datetime.now().year
         else:
             try:
-                final_brief["year"] = int(year_value)
+                extracted_data["year"] = int(year_value)
             except (ValueError, TypeError):
                 self.logger.warning(
                     f"Could not parse '{year_value}' as a year. Defaulting to current year."
                 )
-                final_brief["year"] = datetime.now().year
+                extracted_data["year"] = datetime.now().year
 
-        for item in BRIEF_SCHEMA:
-            if item.get("is_required") and not final_brief.get(item["name"]):
-                self.logger.critical(
-                    f"Missing required variable '{item['name']}' after deconstruction."
-                )
-                return None
-        return final_brief
+        # Final check for the most critical field
+        if not extracted_data.get("theme_hint"):
+            self.logger.critical(
+                "❌ Missing required variable 'theme_hint' after deconstruction."
+            )
+            return None
+
+        return extracted_data
 
 
 class BriefEnrichmentProcessor(BaseProcessor):

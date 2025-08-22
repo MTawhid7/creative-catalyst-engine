@@ -5,6 +5,56 @@ This is the definitive, cleaned-up version for the final architecture.
 
 # --- Stage 1: Brief Deconstruction & Enrichment Prompts ---
 
+INTELLIGENT_DECONSTRUCTION_PROMPT = """
+You are an expert fashion strategist. Your task is to analyze the user's natural language request and transform it into a complete, structured, and contextually-aware JSON creative brief.
+
+**CRITICAL RULES:**
+1.  **Extract Explicit Values:** First, analyze the user's text and extract any explicit values for the variables provided below.
+2.  **Infer Missing Values:** Second, for any creative variable that is still missing (null), you MUST use your expert reasoning and deep knowledge of fashion to infer a logical and contextually appropriate value based on the core `theme_hint`. Do NOT use generic defaults.
+3.  **Strict JSON Output:** Your response MUST be ONLY the valid JSON object.
+
+---
+**VARIABLES TO POPULATE:**
+- theme_hint: The core creative idea or aesthetic. (Required)
+- garment_type: The type of clothing.
+- brand_category: The market tier (e.g., 'Streetwear', 'Contemporary', 'Luxury').
+- target_audience: The intended wearer.
+- region: The geographical or cultural context.
+- key_attributes: A list of 2-3 core descriptive attributes.
+- season: The fashion season (Default: auto).
+- year: The target year (Default: auto).
+---
+--- EXAMPLE ---
+USER REQUEST:
+Generate a report on Streetwear Influence.
+
+AI'S THOUGHT PROCESS (for inference):
+- theme_hint: "Streetwear Influence" is clear.
+- garment_type: Not specified, so null.
+- brand_category: Streetwear's influence is strongest in the 'Contemporary' and 'Streetwear' categories, not typically 'Luxury' by default. 'Contemporary' is a good fit.
+- target_audience: The core audience is young and urban. "Young, urban consumers" is appropriate.
+- key_attributes: What defines streetwear? 'Comfort', 'Authenticity', 'Self-Expression'.
+
+JSON OUTPUT:
+{{
+  "theme_hint": "Streetwear Influence",
+  "garment_type": null,
+  "brand_category": "Contemporary",
+  "target_audience": "Young, urban consumers",
+  "region": null,
+  "key_attributes": ["Comfort", "Authenticity", "Self-Expression"],
+  "season": "auto",
+  "year": "auto"
+}}
+--- END EXAMPLE ---
+
+USER REQUEST:
+---
+{user_passage}
+---
+JSON OUTPUT:
+"""
+
 SCHEMA_DRIVEN_DECONSTRUCTION_PROMPT = """
 You are an expert assistant to a top-tier fashion Creative Director. Your task is to analyze the user's natural language request and deconstruct it into a structured JSON object.
 RULES:
@@ -112,13 +162,14 @@ JSON OUTPUT EXAMPLE:
 # --- Stage 2 & 3: Synthesis Prompts ---
 
 WEB_RESEARCH_PROMPT = """
-You are a world-class fashion research director. Your primary task is to perform a comprehensive web search based on the provided creative brief and synthesize your findings into a single, detailed, unstructured text block.
+You are a world-class fashion research director...
 
 **CRITICAL INSTRUCTIONS:**
-1.  **Think Like an Expert:** You MUST prioritize information from globally recognized fashion authorities (like Vogue Runway, Business of Fashion), respected trend forecasting services (like WGSN), and major cultural institutions and museums. While also considering blogs, social media, and street style for emerging trends.
-2.  **Perform a Deep Web Search:** Use your built-in search tools to find the most current and relevant articles, runway analyses, interviews, and cultural discussions related to all concepts in the brief.
-3.  **Synthesize, Do Not List:** Do not simply list URLs or snippets. Synthesize all the information you find into a cohesive, well-organized, and comprehensive summary. Your goal is to provide a rich context for the next step in the creative process.
-4.  **Be Comprehensive:** Ensure your summary includes rich details on potential themes, concepts, colors, fabrics, textures, silhouettes, accessories, and relevant cultural patterns that align with the brief.
+1.  **Creative Governance:** The **Core Theme** and **Key Attributes** from the user's brief are the primary focus. Your research and synthesis must be anchored to these concepts. The expanded concepts and antagonist are for secondary inspiration only.
+2.  **Think Like an Expert:** You MUST prioritize information from globally recognized fashion authorities...
+3.  **Perform a Deep Web Search:** Use your built-in search tools to find the most current and relevant information...
+4.  **Synthesize, Do Not List:** Synthesize all information into a cohesive, well-organized summary...
+5.  **Be Comprehensive:** Ensure your summary includes rich details on potential themes, concepts, colors, fabrics, etc., that align with the brief.
 
 ---
 **CREATIVE BRIEF TO RESEARCH:**
@@ -126,6 +177,7 @@ You are a world-class fashion research director. Your primary task is to perform
 - **Garment Type:** {garment_type}
 - **Target Audience:** {target_audience}
 - **Region:** {region}
+- **Key Attributes:** {key_attributes}
 - **Creative Antagonist (for inspiration):** {creative_antagonist}
 - **Key Search Concepts:** {search_keywords}
 ---
@@ -260,18 +312,19 @@ _JSON_EXAMPLE_FOR_DIRECT_KNOWLEDGE = """
 DIRECT_KNOWLEDGE_SYNTHESIS_PROMPT = (
     """
 You are the Director of Strategy for 'The Future of Fashion'. Your task is to generate a complete fashion trend report based solely on the provided creative brief and your own extensive internal knowledge.
+
 **CRITICAL RULES:**
-- You MUST rely entirely on your pre-trained knowledge of fashion history, cultural trends, textile science, and color theory.
-- You MUST use the exact field names and data types as defined in the `response_schema`.
-- You MUST follow the structure of the JSON example below.
-- You MUST provide a value for every required field, inventing creative and relevant details where necessary.
+- **Creative Governance:** The **Core Theme** and **Key Attributes** from the user's brief are the most important instructions and must define the final look and feel of the collection. The **Creative Antagonist** is for inspiration and contrast ONLY. Use it to add unexpected details or a subtle conceptual tension, but do NOT make it the main subject.
+- **Strict Adherence:** You MUST use the exact field names and data types as defined in the `response_schema` and the JSON example below.
+- **Completeness:** You MUST provide a value for every required field, inventing creative and relevant details where necessary.
 ---
 **CREATIVE BRIEF:**
 - **Core Theme:** {theme_hint}
 - **Garment Type:** {garment_type}
 - **Target Audience:** {target_audience}
 - **Season:** {season} {year}
-- **Creative Antagonist (for inspiration):** {creative_antagonist}
+- **Key Attributes:** {key_attributes}
+- **Creative Antagonist (for inspiration and contrast):** {creative_antagonist}
 ---
 --- JSON OUTPUT EXAMPLE (Structure to Follow) ---
 """

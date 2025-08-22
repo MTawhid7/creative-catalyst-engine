@@ -1,6 +1,7 @@
 """
 This module contains the processors for the core synthesis stage, using a
-robust, multi-step "research, structure, synthesize" pipeline.
+robust, multi-step "research, structure, synthesize" pipeline with graceful
+handling for incomplete creative briefs.
 """
 
 import json
@@ -24,16 +25,18 @@ class WebResearchProcessor(BaseProcessor):
 
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info(
-            "Starting web research using Gemini's native search capabilities..."
+            "⚙️ Starting web research using Gemini's native search capabilities..."
         )
         brief = context.enriched_brief
 
+        # This robust formatting gracefully handles potentially None or empty values from the brief.
         prompt = prompt_library.WEB_RESEARCH_PROMPT.format(
-            theme_hint=brief.get("theme_hint", ""),
-            garment_type=brief.get("garment_type", "not specified"),
-            target_audience=brief.get("target_audience", "a global audience"),
-            region=brief.get("region", "Global"),
-            creative_antagonist=brief.get("creative_antagonist", "mainstream trends"),
+            theme_hint=brief.get("theme_hint", "fashion"),
+            garment_type=brief.get("garment_type") or "not specified",
+            target_audience=brief.get("target_audience") or "a general audience",
+            region=brief.get("region") or "Global",
+            key_attributes=", ".join(brief.get("key_attributes") or ["general"]),
+            creative_antagonist=brief.get("creative_antagonist") or "mainstream trends",
             search_keywords=", ".join(brief.get("search_keywords", [])),
         )
 
@@ -240,10 +243,6 @@ class ReportSynthesisProcessor(BaseProcessor):
         final_report["region"] = brief.get("region")
         final_report["target_model_ethnicity"] = "Diverse"
 
-        # --- START OF FIX ---
-        # The line `final_report["visual_analysis"] = []` has been removed.
-        # --- END OF FIX ---
-
         if "accessories" in final_report and isinstance(
             final_report.get("accessories"), str
         ):
@@ -280,22 +279,28 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
             "Generating report directly from Gemini's internal knowledge base..."
         )
         brief = context.enriched_brief
+
+        # This robust formatting gracefully handles potentially None or empty values from the brief.
         prompt = prompt_library.DIRECT_KNOWLEDGE_SYNTHESIS_PROMPT.format(
-            theme_hint=brief.get("theme_hint", ""),
-            garment_type=brief.get("garment_type", "not specified"),
-            target_audience=brief.get("target_audience", ""),
+            theme_hint=brief.get("theme_hint", "fashion"),
+            garment_type=brief.get("garment_type") or "not specified",
+            target_audience=brief.get("target_audience") or "a general audience",
             season=brief.get("season", ""),
             year=brief.get("year", ""),
-            creative_antagonist=brief.get("creative_antagonist", ""),
+            key_attributes=", ".join(brief.get("key_attributes") or ["general"]),
+            creative_antagonist=brief.get("creative_antagonist") or "mainstream trends",
         )
+
         response = await gemini_client.generate_content_async(
             prompt_parts=[prompt], response_schema=FashionTrendReport
         )
+
         if not response:
             self.logger.critical(
                 "❌ Direct knowledge synthesis also failed. The model could not generate a report."
             )
             raise RuntimeError("The fallback knowledge synthesis process failed.")
+
         self.logger.info("✅ Success: Generated report using direct knowledge.")
         context.final_report = response
         return context
