@@ -22,10 +22,7 @@ logger = get_logger(__name__)
 
 # This is the single point of interaction for the user.
 USER_PASSAGE = """
-I need to design a collection of women's outerwear for Fall/Winter 2026.
-The core theme is 'Arctic Minimalism', inspired by the stark beauty of polar landscapes
-and the functional design of Inuit clothing. The brand category is luxury, and the
-target audience is a sophisticated, urban consumer who values both style and sustainability.
+Generate a report on Streetwear Influence
 """
 
 

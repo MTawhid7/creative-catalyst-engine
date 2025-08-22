@@ -13,12 +13,9 @@ pydantic          # For robust data modeling, validation, and settings managemen
 
 # --- Configuration & Environment ---
 python-dotenv     # For loading environment variables from the .env file.
-PyYAML            # For parsing the sources.yaml configuration file.
 
 # --- Utilities ---
-requests          # For making simple, robust HTTP requests (used in the geolocation utility).
 python-json-logger # For creating structured, machine-readable JSON logs.
-
 
 # --- Vector Database Caching ---
 chromadb

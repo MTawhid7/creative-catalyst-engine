@@ -67,21 +67,16 @@ class BriefDeconstructionProcessor(BaseProcessor):
     """
 
     async def process(self, context: RunContext) -> RunContext:
-        """Orchestrates the deconstruction and validation of the user's input."""
-        self.logger.info("Deconstructing user passage into initial brief...")
-
+        self.logger.info("⚙️ Deconstructing user passage into a structured brief...")
         extracted_data = await self._deconstruct_passage_async(context.user_passage)
         initial_brief = self._validate_and_apply_defaults(extracted_data)
-
         if not initial_brief:
-            # This is a critical failure. The pipeline cannot continue without a valid brief.
             self.logger.critical(
-                "Brief deconstruction failed to produce a valid initial brief. Halting pipeline."
+                "❌ Deconstruction failed to produce a valid initial brief. Halting pipeline."
             )
             raise ValueError("Brief deconstruction failed. Check logs for details.")
-
         context.enriched_brief = initial_brief
-        self.logger.info("Successfully deconstructed and validated the initial brief.")
+        self.logger.info("✅ Success: Deconstructed and validated the initial brief.")
         return context
 
     async def _deconstruct_passage_async(self, user_passage: str) -> Optional[Dict]:
@@ -167,20 +162,17 @@ class BriefEnrichmentProcessor(BaseProcessor):
     """
 
     async def process(self, context: RunContext) -> RunContext:
-        """Orchestrates the creative enrichment of the brief."""
-        self.logger.info("Enriching brief with creative concepts and keywords...")
-
+        self.logger.info(
+            "⚙️ Enriching brief with AI-driven creative concepts and keywords..."
+        )
         enriched_brief = await self._enrich_brief_async(context.enriched_brief)
         context.enriched_brief = enriched_brief
-
         self.logger.info(
-            f"Brief expanded with concepts: {enriched_brief.get('expanded_concepts')}"
+            f"✅ Success: Brief enriched. Found {len(enriched_brief.get('search_keywords', []))} keywords."
         )
-        self.logger.info(
-            f"Creative antagonist identified: {enriched_brief.get('creative_antagonist')}"
-        )
-        self.logger.info(
-            f"Extracted search keywords: {enriched_brief.get('search_keywords')}"
+        self.logger.debug(f"   - Concepts: {enriched_brief.get('expanded_concepts')}")
+        self.logger.debug(
+            f"   - Antagonist: {enriched_brief.get('creative_antagonist')}"
         )
         return context
 

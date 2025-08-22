@@ -37,8 +37,10 @@ except Exception as e:
 async def check(brief_key: str) -> Optional[str]:
     """
     Checks the L1 cache for a semantically similar report using the brief's composite key.
+    Returns the JSON string of the report if a close match is found, otherwise None.
     """
     if not _report_collection:
+        logger.warning("Report collection is not available. Skipping cache check.")
         return None
 
     logger.info("Checking Report Cache (L1) for similar briefs...")
@@ -51,7 +53,8 @@ async def check(brief_key: str) -> Optional[str]:
     try:
         results = _report_collection.query(query_embeddings=[embedding], n_results=1)
 
-        # Defensively check the structure of the results
+        # --- Defensive Parsing of Results ---
+        # This robust checking prevents crashes if the database returns an unexpected structure.
         if not results or not results.get("ids") or not results["ids"][0]:
             logger.info("L1 CACHE MISS: No similar documents found in the cache.")
             return None
@@ -76,7 +79,7 @@ async def check(brief_key: str) -> Optional[str]:
             return document
         else:
             logger.info(
-                f"L1 CACHE MISS. Closest report distance ({distance:.4f}) is above threshold."
+                f"L1 CACHE MISS. Closest report distance ({distance:.4f}) is above the threshold."
             )
             return None
 
@@ -90,9 +93,11 @@ async def check(brief_key: str) -> Optional[str]:
 
 async def add(brief_key: str, report_data: Dict):
     """
-    Adds a newly generated report to the L1 cache.
+    Adds a newly generated report to the L1 cache. The report data is
+    stored as a JSON string, associated with the semantic vector of the brief key.
     """
     if not _report_collection:
+        logger.warning("Report collection is not available. Skipping cache add.")
         return
 
     logger.info("Adding new report to Report Cache (L1)...")
@@ -105,6 +110,7 @@ async def add(brief_key: str, report_data: Dict):
         return
 
     report_json = json.dumps(report_data)
+    # Use a stable hash of the brief key as the document ID.
     doc_id = str(hash(brief_key))
 
     try:

@@ -31,17 +31,22 @@ class WebResearchProcessor(BaseProcessor):
         prompt = prompt_library.WEB_RESEARCH_PROMPT.format(
             theme_hint=brief.get("theme_hint", ""),
             garment_type=brief.get("garment_type", "not specified"),
+            target_audience=brief.get("target_audience", "a global audience"),
+            region=brief.get("region", "Global"),
+            creative_antagonist=brief.get("creative_antagonist", "mainstream trends"),
             search_keywords=", ".join(brief.get("search_keywords", [])),
         )
 
         response = await gemini_client.generate_content_async(prompt_parts=[prompt])
 
         if response and response.get("text"):
-            self.logger.info("Successfully synthesized raw text from web research.")
+            self.logger.info(
+                f"✅ Success: Synthesized {len(response['text'])} characters of raw text from web research."
+            )
             context.raw_research_context = response["text"]
         else:
             self.logger.warning(
-                "Web research synthesis returned an empty response. The fallback path will be triggered."
+                "⚠️ Web research returned no content. The fallback path will now be triggered."
             )
             context.raw_research_context = ""
 
@@ -55,10 +60,12 @@ class ContextStructuringProcessor(BaseProcessor):
     """
 
     async def process(self, context: RunContext) -> RunContext:
-        self.logger.info("Organizing raw research into a structured outline...")
+        self.logger.info("⚙️ Organizing raw research into a structured outline...")
 
         if not context.raw_research_context:
-            self.logger.warning("Raw research context is empty. Skipping structuring.")
+            self.logger.warning(
+                "⚠️ Raw research context is empty. Skipping structuring step."
+            )
             context.structured_research_context = ""
             return context
 
@@ -77,11 +84,13 @@ class ContextStructuringProcessor(BaseProcessor):
 
         response = await gemini_client.generate_content_async(prompt_parts=[prompt])
         if response and response.get("text"):
-            self.logger.info("Successfully created pre-structured context outline.")
+            self.logger.info(
+                f"✅ Success: Created pre-structured context outline ({len(response['text'])} characters)."
+            )
             context.structured_research_context = response["text"]
         else:
             self.logger.warning(
-                "Pre-structuring step failed. The final synthesis may be less reliable."
+                "⚠️ Pre-structuring step failed. The final synthesis may be less reliable."
             )
             context.structured_research_context = context.raw_research_context
 
@@ -95,11 +104,11 @@ class ReportSynthesisProcessor(BaseProcessor):
     """
 
     async def process(self, context: RunContext) -> RunContext:
-        self.logger.info("Starting final 'divide and conquer' report synthesis...")
+        self.logger.info("⚙️ Starting final 'divide and conquer' report synthesis...")
 
         if not context.structured_research_context:
             self.logger.warning(
-                "Structured research context is empty. Skipping this processor."
+                "⚠️ Structured research context is empty. Skipping this processor."
             )
             return context
 
@@ -109,12 +118,11 @@ class ReportSynthesisProcessor(BaseProcessor):
 
         if not final_report_data:
             self.logger.error(
-                "The 'divide and conquer' synthesis process failed to produce a valid final report."
+                "❌ The 'divide and conquer' synthesis process failed to produce a valid final report."
             )
-            # We don't raise an error, just leave the report empty so the fallback can trigger.
         else:
             self.logger.info(
-                "Successfully assembled and validated the final trend report."
+                "✅ Success: Assembled and validated the final trend report."
             )
             context.final_report = final_report_data
 
@@ -176,8 +184,7 @@ class ReportSynthesisProcessor(BaseProcessor):
         )
         final_report["narrative_setting_description"] = (
             setting_response.get(
-                "text",
-                "A minimalist, contemporary architectural setting with dramatic natural light.",
+                "text", "A minimalist, contemporary architectural setting."
             )
             if setting_response
             else ""
@@ -202,7 +209,7 @@ class ReportSynthesisProcessor(BaseProcessor):
         )
         final_report.update(accessories_response or {"accessories": {}})
 
-        # STEP 4: Generate Key Pieces Individually
+        # STEP 4: Generate Key Pieces
         self.logger.info("Step 4/5: Generating detailed key pieces...")
         key_piece_sections = research_context.split("Key Piece ")[1:]
         processed_pieces = []
@@ -226,13 +233,16 @@ class ReportSynthesisProcessor(BaseProcessor):
                 self.logger.error(f"Failed to get a response for Key Piece {i + 1}.")
         final_report["detailed_key_pieces"] = processed_pieces
 
-        # STEP 5: Add boilerplate, assemble, and validate
+        # STEP 5: Assemble and Validate
         self.logger.info("Step 5/5: Assembling and validating final report...")
         final_report["season"] = brief.get("season", "")
         final_report["year"] = brief.get("year", 0)
         final_report["region"] = brief.get("region")
         final_report["target_model_ethnicity"] = "Diverse"
-        final_report["visual_analysis"] = []
+
+        # --- START OF FIX ---
+        # The line `final_report["visual_analysis"] = []` has been removed.
+        # --- END OF FIX ---
 
         if "accessories" in final_report and isinstance(
             final_report.get("accessories"), str
@@ -244,7 +254,7 @@ class ReportSynthesisProcessor(BaseProcessor):
                 final_report["accessories"] = json.loads(final_report["accessories"])
             except json.JSONDecodeError:
                 self.logger.error(
-                    "Failed to parse accessories string into a dictionary. Defaulting to empty."
+                    "Failed to parse accessories string. Defaulting to empty dict."
                 )
                 final_report["accessories"] = {}
 
@@ -265,12 +275,10 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
     """
 
     async def process(self, context: RunContext) -> RunContext:
-        """Takes the enriched brief and generates a full report without web context."""
-        self.logger.warning("Activating direct knowledge fallback.")
+        self.logger.warning("⚙️ Activating direct knowledge fallback pipeline.")
         self.logger.info(
             "Generating report directly from Gemini's internal knowledge base..."
         )
-
         brief = context.enriched_brief
         prompt = prompt_library.DIRECT_KNOWLEDGE_SYNTHESIS_PROMPT.format(
             theme_hint=brief.get("theme_hint", ""),
@@ -280,17 +288,14 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
             year=brief.get("year", ""),
             creative_antagonist=brief.get("creative_antagonist", ""),
         )
-
         response = await gemini_client.generate_content_async(
             prompt_parts=[prompt], response_schema=FashionTrendReport
         )
-
         if not response:
             self.logger.critical(
-                "Direct knowledge synthesis also failed. The model could not generate a report."
+                "❌ Direct knowledge synthesis also failed. The model could not generate a report."
             )
             raise RuntimeError("The fallback knowledge synthesis process failed.")
-
-        self.logger.info("Successfully generated report using direct knowledge.")
+        self.logger.info("✅ Success: Generated report using direct knowledge.")
         context.final_report = response
         return context

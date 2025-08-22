@@ -17,8 +17,8 @@ from ...prompts import prompt_library
 
 class FinalOutputGeneratorProcessor(BaseProcessor):
     """
-    Pipeline Step 7: Generates all final output files, including the main
-    JSON report and the art-directed image prompts.
+    Generates all final output files, including the main JSON report and the
+    art-directed image prompts.
     """
 
     async def process(self, context: RunContext) -> RunContext:
@@ -26,51 +26,37 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
         self.logger.info("Starting final report generation...")
 
         if not context.final_report:
-            self.logger.critical(
-                "Final report data is missing from the context. Halting report generation."
-            )
             raise ValueError("Cannot generate outputs without a final report.")
 
-        # --- START OF FIX ---
-        # Ensure the run-specific output directory exists before any file operations.
-        # This is the most robust place to put this check.
         try:
             context.results_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             self.logger.critical(
-                f"Could not create the output directory {context.results_dir}. Error: {e}",
+                f"Could not create output directory {context.results_dir}: {e}",
                 exc_info=True,
             )
-            raise  # Re-raise the exception to halt the pipeline
-        # --- END OF FIX ---
+            raise
 
-        # 1. Save the main trend report JSON
         self._save_json_file(
             data=context.final_report,
             filename=settings.TREND_REPORT_FILENAME,
             context=context,
         )
 
-        # 2. Generate and save the enriched image prompts
         try:
             validated_report = FashionTrendReport.model_validate(context.final_report)
             prompts_data = self._generate_image_prompts(validated_report)
             self._save_json_file(
                 data=prompts_data, filename=settings.PROMPTS_FILENAME, context=context
             )
-        except ValidationError:
+        except ValidationError as e:
             self.logger.error(
-                "Could not generate image prompts due to a data validation error.",
-                exc_info=True,
+                "Could not generate prompts due to a validation error.", exc_info=True
             )
         except Exception:
             self.logger.error(
                 "An unexpected error occurred during prompt generation.", exc_info=True
             )
-
-        # 3. (Future) Generate the executive summary
-        if "validated_report" in locals():
-            self._generate_executive_summary(validated_report)
 
         self.logger.info("All reporting outputs have been generated successfully.")
         return context
@@ -152,8 +138,3 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
 
         self.logger.info("Image prompt generation complete.")
         return all_prompts
-
-    def _generate_executive_summary(self, report: FashionTrendReport):
-        """Placeholder for generating a human-readable summary (e.g., Markdown)."""
-        self.logger.info("Executive summary generation is not yet implemented.")
-        pass
