@@ -12,7 +12,6 @@ You are an expert fashion strategist. Your task is to analyze the user's natural
 1.  **Extract Explicit Values:** First, analyze the user's text and extract any explicit values for the variables provided below.
 2.  **Infer Missing Values:** Second, for any creative variable that is still missing (null), you MUST use your expert reasoning and deep knowledge of fashion to infer a logical and contextually appropriate value based on the core `theme_hint`. Do NOT use generic defaults.
 3.  **Strict JSON Output:** Your response MUST be ONLY the valid JSON object.
-
 ---
 **VARIABLES TO POPULATE:**
 - theme_hint: The core creative idea or aesthetic. (Required)
@@ -55,38 +54,6 @@ USER REQUEST:
 JSON OUTPUT:
 """
 
-SCHEMA_DRIVEN_DECONSTRUCTION_PROMPT = """
-You are an expert assistant to a top-tier fashion Creative Director. Your task is to analyze the user's natural language request and deconstruct it into a structured JSON object.
-RULES:
-1.  Analyze the user's text for hints about the following variables.
-2.  For any variable that is not mentioned, its value in the JSON object MUST be null.
-3.  Your response MUST be ONLY the valid JSON object.
-VARIABLES TO EXTRACT:
----
-{variable_rules}
----
---- EXAMPLE ---
-USER REQUEST:
-I'm thinking about a line of luxury silk scarves for the Indonesian market, maybe for next year. The main idea is 'Archipelago Dreams'.
-JSON OUTPUT:
-{{
-  "theme_hint": "Archipelago Dreams",
-  "garment_type": "Silk Scarves",
-  "brand_category": "Luxury",
-  "target_audience": null,
-  "region": "Indonesian",
-  "key_attributes": null,
-  "season": "auto",
-  "year": "auto"
-}}
---- END EXAMPLE ---
-USER REQUEST:
----
-{user_passage}
----
-JSON OUTPUT:
-"""
-
 THEME_EXPANSION_PROMPT = """
 You are a world-class fashion historian and cultural theorist. Your task is to take a core fashion theme and expand it into a richer set of abstract, historical, and artistic concepts for inspiration.
 RULES:
@@ -108,6 +75,7 @@ USER BRIEF:
 - Attributes: {key_attributes}
 RESPONSE:
 """
+
 
 CONCEPTS_CORRECTION_PROMPT = """
 Your first attempt to generate creative concepts failed. You returned the following:
@@ -339,49 +307,83 @@ Based on the **CREATIVE BRIEF** and your internal knowledge, generate a single, 
 # --- Stage 4: Image Prompt Generation Templates ---
 
 INSPIRATION_BOARD_PROMPT_TEMPLATE = """
-Create a hyper-detailed, atmospheric flat lay of a professional fashion designer's physical inspiration board.
+Create a hyper-detailed, atmospheric flat lay of a professional fashion designer's physical inspiration board. The board must feel like an authentic, working document, not a static, perfect presentation.
+
 **Core Concept:**
 - Theme: '{theme}'
 - Aesthetic Focus: The conceptual idea of a '{key_piece_name}' that embodies the idea of '{description_snippet}'
 - Muse / Archetype: The style of {model_style}
+
 **Core Color Story:**
 - The board features a clear and intentional color palette, represented by neatly pinned Pantone-style color chips for: {color_names}.
-**Composition & Included Items:**
-The board is an artfully arranged collage that MUST include a mix of the following:
-1.  **Archival & Textural Layer:** Torn pages from vintage art books, faded historical photographs, rough charcoal sketches of garment details.
-2.  **Modern Context Layer:** High-quality, candid street style photos, glossy tear sheets from contemporary fashion magazines.
-3.  **Material Layer:** Physical, tactile swatches of key fabrics like {fabric_names} with frayed edges, alongside close-up photos of specific hardware.
+
+**Non-Fashion Inspiration:**
+- To ground the theme in the real world, the board MUST include at least two non-fashion items for texture and color reference, such as a piece of weathered driftwood, a close-up photo of peeling paint on concrete, or a vintage map.
+
+**Composition & The Designer's Process:**
+The board must look like a dynamic, work-in-progress document. The arrangement is an artfully layered collage, not a clean grid.
+- **Interaction & Annotation:** Elements MUST be layered and interact. Fabric swatches are pinned directly on top of photographs to test relationships. There are **handwritten notes in pencil or ink in the margins, arrows drawn in charcoal connecting elements, and visible pinholes and tape marks** from previous arrangements.
+- The board MUST include a mix of the following:
+    1.  **Archival & Textural Layer:** Torn pages from vintage art books, faded historical photographs, and rough, gestural charcoal sketches of garment details (collars, seams, pockets).
+    2.  **Modern Context Layer:** High-quality, candid street style photos and glossy tear sheets from contemporary fashion magazines.
+    3.  **Material Layer:** Physical, three-dimensional, and tactile swatches of key fabrics like {fabric_names}. The swatches MUST be **messy, frayed, and show signs of handling.** The board must also include **actual, physical metal hardware** like buttons, zippers, or clasps, not just photos of them.
+
+**Overall Mood:**
+Tactile, authentic, intellectual, cinematic, and a **dynamic work-in-progress**.
+
 **Style:**
-Ultra-realistic photograph, top-down perspective, shot on a Hasselblad camera, soft but dramatic lighting, 8k.
+Ultra-realistic photograph, top-down perspective, shot on a Hasselblad camera, soft but dramatic lighting that creates deep shadows, extreme detail, 8k.
 """
 
 MOOD_BOARD_PROMPT_TEMPLATE = """
-Create a professional fashion designer's mood board, meticulously organized on a raw concrete or linen surface.
+Create a professional and atmospheric fashion designer's mood board on a raw concrete or linen surface. The board's primary goal is to evoke the mood, story, and world of a single garment.
+
 **Focus:** Defining the materials, details, and styling for a '{key_piece_name}'.
+
+**Central Anchor Image:**
+- The composition MUST be built around a large, central, candid street style photograph of a person who embodies the spirit of the garment. This image sets the mood for the entire board.
+
+**Composition:**
+- The layout must be a dynamic, overlapping collage, not a rigid grid or a tidy "knolling" arrangement. Elements should be layered to create texture and depth, showing the designer's thought process.
+
+**Environmental Textures:**
+- The board MUST include at least two smaller, secondary photos of urban textures that match the collection's narrative, such as peeling paint, graffiti-covered brick, or worn concrete.
+
 **1. Material & Color Story:**
-- **Fabric Swatches:** The board features hyper-realistic, neatly cut physical fabric swatches of: {fabric_names}.
-- **Color Palette:** A focused color story is arranged with official Pantone-style color chips for: {color_names}.
+- **Fabric Swatches:** Hyper-realistic, physical fabric swatches of: {fabric_names}. They should appear handled, with some neat stacks and some messy, draped pieces.
+- **Color Palette:** A focused color story arranged with official Pantone-style color chips for: {color_names}.
+
 **2. Detail & Craftsmanship:**
 - **Detail Shots:** A dedicated section with macro-photography close-ups of key design details, such as: {details_trims}.
+
 **3. Styling & Accessories:**
-- **Key Accessories:** The board MUST feature 2-3 key physical accessories or high-quality photos of them, such as: {key_accessories}.
+- **Integrated Styling:** The board must show key physical accessories like {key_accessories} interacting with other elements, such as a leather belt placed over a stack of fabric swatches, or a beanie next to the central anchor photograph.
+
 **Style:**
-Professional studio photography, top-down view (flat lay), soft and diffused lighting, extreme detail, macro photography, 8k.
+Professional studio photography, top-down view (flat lay), soft and diffused lighting that creates an **atmospheric, narrative, and emotional** mood. Extreme detail, macro photography, 8k.
 """
 
 FINAL_GARMENT_PROMPT_TEMPLATE = """
-Full-body editorial fashion photograph for a high-end fashion magazine lookbook.
+Full-body editorial fashion photograph for a high-end fashion magazine lookbook, in the style of a Juergen Teller or Glen Luchford editorial.
+
 **Model & Garment:**
 - A professional runway model with the confident, elegant, and stylish presence of {model_style}.
 - The model is wearing the '{key_piece_name}', a stunning garment that embodies the concept of '{description_snippet}'. It is crafted from hyper-realistic {main_fabric} in a rich '{main_color}'.
+
+**Styling:**
+- {styling_description} The overall look must feel authentic and personally styled, not like a mannequin.
+
 **Silhouette & Details:**
 - The silhouette is a modern '{silhouette}'.
 - Macro details are visible, showcasing the exquisite craftsmanship, such as: {details_trims}.
+
 **Pose & Setting:**
-- The model has a confident, poised, and powerful pose that complements the environment.
+- The model has a **dynamic, candid pose that suggests movement**—walking, leaning, or interacting with the environment.
 - **Setting:** {narrative_setting}
+
 **Style:**
-- Cinematic fashion photography, shot on a 50mm lens, hyper-detailed, professional color grading, 8k.
+- Shot on **35mm film**. The image should have a slight **photographic grain**, naturalistic lighting, and a sense of **found reality**. It should feel authentic and unpolished, not like a perfect digital studio shot. 8k.
+
 **Negative Prompt:**
 - -nsfw, -deformed, -bad anatomy, -blurry, -low quality, -generic
 """

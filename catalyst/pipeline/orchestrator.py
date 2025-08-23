@@ -52,13 +52,13 @@ class PipelineOrchestrator:
 
             if cached_report_json:
                 self.logger.warning(
-                    "✅ L1 CACHE HIT! Bypassing synthesis pipeline. A similar report was found."
+                    "🎯 L1 CACHE HIT! Bypassing synthesis pipeline. A similar report was found."
                 )
                 context.final_report = json.loads(cached_report_json)
 
             else:
                 self.logger.info(
-                    "... L1 CACHE MISS. Proceeding with full synthesis pipeline."
+                    "💨 ... L1 CACHE MISS. Proceeding with full synthesis pipeline."
                 )
 
                 # STAGE 3: PRIMARY SYNTHESIS PATH
@@ -92,7 +92,7 @@ class PipelineOrchestrator:
                 f"❌ PIPELINE FAILED: A critical, unhandled exception occurred: {e}",
                 exc_info=True,
             )
-            self.logger.error("Debug artifacts for the run will be saved.")
+            self.logger.error("⚠️ Debug artifacts for the run will be saved.")
         finally:
             self.logger.info("⚙️ Saving all debug artifacts for the run...")
             try:

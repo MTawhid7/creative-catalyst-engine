@@ -20,7 +20,7 @@ sys.path.append(str(project_root))
 try:
     from catalyst import settings
 except ImportError:
-    print("Error: Could not import project settings.")
+    print("❌ Error: Could not import project settings.")
     print(
         "Please ensure you are running this script from the root of your 'CreativeCatalystEngine' project directory."
     )
@@ -43,18 +43,18 @@ def clear_chroma_cache():
     )
 
     if not cache_dir.exists():
-        print("\nCache directory does not exist. Nothing to clear.")
+        print("\n⚠️ Cache directory does not exist. Nothing to clear.")
         return
 
     # Safety check: Ask for explicit user confirmation.
     try:
-        confirm = input("\nAre you sure you want to proceed? [y/N]: ")
+        confirm = input("\n⚖️ Are you sure you want to proceed? [y/N]: ")
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user.")
+        print("\n🚫 Operation cancelled by user.")
         return
 
     if confirm.lower() != "y":
-        print("Operation cancelled.")
+        print("🚫 Operation cancelled.")
         return
 
     try:

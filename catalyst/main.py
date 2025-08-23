@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 # This is the single point of interaction for the user.
 USER_PASSAGE = """
-Generate a report on Streetwear Influence
+Kid's shirt inspired by marvel superheroes
 """
 
 
@@ -57,10 +57,10 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("Process interrupted by user.")
+        logger.info("⛔ Process interrupted by user.")
     except Exception as e:
         # The module-level logger is now available to catch any catastrophic
         # failures that happen during the asyncio.run() call itself.
         logger.critical(
-            "A top-level, unhandled exception occurred: %s", e, exc_info=True
+            "❌ A top-level, unhandled exception occurred: %s", e, exc_info=True
         )

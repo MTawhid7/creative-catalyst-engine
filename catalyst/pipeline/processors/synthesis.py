@@ -25,7 +25,7 @@ class WebResearchProcessor(BaseProcessor):
 
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info(
-            "⚙️ Starting web research using Gemini's native search capabilities..."
+            "🌐 Starting web research using Gemini's native search capabilities..."
         )
         brief = context.enriched_brief
 
@@ -150,7 +150,7 @@ class ReportSynthesisProcessor(BaseProcessor):
         final_report = {}
 
         # STEP 1: Generate Top-Level Fields
-        self.logger.info("Step 1/5: Generating top-level fields...")
+        self.logger.info("✨ Step 1/5: Generating top-level fields...")
         top_level_context = self._extract_section(
             research_context,
             "Overarching Theme:",
@@ -173,11 +173,11 @@ class ReportSynthesisProcessor(BaseProcessor):
         if top_level_response:
             final_report.update(top_level_response)
         else:
-            self.logger.error("Failed to generate top-level fields.")
+            self.logger.error("❌ Failed to generate top-level fields.")
             return None
 
         # STEP 2: Generate Narrative Setting
-        self.logger.info("Step 2/5: Generating narrative setting...")
+        self.logger.info("✨ Step 2/5: Generating narrative setting...")
         setting_prompt = prompt_library.NARRATIVE_SETTING_PROMPT.format(
             overarching_theme=final_report.get("overarching_theme", ""),
             cultural_drivers=", ".join(final_report.get("cultural_drivers", [])),
@@ -194,7 +194,7 @@ class ReportSynthesisProcessor(BaseProcessor):
         )
 
         # STEP 3: Generate Accessories
-        self.logger.info("Step 3/5: Generating accessories...")
+        self.logger.info("✨ Step 3/5: Generating accessories...")
         accessories_context = self._extract_section(
             research_context, "Accessories:", ["Key Piece 1 Name:"]
         )
@@ -213,12 +213,12 @@ class ReportSynthesisProcessor(BaseProcessor):
         final_report.update(accessories_response or {"accessories": {}})
 
         # STEP 4: Generate Key Pieces
-        self.logger.info("Step 4/5: Generating detailed key pieces...")
+        self.logger.info("✨ Step 4/5: Generating detailed key pieces...")
         key_piece_sections = research_context.split("Key Piece ")[1:]
         processed_pieces = []
         for i, section in enumerate(key_piece_sections):
             self.logger.info(
-                f"Processing Key Piece {i + 1}/{len(key_piece_sections)}..."
+                f"🔄 Processing Key Piece {i + 1}/{len(key_piece_sections)}..."
             )
             key_piece_prompt = prompt_library.KEY_PIECE_SYNTHESIS_PROMPT.format(
                 key_piece_context=section
@@ -231,13 +231,15 @@ class ReportSynthesisProcessor(BaseProcessor):
                     validated_piece = KeyPieceDetail.model_validate(piece_response)
                     processed_pieces.append(validated_piece.model_dump(mode="json"))
                 except ValidationError as e:
-                    self.logger.warning(f"Validation failed for Key Piece {i + 1}: {e}")
+                    self.logger.warning(
+                        f"⚠️ Validation failed for Key Piece {i + 1}: {e}"
+                    )
             else:
-                self.logger.error(f"Failed to get a response for Key Piece {i + 1}.")
+                self.logger.error(f"❌ Failed to get a response for Key Piece {i + 1}.")
         final_report["detailed_key_pieces"] = processed_pieces
 
         # STEP 5: Assemble and Validate
-        self.logger.info("Step 5/5: Assembling and validating final report...")
+        self.logger.info("✨ Step 5/5: Assembling and validating final report...")
         final_report["season"] = brief.get("season", "")
         final_report["year"] = brief.get("year", 0)
         final_report["region"] = brief.get("region")
@@ -248,12 +250,12 @@ class ReportSynthesisProcessor(BaseProcessor):
         ):
             try:
                 self.logger.warning(
-                    "Accessories field was a string. Attempting to parse JSON."
+                    "⚠️ Accessories field was a string. Attempting to parse JSON."
                 )
                 final_report["accessories"] = json.loads(final_report["accessories"])
             except json.JSONDecodeError:
                 self.logger.error(
-                    "Failed to parse accessories string. Defaulting to empty dict."
+                    "❌ Failed to parse accessories string. Defaulting to empty dict."
                 )
                 final_report["accessories"] = {}
 
@@ -262,7 +264,7 @@ class ReportSynthesisProcessor(BaseProcessor):
             return validated_report.model_dump(mode="json")
         except ValidationError as e:
             self.logger.critical(
-                f"The final assembled report from divide-and-conquer failed validation: {e}"
+                f"❌ The final assembled report from divide-and-conquer failed validation: {e}"
             )
             return None
 
@@ -276,7 +278,7 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
     async def process(self, context: RunContext) -> RunContext:
         self.logger.warning("⚙️ Activating direct knowledge fallback pipeline.")
         self.logger.info(
-            "Generating report directly from Gemini's internal knowledge base..."
+            "✨ Generating report directly from Gemini's internal knowledge base..."
         )
         brief = context.enriched_brief
 

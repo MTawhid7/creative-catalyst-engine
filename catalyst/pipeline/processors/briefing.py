@@ -1,55 +1,18 @@
 """
-This module contains the processors responsible for the first stage of the
-Creative Catalyst Engine: creating and enriching the creative brief.
+This module contains the processors for the briefing stage.
+The deconstruction processor is an "intelligent" step that infers
+contextually relevant defaults for any missing creative information.
 """
 
 import json
-import asyncio
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+import asyncio
+from typing import Optional, Dict, Any
 
 from catalyst.pipeline.base_processor import BaseProcessor
 from catalyst.context import RunContext
 from ...clients import gemini_client
 from ...prompts import prompt_library
-
-# The schema definition, moved from the old engine file.
-# It defines the structure and rules for deconstructing the user's input.
-BRIEF_SCHEMA = [
-    {
-        "name": "theme_hint",
-        "description": "The core creative idea or aesthetic.",
-        "default": None,
-        "is_required": True,
-    },
-    {"name": "garment_type", "description": "The type of clothing.", "default": None},
-    {
-        "name": "brand_category",
-        "description": "The market tier of the fashion brand.",
-        "default": None,
-    },
-    {
-        "name": "target_audience",
-        "description": "The intended wearer of the fashion.",
-        "default": None,
-    },
-    {
-        "name": "region",
-        "description": "The geographical or cultural context.",
-        "default": None,
-    },
-    {
-        "name": "key_attributes",
-        "description": "A list of specific, descriptive attributes.",
-        "default": None,
-    },
-    {"name": "season", "description": "The fashion season.", "default": "auto"},
-    {
-        "name": "year",
-        "description": "The target year for the collection.",
-        "default": "auto",
-    },
-]
 
 
 class BriefDeconstructionProcessor(BaseProcessor):
@@ -88,7 +51,7 @@ class BriefDeconstructionProcessor(BaseProcessor):
 
         if not response_data or "text" not in response_data:
             self.logger.error(
-                "AI failed to deconstruct/infer the brief. Model returned an empty or invalid response.",
+                "❌ AI failed to deconstruct/infer the brief.",
                 extra={"response": response_data},
             )
             return None
@@ -100,7 +63,7 @@ class BriefDeconstructionProcessor(BaseProcessor):
             return json.loads(json_text)
         except (json.JSONDecodeError, KeyError):
             self.logger.error(
-                "Failed to parse JSON from deconstruction response.",
+                "🛑 Failed to parse JSON from deconstruction response.",
                 exc_info=True,
                 extra={"raw_text": response_data.get("text")},
             )
@@ -111,10 +74,9 @@ class BriefDeconstructionProcessor(BaseProcessor):
     ) -> Optional[Dict]:
         """Applies essential, non-creative defaults (like date/time) and validates the structure."""
         if not isinstance(extracted_data, dict):
-            self.logger.error("Deconstruction did not return a dictionary.")
+            self.logger.error("❌ Deconstruction did not return a dictionary.")
             return None
 
-        # Handle operational defaults for season and year
         if extracted_data.get("season") == "auto":
             current_month = datetime.now().month
             extracted_data["season"] = (
@@ -129,11 +91,10 @@ class BriefDeconstructionProcessor(BaseProcessor):
                 extracted_data["year"] = int(year_value)
             except (ValueError, TypeError):
                 self.logger.warning(
-                    f"Could not parse '{year_value}' as a year. Defaulting to current year."
+                    f"⚠️ Could not parse '{year_value}' as a year. Defaulting to current year."
                 )
                 extracted_data["year"] = datetime.now().year
 
-        # Final check for the most critical field
         if not extracted_data.get("theme_hint"):
             self.logger.critical(
                 "❌ Missing required variable 'theme_hint' after deconstruction."
@@ -158,9 +119,9 @@ class BriefEnrichmentProcessor(BaseProcessor):
         self.logger.info(
             f"✅ Success: Brief enriched. Found {len(enriched_brief.get('search_keywords', []))} keywords."
         )
-        self.logger.debug(f"   - Concepts: {enriched_brief.get('expanded_concepts')}")
+        self.logger.debug(f"💡   - Concepts: {enriched_brief.get('expanded_concepts')}")
         self.logger.debug(
-            f"   - Antagonist: {enriched_brief.get('creative_antagonist')}"
+            f"🎭   - Antagonist: {enriched_brief.get('creative_antagonist')}"
         )
         return context
 
@@ -172,7 +133,7 @@ class BriefEnrichmentProcessor(BaseProcessor):
         task_name: str,
     ) -> Optional[str]:
         """A resilient helper function that attempts to get enrichment data, with a self-correction retry."""
-        self.logger.debug(f"Attempting to generate {task_name} (Attempt 1)...")
+        self.logger.debug(f"⏳ Attempting to generate {task_name} (Attempt 1)...")
         initial_response = await gemini_client.generate_content_async(
             prompt_parts=[initial_prompt]
         )
@@ -182,12 +143,12 @@ class BriefEnrichmentProcessor(BaseProcessor):
             and initial_response["text"].strip()
         ):
             self.logger.debug(
-                f"Successfully generated {task_name} on the first attempt."
+                f"✅ Successfully generated {task_name} on the first attempt."
             )
             return initial_response["text"].strip()
 
         self.logger.warning(
-            f"First attempt to generate {task_name} failed or returned empty. Triggering self-correction."
+            f"⚠️ First attempt to generate {task_name} failed or returned empty. Triggering self-correction."
         )
         failed_output = (
             initial_response.get("text", "None") if initial_response else "None"
@@ -197,7 +158,7 @@ class BriefEnrichmentProcessor(BaseProcessor):
         )
 
         self.logger.debug(
-            f"Attempting to generate {task_name} (Attempt 2 - Correction)..."
+            f"⏳ Attempting to generate {task_name} (Attempt 2 - Correction)..."
         )
         correction_response = await gemini_client.generate_content_async(
             prompt_parts=[correction_prompt]
@@ -208,12 +169,12 @@ class BriefEnrichmentProcessor(BaseProcessor):
             and correction_response["text"].strip()
         ):
             self.logger.info(
-                f"Successfully generated {task_name} on the second (correction) attempt."
+                f"✅ Successfully generated {task_name} on the second (correction) attempt."
             )
             return correction_response["text"].strip()
 
         self.logger.critical(
-            f"Self-correction also failed for {task_name}. The model could not produce a valid output."
+            f"❌ Self-correction also failed for {task_name}. The model could not produce a valid output."
         )
         return None
 

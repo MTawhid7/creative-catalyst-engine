@@ -25,16 +25,16 @@ try:
     if settings.GEMINI_API_KEY:
         # Create the client with API key - this is the correct modern approach
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        logger.info("Gemini API client configured successfully.")
+        logger.info("🔑 Gemini API client configured successfully.")
     else:
         client = None  # Set to None to cause safe failures in functions
         logger.critical(
-            "GEMINI_API_KEY not found in settings. The client will not function."
+            "❌ GEMINI_API_KEY not found in settings. The client will not function."
         )
 except Exception as e:
     client = None
     logger.critical(
-        f"CRITICAL: Failed to configure Gemini API client: {e}", exc_info=True
+        f"❌ CRITICAL: Failed to configure Gemini API client: {e}", exc_info=True
     )
 
 
@@ -86,7 +86,7 @@ def _clean_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
                 # If we end up with no properties, convert to a string type instead
                 # This is a workaround for Gemini's requirement
                 logger.warning(
-                    f"Converting object with empty properties to string type for Gemini compatibility"
+                    f"⚠️ Converting object with empty properties to string type for Gemini compatibility"
                 )
                 return {
                     "type": "string",
@@ -97,7 +97,7 @@ def _clean_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
         elif schema.get("properties") == {}:
             # Handle explicitly empty properties - convert to string
             logger.warning(
-                f"Converting object with explicitly empty properties to string type for Gemini compatibility"
+                f"⚠️ Converting object with explicitly empty properties to string type for Gemini compatibility"
             )
             return {
                 "type": "string",
@@ -108,7 +108,7 @@ def _clean_schema_for_gemini(schema: Dict[str, Any]) -> Dict[str, Any]:
         else:
             # No properties defined at all - convert to string
             logger.warning(
-                f"Converting object with no properties to string type for Gemini compatibility"
+                f"⚠️ Converting object with no properties to string type for Gemini compatibility"
             )
             return {
                 "type": "string",
@@ -195,7 +195,7 @@ def _validate_gemini_schema(schema: Dict[str, Any], path: str = "root") -> List[
         properties = schema.get("properties", {})
         if not properties or len(properties) == 0:
             errors.append(
-                f"Object at {path} has empty properties - Gemini requires non-empty properties for OBJECT type"
+                f"❌ Object at {path} has empty properties - Gemini requires non-empty properties for OBJECT type"
             )
 
     # Recursively validate properties
@@ -241,7 +241,7 @@ def _process_response_schema(
         elif issubclass(response_schema, BaseModel):
             base_schema = response_schema.model_json_schema()
         else:
-            logger.warning(f"Unsupported schema type: {type(response_schema)}")
+            logger.warning(f"⚠️ Unsupported schema type: {type(response_schema)}")
             return None
 
         # Clean the schema for Gemini compatibility
@@ -250,19 +250,19 @@ def _process_response_schema(
         # Validate the cleaned schema
         validation_errors = _validate_gemini_schema(cleaned_schema)
         if validation_errors:
-            logger.error(f"Schema validation failed: {'; '.join(validation_errors)}")
+            logger.error(f"❌ Schema validation failed: {'; '.join(validation_errors)}")
             return None
 
         logger.debug(
-            f"Original schema keys: {list(base_schema.keys()) if isinstance(base_schema, dict) else 'N/A'}"
+            f"🛠 Original schema keys: {list(base_schema.keys()) if isinstance(base_schema, dict) else 'N/A'}"
         )
         logger.debug(
-            f"Cleaned schema keys: {list(cleaned_schema.keys()) if isinstance(cleaned_schema, dict) else 'N/A'}"
+            f"🛠 Cleaned schema keys: {list(cleaned_schema.keys()) if isinstance(cleaned_schema, dict) else 'N/A'}"
         )
 
         return cleaned_schema
     except Exception as e:
-        logger.error(f"Failed to process response schema: {str(e)}", exc_info=True)
+        logger.error(f"❌ Failed to process response schema: {str(e)}", exc_info=True)
         return None
 
 
@@ -299,7 +299,7 @@ def _generate_content_sync(
     This version is enhanced to treat empty responses as retryable, transient errors.
     """
     if not client:
-        logger.error("Cannot generate content: Gemini client is not configured.")
+        logger.error("❌ Cannot generate content: Gemini client is not configured.")
         return None
 
     # (Safety settings and config params setup remains the same)
@@ -331,7 +331,7 @@ def _generate_content_sync(
             config_params["response_schema"] = processed_schema
         else:
             logger.warning(
-                "Failed to process schema, continuing without structured output"
+                "⚠️ Failed to process schema, continuing without structured output"
             )
 
     if tools:
@@ -351,7 +351,7 @@ def _generate_content_sync(
             # Treat an empty response body as a transient, retryable error.
             if not hasattr(response, "text") or response.text is None:
                 logger.warning(
-                    f"Attempt {attempt+1}: API call to {model_name} returned an empty response. Retrying..."
+                    f"⚠️ Attempt {attempt+1}: API call to {model_name} returned an empty response. Retrying..."
                 )
                 # By continuing, we allow the backoff delay to trigger before the next attempt.
                 time.sleep(_calculate_backoff_delay(attempt))
@@ -361,12 +361,12 @@ def _generate_content_sync(
             response_text = response.text.strip()
             if not response_text:
                 logger.warning(
-                    f"Attempt {attempt+1}: API call to {model_name} returned empty text content. Retrying..."
+                    f"⚠️ Attempt {attempt+1}: API call to {model_name} returned empty text content. Retrying..."
                 )
                 time.sleep(_calculate_backoff_delay(attempt))
                 continue
 
-            logger.info(f"Successfully received response from model: {model_name}")
+            logger.info(f"✅ Successfully received response from model: {model_name}")
 
             if response_schema and processed_schema:
                 if response_text.startswith("```json"):
@@ -375,7 +375,7 @@ def _generate_content_sync(
                     return json.loads(response_text)
                 except json.JSONDecodeError as e:
                     logger.error(
-                        f"Failed to parse JSON response: {e}",
+                        f"❌ Failed to parse JSON response: {e}",
                         extra={"raw_response": response_text},
                     )
                     return None
@@ -384,7 +384,7 @@ def _generate_content_sync(
 
         except Exception as e:
             logger.error(
-                f"Attempt {attempt+1}: API call failed for model {model_name}",
+                f"❌ Attempt {attempt+1}: API call failed for model {model_name}",
                 exc_info=True,
             )
             if not _should_retry(e) or attempt == 4:
@@ -392,11 +392,11 @@ def _generate_content_sync(
 
         if attempt < 4:
             delay = _calculate_backoff_delay(attempt)
-            logger.warning(f"Retrying in {delay:.2f} seconds...")
+            logger.warning(f"⚠️ Retrying in {delay:.2f} seconds...")
             time.sleep(delay)
 
     logger.error(
-        f"Could not get a valid response from model {model_name} after multiple attempts."
+        f"❌ Could not get a valid response from model {model_name} after multiple attempts."
     )
     return None
 
@@ -412,7 +412,7 @@ async def generate_content_async(
     Asynchronously runs the synchronous API call in a separate thread to avoid
     blocking the event loop. This is the primary function to be called by other services.
     """
-    logger.info(f"Requesting content from model '{model_name}'...")
+    logger.info(f"📝 Requesting content from model '{model_name}'...")
     try:
         result = await asyncio.to_thread(
             _generate_content_sync, prompt_parts, model_name, response_schema, tools
@@ -420,7 +420,7 @@ async def generate_content_async(
         return result
     except Exception as e:
         logger.critical(
-            f"An unexpected error occurred in the async wrapper: {e}", exc_info=True
+            f"🛑 An unexpected error occurred in the async wrapper: {e}", exc_info=True
         )
         return None
 
@@ -434,10 +434,10 @@ async def generate_embedding_async(
     and most compatible SDK patterns.
     """
     if not client:
-        logger.error("Cannot generate embedding: Gemini client is not configured.")
+        logger.error("❌ Cannot generate embedding: Gemini client is not configured.")
         return None
 
-    logger.info(f"Generating embedding for text: '{text[:70]}...'")
+    logger.info(f"🧠 Generating embedding for text: '{text[:70]}...'")
 
     # Define the configuration for the embedding request
     embedding_config = types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
@@ -459,20 +459,20 @@ async def generate_embedding_async(
                 return response.embeddings[0].values
             else:
                 logger.warning(
-                    "Embedding response was successful but contained no embedding values."
+                    "⚠️ Embedding response was successful but contained no embedding values."
                 )
                 return None
 
         except Exception as e:
             logger.error(
-                f"Attempt {attempt+1}: Embedding generation failed", exc_info=True
+                f"❌ Attempt {attempt+1}: Embedding generation failed", exc_info=True
             )
             if not _should_retry(e) or attempt == 2:
                 logger.critical(
-                    f"Could not generate embedding after multiple retries. Final error: {e}"
+                    f"🛑 Could not generate embedding after multiple retries. Final error: {e}"
                 )
                 return None
             delay = _calculate_backoff_delay(attempt)
-            logger.warning(f"Retrying embedding in {delay:.2f} seconds...")
+            logger.warning(f"⚠️ Retrying embedding in {delay:.2f} seconds...")
             await asyncio.sleep(delay)
     return None
