@@ -78,6 +78,17 @@ class PipelineOrchestrator:
                     fallback_processor = DirectKnowledgeSynthesisProcessor()
                     context = await self._run_step(fallback_processor, context)
 
+                # --- START OF FIX ---
+                # After a successful synthesis (either primary or fallback), add the new report to the cache.
+                if context.final_report:
+                    self.logger.info(
+                        "⚙️ Caching: Adding newly synthesized report to L1 cache..."
+                    )
+                    await cache_manager.add_to_report_cache_async(
+                        context.enriched_brief, context.final_report
+                    )
+                # --- END OF FIX ---
+
             # STAGE 5: REPORTING
             if context.final_report:
                 final_processor = FinalOutputGeneratorProcessor()

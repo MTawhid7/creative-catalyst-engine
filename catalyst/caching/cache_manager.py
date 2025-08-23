@@ -42,7 +42,7 @@ def _create_composite_key(brief: Dict) -> str:
     for key in sorted(DETERMINISTIC_BRIEF_KEYS):
         value = brief.get(key)
         if value:  # Only include keys that have a value
-            # Convert lists to a stable string format
+            # Convert lists to a stable, sorted string format
             if isinstance(value, list):
                 key_parts.append(f"{key}: {', '.join(sorted(value))}")
             else:
@@ -59,9 +59,8 @@ async def check_report_cache_async(brief: Dict) -> Optional[str]:
         "⚙️ Creating deterministic composite key and dispatching check to L1 Report Cache..."
     )
     composite_key = _create_composite_key(brief)
-    logger.debug(
-        f"Generated Cache Key: {composite_key}"
-    )  # Add a debug log to see the key
+    # Adding a debug log is excellent practice to verify the key's consistency.
+    logger.debug(f"⚡ Generated Cache Key: {composite_key}")
     return await report_cache.check(composite_key)
 
 

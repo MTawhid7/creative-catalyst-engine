@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 # This is the single point of interaction for the user.
 USER_PASSAGE = """
-Kid's shirt inspired by marvel superheroes
+"I need a fast-fashion capsule collection for a brand like Zara or H&M for the upcoming festival season. The theme is 'Digital Lavender Haze', based on the color of the year. The vibe should be youthful, optimistic, and slightly psychedelic, with a nod to Y2K futurism. Focus on creating viral, social-media-friendly pieces for a global Gen-Z audience.
 """
 
 
