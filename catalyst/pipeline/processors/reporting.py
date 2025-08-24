@@ -6,6 +6,7 @@ enhanced logic for generating highly specific and creative image prompts.
 import json
 import random
 from typing import Dict, Any
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -19,7 +20,7 @@ from ...prompts import prompt_library
 class FinalOutputGeneratorProcessor(BaseProcessor):
     """
     Generates all final output files, including the main JSON report and the
-    art-directed image prompts.
+    art-directed image prompts that are guided by the brand ethos.
     """
 
     async def process(self, context: RunContext) -> RunContext:
@@ -33,7 +34,10 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
             raise ValueError("Cannot generate outputs without a final report.")
 
         try:
-            context.results_dir.mkdir(parents=True, exist_ok=True)
+            # The results_dir might have been renamed, so we ensure it exists.
+            # The orchestrator should handle the final path, but this is a safeguard.
+            final_dir = Path(context.results_dir)
+            final_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             self.logger.critical(
                 f"❌ Could not create output directory {context.results_dir}: {e}",
@@ -49,15 +53,20 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
 
         try:
             validated_report = FashionTrendReport.model_validate(context.final_report)
-            self.logger.info("⚙️ Generating art-directed, enriched image prompts...")
-            prompts_data = self._generate_image_prompts(validated_report)
+            self.logger.info("⚙️ Generating art-directed, ethos-driven image prompts...")
+
+            # Pass the brand_ethos to the prompt generator for deeper alignment
+            prompts_data = self._generate_image_prompts(
+                validated_report, context.brand_ethos
+            )
+
             self._save_json_file(
                 data=prompts_data, filename=settings.PROMPTS_FILENAME, context=context
             )
             self.logger.info("✅ Success: Image prompt generation complete.")
         except ValidationError as e:
             self.logger.error(
-                "❌ Could not generate prompts due to a validation error.",
+                "❌ Could not generate prompts due to a validation error in the final report.",
                 exc_info=True,
             )
         except Exception:
@@ -72,7 +81,8 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
     def _save_json_file(self, data: Dict, filename: str, context: RunContext):
         """A helper function to save a dictionary to a JSON file."""
         try:
-            output_path = context.results_dir / filename
+            # Ensure we are writing to the final, potentially renamed directory
+            output_path = Path(context.results_dir) / filename
             self.logger.info(f"💾 Saving data to '{output_path}'...")
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
@@ -82,10 +92,13 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                 f"❌ Failed to save JSON file '{filename}'", exc_info=True
             )
 
-    def _generate_image_prompts(self, report: FashionTrendReport) -> Dict[str, Any]:
+    def _generate_image_prompts(
+        self, report: FashionTrendReport, brand_ethos: str
+    ) -> Dict[str, Any]:
         """
         Generates highly specific and creative image prompts by intelligently
-        selecting a relevant muse and a diverse set of accessories for each key piece.
+        selecting a relevant muse and a diverse set of accessories for each key piece,
+        all filtered through the lens of the brand ethos.
         """
         all_prompts = {}
 
@@ -94,9 +107,7 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
         ]
 
         for piece in report.detailed_key_pieces:
-            # --- START OF FIX ---
-
-            # 1. Correctly select the FIRST item from the list before accessing attributes.
+            # Select the most representative elements for the prompt
             main_fabric = (
                 piece.fabrics[0].material if piece.fabrics else "a high-quality fabric"
             )
@@ -105,7 +116,7 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                 piece.silhouettes[0] if piece.silhouettes else "a modern silhouette"
             )
 
-            # 2. Refine Muse Selection Logic to ensure it's always a string.
+            # Refine Muse Selection Logic
             best_muse = (
                 report.influential_models[0]
                 if report.influential_models
@@ -119,10 +130,10 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     best_muse = model
                     break
 
-            # 3. Correct Description Snippet to get only the first sentence.
+            # Get a concise snippet of the description
             description_snippet = piece.description.split(".")[0]
 
-            # 4. Correct Styling Description for more natural language.
+            # Create a natural language styling description
             styling_elements = piece.suggested_pairings[:2]
             if len(styling_elements) >= 2:
                 styling_description = f"The garment is styled with {styling_elements[0]} and {styling_elements[1]} to create a complete, authentic look."
@@ -133,9 +144,7 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     "The garment is styled to feel authentic and personally curated."
                 )
 
-            # --- END OF FIX ---
-
-            # Diverse Accessory Sampling remains correct.
+            # Sample accessories for mood board variety
             num_accessories = min(len(all_accessories), 3)
             sampled_accessories = (
                 random.sample(all_accessories, num_accessories)
@@ -166,6 +175,8 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     key_accessories=", ".join(sampled_accessories),
                 ),
                 "final_garment": prompt_library.FINAL_GARMENT_PROMPT_TEMPLATE.format(
+                    brand_ethos=brand_ethos
+                    or "A focus on creating a beautiful and compelling image.",
                     model_style=best_muse,
                     key_piece_name=piece.key_piece_name,
                     description_snippet=description_snippet,

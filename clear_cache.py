@@ -22,7 +22,7 @@ try:
 except ImportError:
     print("❌ Error: Could not import project settings.")
     print(
-        "Please ensure you are running this script from the root of your 'CreativeCatalystEngine' project directory."
+        "⚠️ Please ensure you are running this script from the root of your 'CreativeCatalystEngine' project directory."
     )
     sys.exit(1)
 
@@ -34,12 +34,12 @@ def clear_chroma_cache():
     """
     cache_dir = settings.CHROMA_PERSIST_DIR
     print("-" * 50)
-    print("Creative Catalyst Engine - Cache Clearing Utility")
+    print("⚙️ Creative Catalyst Engine - Cache Clearing Utility")
     print("-" * 50)
-    print(f"This script will permanently delete the following directory:")
+    print(f"🗑️ This script will permanently delete the following directory:")
     print(f"  -> {cache_dir}")
     print(
-        "\nThis action cannot be undone and will erase all cached reports, sources, and concepts."
+        "\n⚠️ This action cannot be undone and will erase all cached reports, sources, and concepts."
     )
 
     if not cache_dir.exists():
@@ -58,12 +58,12 @@ def clear_chroma_cache():
         return
 
     try:
-        print(f"\nDeleting cache directory: {cache_dir}...")
+        print(f"\n🗑️ Deleting cache directory: {cache_dir}...")
         shutil.rmtree(cache_dir)
-        print("✅ Cache cleared successfully.")
+        print("✅ Cache cleared successfully. Future runs will perform full synthesis.")
     except Exception as e:
         print(f"\n❌ An error occurred while clearing the cache: {e}")
-        print("Please check file permissions and try again.")
+        print("⚠️ Please check file permissions and try again.")
 
 
 if __name__ == "__main__":

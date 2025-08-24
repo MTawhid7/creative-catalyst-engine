@@ -54,25 +54,55 @@ USER REQUEST:
 JSON OUTPUT:
 """
 
+# A new prompt to analyze the user's underlying philosophy.
+ETHOS_ANALYSIS_PROMPT = """
+You are an expert brand strategist and fashion critic. Your task is to analyze the user's request to find the unspoken, underlying design philosophy or brand ethos. Look beyond the specific garments and themes to understand the core values being expressed.
+
+**CRITICAL RULES:**
+1.  Read the user's passage carefully.
+2.  Identify key principles related to craftsmanship, quality, target client's mindset, and overall aesthetic philosophy.
+3.  Synthesize these principles into a single, concise paragraph.
+4.  If the passage is purely functional and contains no discernible ethos (e.g., "T-shirt for teenagers"), respond with an empty string.
+5.  Your response MUST be ONLY the paragraph or the empty string.
+
+--- EXAMPLE ---
+USER PASSAGE:
+"I prefer timeless, bespoke tailoring made from rare fabrics, with attention to every stitch. Exclusivity and craftsmanship are non-negotiable."
+
+AI RESPONSE:
+The core ethos is one of ultimate luxury and uncompromising quality. The focus is on artisanal, bespoke craftsmanship over fleeting trends. Key values are timelessness, material rarity, meticulous attention to detail, and a sense of exclusivity for a discerning clientele.
+--- END EXAMPLE ---
+
+USER PASSAGE:
+---
+{user_passage}
+---
+AI RESPONSE:
+"""
+
 THEME_EXPANSION_PROMPT = """
-You are a world-class fashion historian and cultural theorist. Your task is to take a core fashion theme and expand it into a richer set of abstract, historical, and artistic concepts for inspiration.
+You are a world-class fashion historian and cultural theorist. Your task is to take a core fashion theme and expand it into a richer set of concepts for inspiration, guided by a core brand philosophy.
+
 RULES:
-1.  Analyze the provided theme, garment, and key attributes.
-2.  You MUST brainstorm a list of 3-5 related but non-fashion concepts.
-3.  You MUST include a mix of BOTH abstract/artistic concepts AND specific historical fashion references.
+1.  Analyze the provided theme, garment, key attributes, and brand ethos.
+2.  The **Brand Ethos** is your primary filter. Your concepts MUST align with this philosophy.
+3.  You MUST brainstorm a list of 3-5 related but non-fashion concepts.
 4.  Your response MUST be ONLY a comma-separated list of these concepts.
 --- EXAMPLE ---
 USER BRIEF:
 - Theme: Arctic Minimalism
 - Garment: Outerwear
-- Attributes: functional, sustainable, stark beauty
+- Attributes: functional, sustainable
+- Brand Ethos: The core ethos is one of ultimate luxury and uncompromising quality. The focus is on artisanal, bespoke craftsmanship over fleeting trends.
+
 RESPONSE:
-Bauhaus architectural principles, 19th-century polar expedition gear, Japanese wabi-sabi philosophy, Modern Scandinavian interior design
+Bauhaus architectural principles, Shaker furniture design, Japanese joinery techniques, Dieter Rams' principles of good design
 --- END EXAMPLE ---
 USER BRIEF:
 - Theme: {theme_hint}
 - Garment: {garment_type}
 - Attributes: {key_attributes}
+- Brand Ethos: {brand_ethos}
 RESPONSE:
 """
 
@@ -130,15 +160,20 @@ JSON OUTPUT EXAMPLE:
 # --- Stage 2 & 3: Synthesis Prompts ---
 
 WEB_RESEARCH_PROMPT = """
-You are a world-class fashion research director...
+You are a world-class fashion research director. Your task is to perform a deep web search and synthesize the findings, guided by a core creative brief, a brand philosophy, and a list of expert-curated sources.
 
 **CRITICAL INSTRUCTIONS:**
-1.  **Creative Governance:** The **Core Theme** and **Key Attributes** from the user's brief are the primary focus. Your research and synthesis must be anchored to these concepts. The expanded concepts and antagonist are for secondary inspiration only.
-2.  **Think Like an Expert:** You MUST prioritize information from globally recognized fashion authorities...
-3.  **Perform a Deep Web Search:** Use your built-in search tools to find the most current and relevant information...
-4.  **Synthesize, Do Not List:** Synthesize all information into a cohesive, well-organized summary...
-5.  **Be Comprehensive:** Ensure your summary includes rich details on potential themes, concepts, colors, fabrics, etc., that align with the brief.
+1.  **Philosophical Governance:** The **Brand Ethos** is the most important guide. All synthesized information MUST align with this philosophy.
+2.  **Source Inspiration:** To spark your creative process, the **Curated Sources** list contains expert-selected authorities and concepts. Treat this list as a **starting point for inspiration, not a restrictive set of instructions.** Your primary goal is to find the most creative and relevant information, so you are encouraged to go beyond this list and discover novel, high-quality sources through your own dynamic research.
+3.  **Creative Governance:** The **Core Theme** and **Key Attributes** are the primary focus of the research.
+4.  **Synthesize, Do Not List:** Synthesize all information into a cohesive, well-organized summary.
 
+---
+**GUIDING PHILOSOPHY:**
+- **Brand Ethos:** {brand_ethos}
+---
+**CURATED SOURCES (For Inspiration):**
+{curated_sources}
 ---
 **CREATIVE BRIEF TO RESEARCH:**
 - **Core Theme:** {theme_hint}
@@ -176,9 +211,10 @@ You are a data structuring analyst. Your task is to take a creative brief and a 
 **Cultural Drivers:**
 - [Driver 1]
 - [Driver 2]
-**Influential Models:**
-- [Model 1]
-- [Model 2]
+**Influential Models / Muses:**
+- [CRITICAL: Identify a PERSON, ARCHETYPE, or SUBCULTURE, not a company or a concept. For example: "90s Raver," "Digital Nomad," or "Bella Hadid."]
+- [Archetype 1]
+- [Archetype 2]
 **Accessories:**
 - **Bags:** [Description]
 - **Footwear:** [Description]
@@ -200,6 +236,7 @@ TOP_LEVEL_SYNTHESIS_PROMPT = """
 You are a fashion analyst. Your task is to extract the main, high-level themes from the provided research text and structure them as a JSON object.
 **CRITICAL RULES:**
 - You MUST extract the 'overarching_theme', 'cultural_drivers', and 'influential_models'.
+- For 'influential_models', you MUST extract people, archetypes, or subcultures (e.g., "90s Raver," "Digital Nomad"). Do NOT extract companies or abstract concepts.
 - The output MUST be ONLY the valid JSON object.
 --- ORGANIZED RESEARCH ---
 {research_context}
@@ -210,18 +247,33 @@ ACCESSORIES_SYNTHESIS_PROMPT = """
 You are a fashion analyst. Your task is to extract all mentions of accessories from the provided research text and structure them as a JSON object.
 **CRITICAL RULES:**
 - You MUST group accessories by the categories: "Bags", "Footwear", "Jewelry", and "Other".
+- The value for each category MUST be a list of descriptive strings.
 - The output MUST be ONLY the valid JSON object.
 --- ORGANIZED RESEARCH ---
 {research_context}
+---
+--- JSON OUTPUT EXAMPLE (Structure to Follow) ---
+{{
+  "accessories": {{
+    "Bags": ["Structured top-handle bags", "Miniature crossbody bags"],
+    "Footwear": ["Chunky sole loafers", "Pointed-toe boots"],
+    "Jewelry": ["Layered gold necklaces", "Statement earrings"],
+    "Other": ["Silk scarves", "Leather belts"]
+  }}
+}}
 ---
 """
 
 KEY_PIECE_SYNTHESIS_PROMPT = """
 You are a fashion data analyst and creative consultant. Your task is to extract and enrich the details for a single fashion garment from the provided text and structure it as a valid JSON object.
 **CRITICAL RULES:**
-1.  You MUST use the exact field names and data types from the JSON OUTPUT EXAMPLE.
-2.  **Analyze and Enrich:** If the context lacks specific details (e.g., fabric textures, Pantone/HEX codes), you MUST use your internal knowledge of fashion, textile science, and color theory to provide creative, insightful, and relevant suggestions that fit the theme.
-3.  The output MUST be ONLY the single, valid JSON object for this one key piece.
+1.  **Use Exact Structure:** You MUST use the exact field names and data types from the JSON OUTPUT EXAMPLE.
+2.  **Enrich with Expertise:** If the context lacks specific details (e.g., fabric textures, Pantone/HEX codes), you MUST use your internal knowledge of fashion, textile science, and color theory to provide creative, insightful, and relevant suggestions that fit the theme.
+3.  **Cultural Patterns Mandate:** For the `cultural_patterns` field, if the source text contains no relevant patterns, you MUST invent 1-2 creative patterns that align with the overarching theme (e.g., 'Art Deco motifs', 'Baroque scrollwork', 'traditional Shibori dyeing techniques'). Do NOT leave this field empty.
+4.  **Be Commercially Aware:**
+    - For `inspired_by_designers`, include BOTH high-fashion references AND commercially successful, trend-driven brands relevant to the target market (e.g., for fast-fashion, think of brands like Ganni or Self-Portrait).
+    - For `sustainable` fabrics, be realistic. For a fast-fashion context, it's more credible to suggest a "hero" sustainable fabric or a blend with recycled content rather than claim everything is sustainable.
+5.  The output MUST be ONLY the single, valid JSON object for this one key piece.
 --- KEY PIECE CONTEXT ---
 {key_piece_context}
 ---
@@ -229,12 +281,12 @@ You are a fashion data analyst and creative consultant. Your task is to extract 
 {{
   "key_piece_name": "The Sculpted Parka",
   "description": "An oversized parka with clean lines that embodies quiet strength.",
-  "inspired_by_designers": ["Jil Sander", "Helmut Lang"],
+  "inspired_by_designers": ["Jil Sander", "Helmut Lang", "COS"],
   "wearer_profile": "The urban creative who values form and function.",
-  "cultural_patterns": [],
+  "cultural_patterns": ["Glitch Art Print", "Datamoshing"],
   "fabrics": [
     {{"material": "Recycled Nylon", "texture": "Matte", "sustainable": true}},
-    {{"material": "Technical Wool", "texture": "Brushed", "sustainable": true}}
+    {{"material": "Technical Wool Blend", "texture": "Brushed", "sustainable": false}}
   ],
   "colors": [
     {{"name": "Glacial Blue", "pantone_code": "14-4122 TCX", "hex_value": "#A2C4D1"}},
@@ -255,36 +307,40 @@ The response MUST be a single paragraph of text. Do not use JSON.
 """
 
 _JSON_EXAMPLE_FOR_DIRECT_KNOWLEDGE = """
-{
+{{
   "season": "Fall/Winter", "year": 2026, "region": "Global",
   "target_model_ethnicity": "Diverse",
   "narrative_setting_description": "An ancient, misty forest with towering, moss-covered stones. The air is cool and silent, with soft, diffused light filtering through the canopy.",
   "overarching_theme": "Example: Goblincore Mysticism",
   "cultural_drivers": ["Example: Return to Nature", "Example: Anti-Perfectionism"],
   "influential_models": ["Example: Lord of the Rings Elves"],
-  "accessories": {"Bags": ["Worn leather pouches"], "Footwear": ["Soft, moss-colored boots"], "Jewelry": ["Silver amulets"]},
+  "accessories": {{"Bags": ["Worn leather pouches"], "Footwear": ["Soft, moss-colored boots"], "Jewelry": ["Silver amulets"]}},
   "detailed_key_pieces": [
-    {
+    {{
       "key_piece_name": "The Moss-Stitched Cloak", "description": "A heavy, flowing cloak.",
       "inspired_by_designers": ["Rick Owens", "Yohji Yamamoto"], "wearer_profile": "The modern druid.",
-      "cultural_patterns": [],
-      "fabrics": [{"material": "Brushed Wool", "texture": "Felted", "sustainable": true}],
-      "colors": [{"name": "Forest Floor Brown", "pantone_code": "19-1118 TCX", "hex_value": "#5B4D3D"}],
+      "cultural_patterns": ["Celtic knotwork embroidery", "medieval manuscript illuminations"],
+      "fabrics": [{{"material": "Brushed Wool", "texture": "Felted", "sustainable": true}}],
+      "colors": [{{"name": "Forest Floor Brown", "pantone_code": "19-1118 TCX", "hex_value": "#5B4D3D"}}],
       "silhouettes": ["Asymmetrical", "Draped"], "details_trims": ["Raw edges", "Antler toggles"],
       "suggested_pairings": ["Linen trousers", "Leather accessories"]
-    }
+    }}
   ]
-}
+}}
 """
 
 DIRECT_KNOWLEDGE_SYNTHESIS_PROMPT = (
     """
-You are the Director of Strategy for 'The Future of Fashion'. Your task is to generate a complete fashion trend report based solely on the provided creative brief and your own extensive internal knowledge.
+You are the Director of Strategy for 'The Future of Fashion'. Your task is to generate a complete fashion trend report based solely on the provided creative brief, a guiding brand philosophy, and your own extensive internal knowledge.
 
 **CRITICAL RULES:**
-- **Creative Governance:** The **Core Theme** and **Key Attributes** from the user's brief are the most important instructions and must define the final look and feel of the collection. The **Creative Antagonist** is for inspiration and contrast ONLY. Use it to add unexpected details or a subtle conceptual tension, but do NOT make it the main subject.
-- **Strict Adherence:** You MUST use the exact field names and data types as defined in the `response_schema` and the JSON example below.
-- **Completeness:** You MUST provide a value for every required field, inventing creative and relevant details where necessary.
+- **Philosophical Governance:** The **Brand Ethos** is your most important instruction. The entire report, from the narrative to the choice of fabrics and details, MUST reflect this philosophy.
+- **Creative Governance:** The **Core Theme** and **Key Attributes** must define the final look and feel.
+- **Strict Adherence:** You MUST use the exact field names and data types as defined in the `response_schema`.
+- **Your output MUST be only the valid JSON object.**
+---
+**GUIDING PHILOSOPHY:**
+- **Brand Ethos:** {brand_ethos}
 ---
 **CREATIVE BRIEF:**
 - **Core Theme:** {theme_hint}
@@ -292,14 +348,14 @@ You are the Director of Strategy for 'The Future of Fashion'. Your task is to ge
 - **Target Audience:** {target_audience}
 - **Season:** {season} {year}
 - **Key Attributes:** {key_attributes}
-- **Creative Antagonist (for inspiration and contrast):** {creative_antagonist}
+- **Creative Antagonist (for inspiration):** {creative_antagonist}
 ---
 --- JSON OUTPUT EXAMPLE (Structure to Follow) ---
 """
     + _JSON_EXAMPLE_FOR_DIRECT_KNOWLEDGE
     + """
 ---
-Based on the **CREATIVE BRIEF** and your internal knowledge, generate a single, valid JSON object.
+Based on the **GUIDING PHILOSOPHY** and **CREATIVE BRIEF**, generate a single, valid JSON object.
 """
 )
 
@@ -364,11 +420,14 @@ Professional studio photography, top-down view (flat lay), soft and diffused lig
 """
 
 FINAL_GARMENT_PROMPT_TEMPLATE = """
-Full-body editorial fashion photograph for a high-end fashion magazine lookbook, in the style of a Juergen Teller or Glen Luchford editorial.
+Full-body editorial fashion photograph for a high-end fashion magazine lookbook.
+
+**Guiding Philosophy (Ethos):**
+- {brand_ethos}
 
 **Model & Garment:**
 - A professional runway model with the confident, elegant, and stylish presence of {model_style}.
-- The model is wearing the '{key_piece_name}', a stunning garment that embodies the concept of '{description_snippet}'. It is crafted from hyper-realistic {main_fabric} in a rich '{main_color}'.
+- The model is wearing the '{key_piece_name}', a stunning garment that embodies the concept of '{description_snippet}'. It is crafted from hyper-realistic {main_fabric} in a rich '{main_color}'. The craftsmanship MUST reflect the Guiding Philosophy.
 
 **Styling:**
 - {styling_description} The overall look must feel authentic and personally styled, not like a mannequin.
@@ -382,7 +441,7 @@ Full-body editorial fashion photograph for a high-end fashion magazine lookbook,
 - **Setting:** {narrative_setting}
 
 **Style:**
-- Shot on **35mm film**. The image should have a slight **photographic grain**, naturalistic lighting, and a sense of **found reality**. It should feel authentic and unpolished, not like a perfect digital studio shot. 8k.
+- The photographic style MUST align with the **Guiding Philosophy**. If the ethos is raw and unpolished, shoot on 35mm film like Juergen Teller. If the ethos is timeless and elegant, shoot with the polished, romantic style of a top fashion magazine. The image should feel authentic to the brand. 8k.
 
 **Negative Prompt:**
 - -nsfw, -deformed, -bad anatomy, -blurry, -low quality, -generic

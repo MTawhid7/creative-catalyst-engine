@@ -45,10 +45,14 @@ GEMINI_MODEL_NAME = "gemini-2.5-flash"
 # --- 4. Caching Configuration ---
 EMBEDDING_MODEL_NAME = "embedding-001"
 CHROMA_COLLECTION_NAME = "creative_catalyst_reports"
-CACHE_DISTANCE_THRESHOLD = 0.25
+CACHE_DISTANCE_THRESHOLD = 0.15
 
 
 # --- 5. File & Logging Configuration ---
 LOG_FILE_PATH = LOGS_DIR / "catalyst_engine.log"
 TREND_REPORT_FILENAME = "itemized_fashion_trends.json"
 PROMPTS_FILENAME = "generated_prompts.json"
+
+
+# --- 6. Results Management ---
+KEEP_N_RESULTS = 10  # Keep the 10 most recent result folders

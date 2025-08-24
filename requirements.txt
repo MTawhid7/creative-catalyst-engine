@@ -19,3 +19,6 @@ python-json-logger # For creating structured, machine-readable JSON logs.
 
 # --- Vector Database Caching ---
 chromadb
+
+# YAML Parsing
+PyYAML            # For parsing the sources.yaml configuration file.

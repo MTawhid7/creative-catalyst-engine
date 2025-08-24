@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 import asyncio
 from typing import Optional, Dict, Any
+import re
 
 from catalyst.pipeline.base_processor import BaseProcessor
 from catalyst.context import RunContext
@@ -20,6 +21,18 @@ class BriefDeconstructionProcessor(BaseProcessor):
     Pipeline Step 1: Intelligently deconstructs the user's passage into a
     structured brief, inferring missing creative details from the core theme.
     """
+
+    def _create_slug(self, text: Optional[str]) -> str:
+        """Generates a clean, URL-friendly slug from a string."""
+        if not text:
+            return "untitled"
+        text = text.lower()
+        # Remove special characters, allowing only letters, numbers, spaces, and hyphens
+        text = re.sub(r"[^a-z0-9\s-]", "", text)
+        # Replace spaces and consecutive hyphens with a single hyphen
+        text = re.sub(r"[\s-]+", "-", text).strip("-")
+        # Truncate to a reasonable length
+        return text[:50]
 
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info("⚙️ Performing intelligent deconstruction of user passage...")
@@ -34,6 +47,12 @@ class BriefDeconstructionProcessor(BaseProcessor):
             raise ValueError("Brief deconstruction failed. Check logs for details.")
 
         context.enriched_brief = initial_brief
+
+        # Generate and store the theme slug in the context object
+        theme_hint = initial_brief.get("theme_hint")
+        context.theme_slug = self._create_slug(theme_hint)
+        self.logger.info(f"✅ Generated theme slug: '{context.theme_slug}'")
+
         self.logger.info(
             "✅ Success: Deconstructed and inferred a complete initial brief."
         )
@@ -104,9 +123,39 @@ class BriefDeconstructionProcessor(BaseProcessor):
         return extracted_data
 
 
+class EthosClarificationProcessor(BaseProcessor):
+    """
+    Pipeline Step 2: Analyzes the user's passage for an underlying
+    design philosophy or brand ethos.
+    """
+
+    async def process(self, context: RunContext) -> RunContext:
+        self.logger.info("🔬 Analyzing user passage for deeper brand ethos...")
+
+        prompt = prompt_library.ETHOS_ANALYSIS_PROMPT.format(
+            user_passage=context.user_passage
+        )
+        response = await gemini_client.generate_content_async(prompt_parts=[prompt])
+
+        if response and response.get("text"):
+            ethos = response["text"].strip()
+            if ethos:
+                context.brand_ethos = ethos
+                self.logger.info("✅ Success: Distilled brand ethos.")
+                self.logger.debug(f"Found Ethos: {ethos}")
+            else:
+                self.logger.info(
+                    "💨 No specific ethos found. Proceeding with standard brief."
+                )
+        else:
+            self.logger.warning("⚠️ Ethos analysis returned no content. Skipping.")
+
+        return context
+
+
 class BriefEnrichmentProcessor(BaseProcessor):
     """
-    Pipeline Step 2: Expands the initial brief with AI-driven creative
+    Pipeline Step 3: Expands the initial brief with AI-driven creative
     concepts, a strategic antagonist, and searchable keywords for research.
     """
 
@@ -114,7 +163,10 @@ class BriefEnrichmentProcessor(BaseProcessor):
         self.logger.info(
             "⚙️ Enriching brief with AI-driven creative concepts and keywords..."
         )
-        enriched_brief = await self._enrich_brief_async(context.enriched_brief)
+        # Pass the newly found brand_ethos to the enrichment process
+        enriched_brief = await self._enrich_brief_async(
+            context.enriched_brief, context.brand_ethos
+        )
         context.enriched_brief = enriched_brief
         self.logger.info(
             f"✅ Success: Brief enriched. Found {len(enriched_brief.get('search_keywords', []))} keywords."
@@ -189,13 +241,18 @@ class BriefEnrichmentProcessor(BaseProcessor):
         except (json.JSONDecodeError, AttributeError):
             return cleaned_text
 
-    async def _enrich_brief_async(self, brief: Dict) -> Dict:
+    async def _enrich_brief_async(self, brief: Dict, brand_ethos: str) -> Dict:
         """The main enrichment logic, calling out to the LLM for creative expansion."""
+
+        # Add the brand_ethos to the prompt arguments to guide concept generation
         concept_prompt_args = {
             "theme_hint": brief.get("theme_hint", "general fashion"),
             "garment_type": brief.get("garment_type", "clothing"),
             "key_attributes": ", ".join(brief.get("key_attributes", [])),
+            "brand_ethos": brand_ethos
+            or "No specific ethos provided.",  # Handle empty ethos
         }
+
         antagonist_prompt_args = {
             "theme_hint": brief.get("theme_hint", "general fashion")
         }

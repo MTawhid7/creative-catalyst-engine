@@ -10,7 +10,11 @@ from ..utilities.logger import get_logger
 from ..caching import cache_manager
 
 # Import all processors
-from .processors.briefing import BriefDeconstructionProcessor, BriefEnrichmentProcessor
+from .processors.briefing import (
+    BriefDeconstructionProcessor,
+    EthosClarificationProcessor,
+    BriefEnrichmentProcessor,
+)
 from .processors.synthesis import (
     WebResearchProcessor,
     ContextStructuringProcessor,
@@ -34,9 +38,10 @@ class PipelineOrchestrator:
         self.logger.info(f"▶️ PIPELINE START | Run ID: {context.run_id}")
 
         try:
-            # STAGE 1: BRIEFING
+            # STAGE 1: BRIEFING (NOW WITH ETHOS CLARIFICATION)
             briefing_pipeline: list[BaseProcessor] = [
                 BriefDeconstructionProcessor(),
+                EthosClarificationProcessor(),
                 BriefEnrichmentProcessor(),
             ]
             for processor in briefing_pipeline:
@@ -78,7 +83,6 @@ class PipelineOrchestrator:
                     fallback_processor = DirectKnowledgeSynthesisProcessor()
                     context = await self._run_step(fallback_processor, context)
 
-                # --- START OF FIX ---
                 # After a successful synthesis (either primary or fallback), add the new report to the cache.
                 if context.final_report:
                     self.logger.info(
@@ -87,7 +91,6 @@ class PipelineOrchestrator:
                     await cache_manager.add_to_report_cache_async(
                         context.enriched_brief, context.final_report
                     )
-                # --- END OF FIX ---
 
             # STAGE 5: REPORTING
             if context.final_report:

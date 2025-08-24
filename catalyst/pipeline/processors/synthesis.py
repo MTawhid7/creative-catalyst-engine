@@ -15,12 +15,16 @@ from catalyst.context import RunContext
 from ...clients import gemini_client
 from ...prompts import prompt_library
 from ...models.trend_report import FashionTrendReport, KeyPieceDetail
+from ...utilities.config_loader import (
+    FORMATTED_SOURCES,
+)
 
 
 class WebResearchProcessor(BaseProcessor):
     """
-    Pipeline Step 3: Instructs the LLM to perform a web search and return a
-    single, unstructured block of text summarizing its findings.
+    Pipeline Step 4: Instructs the LLM to perform a web search and return a
+    single, unstructured block of text summarizing its findings, guided by the brand ethos
+    and a curated list of sources.
     """
 
     async def process(self, context: RunContext) -> RunContext:
@@ -29,8 +33,10 @@ class WebResearchProcessor(BaseProcessor):
         )
         brief = context.enriched_brief
 
-        # This robust formatting gracefully handles potentially None or empty values from the brief.
+        # This robust formatting now includes the brand_ethos and curated sources.
         prompt = prompt_library.WEB_RESEARCH_PROMPT.format(
+            brand_ethos=context.brand_ethos or "No specific ethos provided.",
+            curated_sources=FORMATTED_SOURCES,  # <--- INJECT THE SOURCES
             theme_hint=brief.get("theme_hint", "fashion"),
             garment_type=brief.get("garment_type") or "not specified",
             target_audience=brief.get("target_audience") or "a general audience",
@@ -58,7 +64,7 @@ class WebResearchProcessor(BaseProcessor):
 
 class ContextStructuringProcessor(BaseProcessor):
     """
-    Pipeline Step 4: Organizes the raw research context into a
+    Pipeline Step 5: Organizes the raw research context into a
     clean, bulleted list to prepare for final JSON generation.
     """
 
@@ -102,7 +108,7 @@ class ContextStructuringProcessor(BaseProcessor):
 
 class ReportSynthesisProcessor(BaseProcessor):
     """
-    Pipeline Step 5: Uses the reliable "divide and conquer" method to
+    Pipeline Step 6: Uses the reliable "divide and conquer" method to
     generate the final, validated JSON trend report from the structured context.
     """
 
@@ -271,8 +277,8 @@ class ReportSynthesisProcessor(BaseProcessor):
 
 class DirectKnowledgeSynthesisProcessor(BaseProcessor):
     """
-    Pipeline Fallback Step: Generates the entire trend report in a single call,
-    relying solely on the model's pre-trained knowledge.
+    Pipeline Fallback Step: Generates the entire trend report using a robust,
+    multi-step process guided by the brand ethos and the model's internal knowledge.
     """
 
     async def process(self, context: RunContext) -> RunContext:
@@ -280,29 +286,163 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
         self.logger.info(
             "✨ Generating report directly from Gemini's internal knowledge base..."
         )
-        brief = context.enriched_brief
 
-        # This robust formatting gracefully handles potentially None or empty values from the brief.
-        prompt = prompt_library.DIRECT_KNOWLEDGE_SYNTHESIS_PROMPT.format(
-            theme_hint=brief.get("theme_hint", "fashion"),
-            garment_type=brief.get("garment_type") or "not specified",
-            target_audience=brief.get("target_audience") or "a general audience",
-            season=brief.get("season", ""),
-            year=brief.get("year", ""),
-            key_attributes=", ".join(brief.get("key_attributes") or ["general"]),
-            creative_antagonist=brief.get("creative_antagonist") or "mainstream trends",
+        final_report_data = await self._generate_report_with_internal_knowledge(
+            context.enriched_brief, context.brand_ethos
         )
 
-        response = await gemini_client.generate_content_async(
-            prompt_parts=[prompt], response_schema=FashionTrendReport
-        )
-
-        if not response:
+        if not final_report_data:
             self.logger.critical(
                 "❌ Direct knowledge synthesis also failed. The model could not generate a report."
             )
             raise RuntimeError("The fallback knowledge synthesis process failed.")
 
         self.logger.info("✅ Success: Generated report using direct knowledge.")
-        context.final_report = response
+        context.final_report = final_report_data
         return context
+
+    async def _generate_report_with_internal_knowledge(
+        self, brief: Dict, brand_ethos: str
+    ) -> Optional[Dict]:
+        """
+        Breaks the synthesis task into smaller, reliable, schema-driven API calls
+        using the model's internal knowledge, guided by the brand ethos.
+        """
+        final_report = {}
+        ethos = brand_ethos or "A focus on creating a beautiful and compelling design."
+        brief_context_str = json.dumps(brief, indent=2)
+
+        # STEP 1: Generate Top-Level Fields
+        self.logger.info("✨ Fallback Step 1/4: Generating top-level fields...")
+
+        class TopLevelModel(BaseModel):
+            overarching_theme: str
+            cultural_drivers: List[str]
+            influential_models: List[str]
+
+        top_level_prompt = f"""
+        Based on your internal knowledge, the creative brief, and the guiding philosophy below, generate the top-level fashion concepts.
+
+        GUIDING PHILOSOPHY (ETHOS):
+        {ethos}
+
+        CREATIVE BRIEF:
+        {brief_context_str}
+        """
+        top_level_response = await gemini_client.generate_content_async(
+            prompt_parts=[top_level_prompt],
+            response_schema=TopLevelModel,
+        )
+        if top_level_response:
+            final_report.update(top_level_response)
+        else:
+            self.logger.error("❌ Fallback failed to generate top-level fields.")
+            return None
+
+        # STEP 2: Generate Narrative Setting
+        self.logger.info("✨ Fallback Step 2/4: Generating narrative setting...")
+        setting_prompt = prompt_library.NARRATIVE_SETTING_PROMPT.format(
+            overarching_theme=final_report.get("overarching_theme", ""),
+            cultural_drivers=", ".join(final_report.get("cultural_drivers", [])),
+        )
+        setting_response = await gemini_client.generate_content_async(
+            prompt_parts=[setting_prompt]
+        )
+        final_report["narrative_setting_description"] = (
+            setting_response.get(
+                "text", "A minimalist, contemporary architectural setting."
+            )
+            if setting_response
+            else ""
+        )
+
+        # STEP 3: Generate Accessories
+        self.logger.info("✨ Fallback Step 3/4: Generating accessories...")
+
+        class AccessoriesModel(BaseModel):
+            accessories: Dict[str, List[str]]
+
+        accessories_prompt = f"""
+        Based on your internal knowledge, the creative brief, and the guiding philosophy below, generate a list of relevant accessories.
+
+        GUIDING PHILOSOPHY (ETHOS):
+        {ethos}
+
+        CREATIVE BRIEF:
+        {brief_context_str}
+        """
+        accessories_response = await gemini_client.generate_content_async(
+            prompt_parts=[accessories_prompt],
+            response_schema=AccessoriesModel,
+        )
+        final_report.update(accessories_response or {"accessories": {}})
+
+        # STEP 4: Generate Key Pieces
+        self.logger.info("✨ Fallback Step 4/4: Generating detailed key pieces...")
+
+        class KeyPieceNames(BaseModel):
+            names: List[str]
+
+        key_pieces_names_prompt = f"""
+        Based on the creative brief and ethos below, generate a list of 2-3 creative and descriptive names for key fashion pieces that fit the theme.
+
+        GUIDING PHILOSOPHY (ETHOS):
+        {ethos}
+
+        CREATIVE BRIEF:
+        {brief_context_str}
+        """
+        names_response = await gemini_client.generate_content_async(
+            prompt_parts=[key_pieces_names_prompt],
+            response_schema=KeyPieceNames,
+        )
+
+        processed_pieces = []
+        if names_response and names_response.get("names"):
+            for i, piece_name in enumerate(names_response["names"]):
+                self.logger.info(
+                    f"🔄 Processing Key Piece '{piece_name}' ({i + 1}/{len(names_response['names'])})..."
+                )
+                key_piece_prompt = f"""
+                You are a fashion expert. Based on the creative brief and guiding philosophy below, generate the detailed JSON data for a single key piece named '{piece_name}'.
+
+                GUIDING PHILOSOPHY (ETHOS):
+                {ethos}
+
+                CREATIVE BRIEF:
+                {brief_context_str}
+                """
+                piece_response = await gemini_client.generate_content_async(
+                    prompt_parts=[key_piece_prompt], response_schema=KeyPieceDetail
+                )
+                if piece_response:
+                    try:
+                        validated_piece = KeyPieceDetail.model_validate(piece_response)
+                        processed_pieces.append(validated_piece.model_dump(mode="json"))
+                    except ValidationError as e:
+                        self.logger.warning(
+                            f"⚠️ Validation failed for Key Piece '{piece_name}': {e}"
+                        )
+                else:
+                    self.logger.error(
+                        f"❌ Failed to get a response for Key Piece '{piece_name}'."
+                    )
+        final_report["detailed_key_pieces"] = processed_pieces
+
+        # STEP 5: Assemble and Validate
+        self.logger.info(
+            "✨ Fallback Step 5/5: Assembling and validating final report..."
+        )
+        final_report["season"] = brief.get("season", "")
+        final_report["year"] = brief.get("year", 0)
+        final_report["region"] = brief.get("region")
+        final_report["target_model_ethnicity"] = "Diverse"
+
+        try:
+            validated_report = FashionTrendReport.model_validate(final_report)
+            return validated_report.model_dump(mode="json")
+        except ValidationError as e:
+            self.logger.critical(
+                f"❌ The final assembled report from the fallback process failed validation: {e}"
+            )
+            return None
