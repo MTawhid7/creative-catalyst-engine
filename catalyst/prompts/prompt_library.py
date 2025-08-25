@@ -55,6 +55,9 @@ JSON OUTPUT:
 """
 
 # A new prompt to analyze the user's underlying philosophy.
+# catalyst/prompts/prompt_library.py
+
+# A new prompt to analyze the user's underlying philosophy.
 ETHOS_ANALYSIS_PROMPT = """
 You are an expert brand strategist and fashion critic. Your task is to analyze the user's request to find the unspoken, underlying design philosophy or brand ethos. Look beyond the specific garments and themes to understand the core values being expressed.
 
@@ -62,22 +65,34 @@ You are an expert brand strategist and fashion critic. Your task is to analyze t
 1.  Read the user's passage carefully.
 2.  Identify key principles related to craftsmanship, quality, target client's mindset, and overall aesthetic philosophy.
 3.  Synthesize these principles into a single, concise paragraph.
-4.  If the passage is purely functional and contains no discernible ethos (e.g., "T-shirt for teenagers"), respond with an empty string.
-5.  Your response MUST be ONLY the paragraph or the empty string.
+4.  If the passage is purely functional and contains no discernible ethos, you MUST return null for the ethos value.
+5.  Your response MUST be ONLY a valid JSON object with a single key: "ethos".
 
---- EXAMPLE ---
+--- EXAMPLE 1 ---
 USER PASSAGE:
 "I prefer timeless, bespoke tailoring made from rare fabrics, with attention to every stitch. Exclusivity and craftsmanship are non-negotiable."
 
-AI RESPONSE:
-The core ethos is one of ultimate luxury and uncompromising quality. The focus is on artisanal, bespoke craftsmanship over fleeting trends. Key values are timelessness, material rarity, meticulous attention to detail, and a sense of exclusivity for a discerning clientele.
---- END EXAMPLE ---
+JSON RESPONSE:
+{{
+  "ethos": "The core ethos is one of ultimate luxury and uncompromising quality. The focus is on artisanal, bespoke craftsmanship over fleeting trends. Key values are timelessness, material rarity, meticulous attention to detail, and a sense of exclusivity for a discerning clientele."
+}}
+--- END EXAMPLE 1 ---
+
+--- EXAMPLE 2 ---
+USER PASSAGE:
+"T-shirt for teenagers"
+
+JSON RESPONSE:
+{{
+  "ethos": null
+}}
+--- END EXAMPLE 2 ---
 
 USER PASSAGE:
 ---
 {user_passage}
 ---
-AI RESPONSE:
+JSON RESPONSE:
 """
 
 THEME_EXPANSION_PROMPT = """
@@ -244,21 +259,25 @@ You are a fashion analyst. Your task is to extract the main, high-level themes f
 """
 
 ACCESSORIES_SYNTHESIS_PROMPT = """
-You are a fashion analyst. Your task is to extract all mentions of accessories from the provided research text and structure them as a JSON object.
+You are an expert fashion stylist and data analyst. Your task is to extract all mentions of accessories from the provided research text and structure them as a JSON object.
+
 **CRITICAL RULES:**
-- You MUST group accessories by the categories: "Bags", "Footwear", "Jewelry", and "Other".
-- The value for each category MUST be a list of descriptive strings.
-- The output MUST be ONLY the valid JSON object.
+1.  **Define "Accessory":** Your primary task is to identify items that *adorn* or *complement* an outfit, not core articles of clothing.
+2.  **Negative Constraint:** You MUST EXCLUDE items like **jackets, kimonos, coats, cardigans, and shirts.** These are layering garments, not accessories.
+3.  **Strict Categorization:** You MUST focus on extracting items for the specific categories: "Bags", "Footwear", "Jewelry", and "Other" (for items like hats, belts, scarves, sunglasses, etc.).
+4.  **Intelligent Enrichment:** If the research text is sparse or missing specific examples for these categories, you MUST use your own expert fashion knowledge of the theme to suggest at least 2-3 relevant and creative items for each primary category ("Bags", "Footwear", "Jewelry"). Do NOT leave them empty if the theme strongly implies their presence (e.g., a festival theme).
+5.  **Valid JSON Output:** The output MUST be ONLY the valid JSON object.
+
 --- ORGANIZED RESEARCH ---
 {research_context}
 ---
 --- JSON OUTPUT EXAMPLE (Structure to Follow) ---
 {{
   "accessories": {{
-    "Bags": ["Structured top-handle bags", "Miniature crossbody bags"],
-    "Footwear": ["Chunky sole loafers", "Pointed-toe boots"],
-    "Jewelry": ["Layered gold necklaces", "Statement earrings"],
-    "Other": ["Silk scarves", "Leather belts"]
+    "Bags": ["Fringed crossbody bags", "Woven straw totes"],
+    "Footwear": ["Suede ankle boots", "Gladiator sandals"],
+    "Jewelry": ["Layered turquoise necklaces", "Statement silver rings"],
+    "Other": ["Wide-brimmed fedora hats", "Embroidered belts"]
   }}
 }}
 ---
@@ -305,59 +324,6 @@ You are a world-class art director and storyteller. Based on the following core 
 - Cultural Drivers: {cultural_drivers}
 The response MUST be a single paragraph of text. Do not use JSON.
 """
-
-_JSON_EXAMPLE_FOR_DIRECT_KNOWLEDGE = """
-{{
-  "season": "Fall/Winter", "year": 2026, "region": "Global",
-  "target_model_ethnicity": "Diverse",
-  "narrative_setting_description": "An ancient, misty forest with towering, moss-covered stones. The air is cool and silent, with soft, diffused light filtering through the canopy.",
-  "overarching_theme": "Example: Goblincore Mysticism",
-  "cultural_drivers": ["Example: Return to Nature", "Example: Anti-Perfectionism"],
-  "influential_models": ["Example: Lord of the Rings Elves"],
-  "accessories": {{"Bags": ["Worn leather pouches"], "Footwear": ["Soft, moss-colored boots"], "Jewelry": ["Silver amulets"]}},
-  "detailed_key_pieces": [
-    {{
-      "key_piece_name": "The Moss-Stitched Cloak", "description": "A heavy, flowing cloak.",
-      "inspired_by_designers": ["Rick Owens", "Yohji Yamamoto"], "wearer_profile": "The modern druid.",
-      "cultural_patterns": ["Celtic knotwork embroidery", "medieval manuscript illuminations"],
-      "fabrics": [{{"material": "Brushed Wool", "texture": "Felted", "sustainable": true}}],
-      "colors": [{{"name": "Forest Floor Brown", "pantone_code": "19-1118 TCX", "hex_value": "#5B4D3D"}}],
-      "silhouettes": ["Asymmetrical", "Draped"], "details_trims": ["Raw edges", "Antler toggles"],
-      "suggested_pairings": ["Linen trousers", "Leather accessories"]
-    }}
-  ]
-}}
-"""
-
-DIRECT_KNOWLEDGE_SYNTHESIS_PROMPT = (
-    """
-You are the Director of Strategy for 'The Future of Fashion'. Your task is to generate a complete fashion trend report based solely on the provided creative brief, a guiding brand philosophy, and your own extensive internal knowledge.
-
-**CRITICAL RULES:**
-- **Philosophical Governance:** The **Brand Ethos** is your most important instruction. The entire report, from the narrative to the choice of fabrics and details, MUST reflect this philosophy.
-- **Creative Governance:** The **Core Theme** and **Key Attributes** must define the final look and feel.
-- **Strict Adherence:** You MUST use the exact field names and data types as defined in the `response_schema`.
-- **Your output MUST be only the valid JSON object.**
----
-**GUIDING PHILOSOPHY:**
-- **Brand Ethos:** {brand_ethos}
----
-**CREATIVE BRIEF:**
-- **Core Theme:** {theme_hint}
-- **Garment Type:** {garment_type}
-- **Target Audience:** {target_audience}
-- **Season:** {season} {year}
-- **Key Attributes:** {key_attributes}
-- **Creative Antagonist (for inspiration):** {creative_antagonist}
----
---- JSON OUTPUT EXAMPLE (Structure to Follow) ---
-"""
-    + _JSON_EXAMPLE_FOR_DIRECT_KNOWLEDGE
-    + """
----
-Based on the **GUIDING PHILOSOPHY** and **CREATIVE BRIEF**, generate a single, valid JSON object.
-"""
-)
 
 
 # --- Stage 4: Image Prompt Generation Templates ---

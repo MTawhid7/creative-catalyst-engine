@@ -35,7 +35,6 @@ class RunContext:
         # Add a new field to hold the deeper understanding of the user's philosophy.
         self.brand_ethos: str = ""
         # --- END OF FIX ---
-        self.discovered_urls: List[str] = []
         self.raw_research_context: str = ""
         self.structured_research_context: str = ""
         self.final_report: Dict = {}
@@ -64,7 +63,6 @@ class RunContext:
             "user_passage": self.user_passage,
             "enriched_brief": self.enriched_brief,
             "brand_ethos": self.brand_ethos,  # Add to logging
-            "discovered_urls_count": len(self.discovered_urls),
             "raw_research_context_length": len(self.raw_research_context),
             "structured_research_context_length": len(self.structured_research_context),
             "final_report_keys": (

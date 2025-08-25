@@ -21,9 +21,8 @@ logger = get_logger(__name__)
 
 # This is the single point of interaction for the user.
 USER_PASSAGE = """
-I prefer timeless, bespoke tailoring made from rare fabrics, with attention to every stitch. Exclusivity and craftsmanship are non-negotiable.
+Design a single, show-stopping gown for the Met Gala. It needs to be completely over-the-top, maybe something that glows in the dark or has moving parts. It has to be a major statement piece that will get all the press.
 """
-
 
 def cleanup_old_results():
     """Keeps the most recent N result folders and deletes the rest."""

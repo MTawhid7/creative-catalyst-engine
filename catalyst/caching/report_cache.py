@@ -19,7 +19,7 @@ from ..utilities.logger import get_logger
 logger = get_logger(__name__)
 
 # --- ChromaDB Client Initialization ---
-_collection_name = settings.CHROMA_COLLECTION_NAME + "_reports"
+_collection_name = settings.CHROMA_COLLECTION_NAME
 _report_collection = None
 try:
     chroma_client = chromadb.PersistentClient(path=str(settings.CHROMA_PERSIST_DIR))

@@ -32,7 +32,8 @@ class BriefDeconstructionProcessor(BaseProcessor):
         # Replace spaces and consecutive hyphens with a single hyphen
         text = re.sub(r"[\s-]+", "-", text).strip("-")
         # Truncate to a reasonable length
-        return text[:50]
+        slug = text[:15]
+        return slug.strip("-")
 
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info("⚙️ Performing intelligent deconstruction of user passage...")
@@ -135,20 +136,38 @@ class EthosClarificationProcessor(BaseProcessor):
         prompt = prompt_library.ETHOS_ANALYSIS_PROMPT.format(
             user_passage=context.user_passage
         )
-        response = await gemini_client.generate_content_async(prompt_parts=[prompt])
 
-        if response and response.get("text"):
-            ethos = response["text"].strip()
-            if ethos:
-                context.brand_ethos = ethos
-                self.logger.info("✅ Success: Distilled brand ethos.")
-                self.logger.debug(f"Found Ethos: {ethos}")
-            else:
-                self.logger.info(
-                    "💨 No specific ethos found. Proceeding with standard brief."
+        # --- START OF FIX ---
+        # The client will now receive a JSON string, which needs to be parsed.
+        response_text = await gemini_client.generate_content_async(
+            prompt_parts=[prompt]
+        )
+
+        if response_text and response_text.get("text"):
+            try:
+                # Clean up potential markdown and parse the JSON
+                json_text = response_text["text"].strip()
+                if json_text.startswith("```json"):
+                    json_text = json_text[7:-3].strip()
+
+                data = json.loads(json_text)
+                ethos = data.get("ethos")  # Safely get the 'ethos' value
+
+                if ethos:
+                    context.brand_ethos = ethos
+                    self.logger.info("✅ Success: Distilled brand ethos.")
+                    self.logger.debug(f"Found Ethos: {ethos}")
+                else:
+                    self.logger.info(
+                        "💨 No specific ethos found. Proceeding with standard brief."
+                    )
+            except (json.JSONDecodeError, KeyError):
+                self.logger.warning(
+                    "⚠️ Ethos analysis returned malformed JSON. Skipping."
                 )
         else:
             self.logger.warning("⚠️ Ethos analysis returned no content. Skipping.")
+        # --- END OF FIX ---
 
         return context
 

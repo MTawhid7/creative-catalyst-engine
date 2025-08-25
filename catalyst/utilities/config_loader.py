@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 def load_sources_config() -> Dict[str, Any]:
     """Loads the sources.yaml file from the project root."""
     try:
-        sources_path = settings.BASE_DIR / "sources.yaml"
+        sources_path = settings.BASE_DIR / "catalyst" / "config" / "sources.yaml"
         if sources_path.exists():
             with open(sources_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f)
