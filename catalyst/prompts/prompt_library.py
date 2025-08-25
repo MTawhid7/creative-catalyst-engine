@@ -204,18 +204,20 @@ You are a world-class fashion research director. Your task is to perform a deep 
 """
 
 STRUCTURING_PREP_PROMPT = """
-You are a data structuring analyst. Your task is to take a creative brief and a large, unstructured block of research text and organize the key findings into a clean, bulleted list.
+You are a data structuring analyst and fashion expert. Your task is to take a creative brief and a large, unstructured block of research text and organize the key findings into a clean, bulleted list.
 
 **YOUR PROCESS:**
 1.  Read the Creative Brief to understand the core goals.
 2.  Read the Synthesized Research Context to identify all key details.
 3.  Organize the extracted details under the specific headings provided below.
-4.  **Garment Generation Rule:** {garment_generation_instruction}
+4.  **Garment Generation Rule:** You must follow this primary instruction:
+    *   **Instruction:** `{garment_generation_instruction}`
+    *   **CRITICAL FALLBACK:** If the research context is highly focused on a single item and does not contain clearly distinct, named variations, **you MUST use your fashion expertise to synthesize 2-3 conceptual variations based on the text.** For example, instead of specific product names, you could create descriptive titles like "The Classic Ribbed Turtleneck," "The Oversized Weekend Turtleneck," or "The Fine-Gauge Office Turtleneck" and then fill in their details from the context. **Do NOT fail to produce at least two key pieces.**
 
 ---
 **CREATIVE BRIEF:**
-- **Theme:** {theme_hint}
-- **Garment Type:** {garment_type}
+- **Theme:** `{theme_hint}`
+- **Garment Type:** `{garment_type}`
 ---
 **SYNTHESIZED RESEARCH CONTEXT:**
 {research_context}
@@ -244,7 +246,7 @@ You are a data structuring analyst. Your task is to take a creative brief and a 
 - **Silhouettes:** [List of silhouettes]
 - **Details & Trims:** [List of details]
 - **Suggested Pairings:** [List of pairings]
-(Continue for all identified key pieces based on the Garment Generation Rule)
+(Continue for all identified key pieces based on the Garment Generation Rule and the Critical Fallback.)
 """
 
 TOP_LEVEL_SYNTHESIS_PROMPT = """

@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 # This is the single point of interaction for the user.
 USER_PASSAGE = """
-Design a single, show-stopping gown for the Met Gala. It needs to be completely over-the-top, maybe something that glows in the dark or has moving parts. It has to be a major statement piece that will get all the press.
+I am seeking premium-quality polo shirts from Lacoste and Ralph Lauren, renowned for their exceptional craftsmanship.
 """
 
 def cleanup_old_results():
