@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 # This is the single point of interaction for the user.
 USER_PASSAGE = """
-I am seeking premium-quality polo shirts from Lacoste and Ralph Lauren, renowned for their exceptional craftsmanship.
+Show Hermès bespoke coats paired with bohemian layering styles.
 """
 
 def cleanup_old_results():

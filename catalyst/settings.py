@@ -45,7 +45,7 @@ GEMINI_MODEL_NAME = "gemini-2.5-flash"
 # --- 4. Caching Configuration ---
 EMBEDDING_MODEL_NAME = "embedding-001"
 CHROMA_COLLECTION_NAME = "creative_catalyst_reports"
-CACHE_DISTANCE_THRESHOLD = 0.15
+CACHE_DISTANCE_THRESHOLD = 0.10
 
 
 # --- 5. File & Logging Configuration ---

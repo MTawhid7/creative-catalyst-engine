@@ -327,90 +327,84 @@ You are a world-class art director and storyteller. Based on the following core 
 The response MUST be a single paragraph of text. Do not use JSON.
 """
 
+CREATIVE_STYLE_GUIDE_PROMPT = """
+You are an expert creative director for a high-fashion magazine. Your task is to translate an abstract fashion brief into a concrete, actionable style guide for a photoshoot.
+
+**CRITICAL RULES:**
+1.  **Translate Ethos to Photography:** Analyze the `brand_ethos` and `overarching_theme` to define a specific photographic style. Provide concrete details like lighting, camera lens, and mood.
+2.  **Enrich the Model Persona:** Expand the `influential_models` archetype into a single, descriptive sentence that captures the model's attitude, presence, and energy.
+3.  **Weaponize the Antagonist:** Use the `creative_antagonist` to create a comma-separated list of visual styles, textures, or concepts that should be explicitly AVOIDED in the final image.
+4.  **Strict JSON Output:** Your response MUST be ONLY a valid JSON object with the keys "photographic_style", "model_persona", and "negative_style_keywords".
+
+---
+**FASHION BRIEF:**
+- **Brand Ethos:** {brand_ethos}
+- **Overarching Theme:** {overarching_theme}
+- **Influential Models / Archetypes:** {influential_models}
+- **Creative Antagonist:** {creative_antagonist}
+---
+--- EXAMPLE ---
+**FASHION BRIEF:**
+- **Brand Ethos:** "The core ethos is one of ultimate luxury and uncompromising quality... a sense of exclusivity for a discerning clientele."
+- **Overarching Theme:** "Timeless, bespoke tailoring as an artifact of unparalleled craftsmanship."
+- **Influential Models / Archetypes:** ["The Modern Connoisseur", "The Legacy Builder"]
+- **Creative Antagonist:** "Synthetic, Disposable Ubiquity"
+
+**JSON RESPONSE:**
+{{
+  "photographic_style": "The lighting should be soft and directional, like natural light from a large window, creating gentle shadows that emphasize texture. Use a prime lens (e.g., 85mm at f/2.0) for a shallow depth of field, giving the image a timeless, painterly quality.",
+  "model_persona": "The model embodies the quiet confidence of a modern connoisseur, with a poised, contemplative presence that speaks to an appreciation for heritage and craftsmanship.",
+  "negative_style_keywords": "cheap, synthetic, mass-produced, disposable, plastic, overly trendy, flashy, generic"
+}}
+---
+
+**JSON RESPONSE:**
+"""
 
 # --- Stage 4: Image Prompt Generation Templates ---
 
-INSPIRATION_BOARD_PROMPT_TEMPLATE = """
-Create a hyper-detailed, atmospheric flat lay of a professional fashion designer's physical inspiration board. The board must feel like an authentic, working document, not a static, perfect presentation.
-
-**Core Concept:**
-- Theme: '{theme}'
-- Aesthetic Focus: The conceptual idea of a '{key_piece_name}' that embodies the idea of '{description_snippet}'
-- Muse / Archetype: The style of {model_style}
-
-**Core Color Story:**
-- The board features a clear and intentional color palette, represented by neatly pinned Pantone-style color chips for: {color_names}.
-
-**Non-Fashion Inspiration:**
-- To ground the theme in the real world, the board MUST include at least two non-fashion items for texture and color reference, such as a piece of weathered driftwood, a close-up photo of peeling paint on concrete, or a vintage map.
-
-**Composition & The Designer's Process:**
-The board must look like a dynamic, work-in-progress document. The arrangement is an artfully layered collage, not a clean grid.
-- **Interaction & Annotation:** Elements MUST be layered and interact. Fabric swatches are pinned directly on top of photographs to test relationships. There are **handwritten notes in pencil or ink in the margins, arrows drawn in charcoal connecting elements, and visible pinholes and tape marks** from previous arrangements.
-- The board MUST include a mix of the following:
-    1.  **Archival & Textural Layer:** Torn pages from vintage art books, faded historical photographs, and rough, gestural charcoal sketches of garment details (collars, seams, pockets).
-    2.  **Modern Context Layer:** High-quality, candid street style photos and glossy tear sheets from contemporary fashion magazines.
-    3.  **Material Layer:** Physical, three-dimensional, and tactile swatches of key fabrics like {fabric_names}. The swatches MUST be **messy, frayed, and show signs of handling.** The board must also include **actual, physical metal hardware** like buttons, zippers, or clasps, not just photos of them.
-
-**Overall Mood:**
-Tactile, authentic, intellectual, cinematic, and a **dynamic work-in-progress**.
-
-**Style:**
-Ultra-realistic photograph, top-down perspective, shot on a Hasselblad camera, soft but dramatic lighting that creates deep shadows, extreme detail, 8k.
-"""
 
 MOOD_BOARD_PROMPT_TEMPLATE = """
-Create a professional and atmospheric fashion designer's mood board on a raw concrete or linen surface. The board's primary goal is to evoke the mood, story, and world of a single garment.
+Create a professional, atmospheric fashion mood board laid out on a raw concrete or linen surface. The board's goal is to evoke the mood, story, and world of a single garment: '{key_piece_name}'.
 
-**Focus:** Defining the materials, details, and styling for a '{key_piece_name}'.
+**Composition & Feel:**
+- Use a top-down flat-lay composition. The layout should be a dynamic, slightly overlapping collage, not a rigid grid. Layer elements to create a sense of texture and depth.
+- The lighting should be soft and diffused, as if from a large studio window, creating a narrative and emotional mood.
+- Feature a printed, Polaroid-style portrait of a professional fashion model with artistic features, representing the garment's wearer. This portrait should appear as an object clipped or pinned into the flat-lay.
 
-**Central Anchor Image:**
-- The composition MUST be built around a large, central, candid street style photograph of a person who embodies the spirit of the garment. This image sets the mood for the entire board.
+**Required Elements:**
+1.  **Material & Color Story:**
+    - Include hyper-realistic, tactile fabric swatches of: {fabric_names}. Arrange some neatly stacked and some casually draped to show their texture.
+    - Feature a focused color palette arranged with official, Pantone-like color chips for: {color_names}.
 
-**Composition:**
-- The layout must be a dynamic, overlapping collage, not a rigid grid or a tidy "knolling" arrangement. Elements should be layered to create texture and depth, showing the designer's thought process.
+2.  **Details & Craftsmanship:**
+    - Include a dedicated section with macro-photography close-ups of key design details and trims, such as: {details_trims}. These should clearly show the stitch, weave, and surface texture.
 
-**Environmental Textures:**
-- The board MUST include at least two smaller, secondary photos of urban textures that match the collection's narrative, such as peeling paint, graffiti-covered brick, or worn concrete.
+3.  **Styling & Accessories:**
+    - Show key physical accessories, like {key_accessories}, interacting with other elements to create a sense of process and curation.
 
-**1. Material & Color Story:**
-- **Fabric Swatches:** Hyper-realistic, physical fabric swatches of: {fabric_names}. They should appear handled, with some neat stacks and some messy, draped pieces.
-- **Color Palette:** A focused color story arranged with official Pantone-style color chips for: {color_names}.
-
-**2. Detail & Craftsmanship:**
-- **Detail Shots:** A dedicated section with macro-photography close-ups of key design details, such as: {details_trims}.
-
-**3. Styling & Accessories:**
-- **Integrated Styling:** The board must show key physical accessories like {key_accessories} interacting with other elements, such as a leather belt placed over a stack of fabric swatches, or a beanie next to the central anchor photograph.
-
-**Style:**
-Professional studio photography, top-down view (flat lay), soft and diffused lighting that creates an **atmospheric, narrative, and emotional** mood. Extreme detail, macro photography, 8k.
+**Style & Negative Constraints:**
+- Style: Professional studio photography, editorial, tactile, atmospheric, high-detail.
+- Negative Prompts: Avoid text, watermarks, logos, brand names, and recognizable public figures. The image should be clean and professional.
 """
 
 FINAL_GARMENT_PROMPT_TEMPLATE = """
-Full-body editorial fashion photograph for a high-end fashion magazine lookbook.
+Full-body editorial fashion photograph for a high-end magazine lookbook, featuring the '{key_piece_name}'.
 
-**Guiding Philosophy (Ethos):**
-- {brand_ethos}
+**Photography Style & Mood:**
+- {photographic_style_guide}
+- The photograph should have a shallow depth of field, keeping the garment's texture and details in sharp focus while the background is softly blurred.
 
-**Model & Garment:**
-- A professional runway model with the confident, elegant, and stylish presence of {model_style}.
-- The model is wearing the '{key_piece_name}', a stunning garment that embodies the concept of '{description_snippet}'. It is crafted from hyper-realistic {main_fabric} in a rich '{main_color}'. The craftsmanship MUST reflect the Guiding Philosophy.
+**Model Persona & Garment:**
+- **Model:** {model_persona} The model is a professional fashion model with artistic features.
+- **Garment:** The model is wearing the '{key_piece_name}', crafted from {main_fabric} in a rich '{main_color}'. The rendering should showcase the material's texture, weave, and drape with photorealistic detail.
+- **Styling:** The garment is styled with {styling_description} to create a look that feels authentic and personally curated.
 
-**Styling:**
-- {styling_description} The overall look must feel authentic and personally styled, not like a mannequin.
-
-**Silhouette & Details:**
-- The silhouette is a modern '{silhouette}'.
-- Macro details are visible, showcasing the exquisite craftsmanship, such as: {details_trims}.
-
-**Pose & Setting:**
-- The model has a **dynamic, candid pose that suggests movement**—walking, leaning, or interacting with the environment.
+**Composition & Setting:**
 - **Setting:** {narrative_setting}
+- **Composition:** The primary shot is a full-body view capturing the garment's modern '{silhouette}'. The model should have a dynamic, candid pose that suggests movement.
 
-**Style:**
-- The photographic style MUST align with the **Guiding Philosophy**. If the ethos is raw and unpolished, shoot on 35mm film like Juergen Teller. If the ethos is timeless and elegant, shoot with the polished, romantic style of a top fashion magazine. The image should feel authentic to the brand. 8k.
-
-**Negative Prompt:**
-- -nsfw, -deformed, -bad anatomy, -blurry, -low quality, -generic
+**Style & Negative Constraints:**
+- **Style:** Editorial, photorealistic, cinematic, tactile, high-detail, authentic.
+- **Negative Prompts:** Avoid {negative_style_keywords}, nsfw, deformed anatomy, extra limbs, poor quality, watermarks, logos, text overlays, and any likeness of real public figures or celebrities.
 """

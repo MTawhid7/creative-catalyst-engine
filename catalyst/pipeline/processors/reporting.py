@@ -1,6 +1,7 @@
 """
 This module contains the processor for the final reporting stage, with
-enhanced logic for generating highly specific and creative image prompts.
+an advanced "Creative Direction" step to generate highly specific and
+art-directed image prompts.
 """
 
 import json
@@ -15,12 +16,13 @@ from catalyst.context import RunContext
 from ... import settings
 from ...models.trend_report import FashionTrendReport
 from ...prompts import prompt_library
+from ...clients import gemini_client
 
 
 class FinalOutputGeneratorProcessor(BaseProcessor):
     """
     Generates all final output files, including the main JSON report and the
-    art-directed image prompts that are guided by the brand ethos.
+    AI-driven "Creative Style Guide" that produces the final image prompts.
     """
 
     async def process(self, context: RunContext) -> RunContext:
@@ -34,8 +36,6 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
             raise ValueError("Cannot generate outputs without a final report.")
 
         try:
-            # The results_dir might have been renamed, so we ensure it exists.
-            # The orchestrator should handle the final path, but this is a safeguard.
             final_dir = Path(context.results_dir)
             final_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
@@ -53,11 +53,12 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
 
         try:
             validated_report = FashionTrendReport.model_validate(context.final_report)
-            self.logger.info("⚙️ Generating art-directed, ethos-driven image prompts...")
+            self.logger.info("🎨 Performing AI Creative Direction step...")
 
-            # Pass the brand_ethos to the prompt generator for deeper alignment
-            prompts_data = self._generate_image_prompts(
-                validated_report, context.brand_ethos
+            prompts_data = await self._generate_image_prompts(
+                report=validated_report,
+                brand_ethos=context.brand_ethos,
+                enriched_brief=context.enriched_brief,
             )
 
             self._save_json_file(
@@ -81,7 +82,6 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
     def _save_json_file(self, data: Dict, filename: str, context: RunContext):
         """A helper function to save a dictionary to a JSON file."""
         try:
-            # Ensure we are writing to the final, potentially renamed directory
             output_path = Path(context.results_dir) / filename
             self.logger.info(f"💾 Saving data to '{output_path}'...")
             with open(output_path, "w", encoding="utf-8") as f:
@@ -92,22 +92,68 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                 f"❌ Failed to save JSON file '{filename}'", exc_info=True
             )
 
-    def _generate_image_prompts(
-        self, report: FashionTrendReport, brand_ethos: str
+    async def _generate_creative_style_guide(
+        self, report: FashionTrendReport, brand_ethos: str, enriched_brief: Dict
+    ) -> Dict:
+        """Calls the AI to translate the report data into a concrete style guide."""
+        self.logger.info("✍️ Generating Creative Style Guide from report data...")
+
+        prompt = prompt_library.CREATIVE_STYLE_GUIDE_PROMPT.format(
+            brand_ethos=brand_ethos
+            or "A focus on creating a beautiful and compelling image.",
+            overarching_theme=report.overarching_theme,
+            influential_models=", ".join(report.influential_models),
+            creative_antagonist=enriched_brief.get(
+                "creative_antagonist", "mainstream trends"
+            ),
+        )
+
+        response = await gemini_client.generate_content_async(prompt_parts=[prompt])
+
+        if response and response.get("text"):
+            try:
+                json_text = (
+                    response["text"]
+                    .strip()
+                    .removeprefix("```json")
+                    .removesuffix("```")
+                    .strip()
+                )
+                style_guide = json.loads(json_text)
+                self.logger.info("✅ Success: Creative Style Guide generated.")
+                return style_guide
+            except (json.JSONDecodeError, KeyError):
+                self.logger.warning(
+                    "⚠️ Could not parse style guide JSON. Using fallback."
+                )
+        else:
+            self.logger.warning("⚠️ AI call for style guide failed. Using fallback.")
+
+        # Fallback to safe defaults if the AI call fails
+        return {
+            "photographic_style": "The lighting should be soft and natural, creating a timeless and elegant mood.",
+            "model_persona": "The model embodies the core theme with a confident and authentic presence.",
+            "negative_style_keywords": "generic, boring, poorly lit, blurry",
+        }
+
+    async def _generate_image_prompts(
+        self, report: FashionTrendReport, brand_ethos: str, enriched_brief: Dict
     ) -> Dict[str, Any]:
         """
-        Generates highly specific and creative image prompts by intelligently
-        selecting a relevant muse and a diverse set of accessories for each key piece,
-        all filtered through the lens of the brand ethos.
+        Generates prompts by first creating an AI-driven style guide, then applying
+        it to each key piece.
         """
         all_prompts = {}
+
+        style_guide = await self._generate_creative_style_guide(
+            report, brand_ethos, enriched_brief
+        )
 
         all_accessories = [
             item for sublist in report.accessories.values() for item in sublist
         ]
 
         for piece in report.detailed_key_pieces:
-            # Select the most representative elements for the prompt
             main_fabric = (
                 piece.fabrics[0].material if piece.fabrics else "a high-quality fabric"
             )
@@ -116,41 +162,29 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                 piece.silhouettes[0] if piece.silhouettes else "a modern silhouette"
             )
 
-            # Refine Muse Selection Logic
-            best_muse = (
-                report.influential_models[0]
-                if report.influential_models
-                else "an elegant fashion model"
-            )
-            for model in report.influential_models:
-                if any(
-                    keyword.lower() in model.lower()
-                    for keyword in piece.inspired_by_designers
-                ):
-                    best_muse = model
-                    break
-
-            # Get a concise snippet of the description
             description_snippet = piece.description.split(".")[0]
-
-            # Create a natural language styling description
             styling_elements = piece.suggested_pairings[:2]
+
+            # --- START OF FIX: CORRECTED STRING CONSTRUCTION ---
+            # This logic now only produces the list of items, preventing duplication.
             if len(styling_elements) >= 2:
-                styling_description = f"The garment is styled with {styling_elements[0]} and {styling_elements[1]} to create a complete, authentic look."
+                styling_description = f"{styling_elements[0]} and {styling_elements[1]}"
             elif len(styling_elements) == 1:
-                styling_description = f"The garment is styled with {styling_elements[0]} to create a complete, authentic look."
+                styling_description = f"{styling_elements[0]}"
             else:
                 styling_description = (
-                    "The garment is styled to feel authentic and personally curated."
+                    "the piece is styled to feel authentic and personally curated"
                 )
+            # --- END OF FIX ---
 
-            # Sample accessories for mood board variety
-            num_accessories = min(len(all_accessories), 3)
-            sampled_accessories = (
-                random.sample(all_accessories, num_accessories)
-                if num_accessories > 0
-                else ["a statement handbag", "chunky boots"]
-            )
+            # --- START OF FIX: ADDED ROBUST ACCESSORY FALLBACK ---
+            # This ensures that even if no accessories are found, we have a safe default.
+            if all_accessories:
+                num_accessories = min(len(all_accessories), 3)
+                sampled_accessories = random.sample(all_accessories, num_accessories)
+            else:
+                sampled_accessories = ["a statement handbag", "elegant sunglasses"]
+            # --- END OF FIX ---
 
             color_names = ", ".join([c.name for c in piece.colors])
             fabric_names = ", ".join(
@@ -159,14 +193,6 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
             details_trims_list = ", ".join(piece.details_trims)
 
             piece_prompts = {
-                "inspiration_board": prompt_library.INSPIRATION_BOARD_PROMPT_TEMPLATE.format(
-                    theme=report.overarching_theme,
-                    key_piece_name=piece.key_piece_name,
-                    description_snippet=description_snippet,
-                    model_style=best_muse,
-                    color_names=color_names,
-                    fabric_names=fabric_names,
-                ),
                 "mood_board": prompt_library.MOOD_BOARD_PROMPT_TEMPLATE.format(
                     key_piece_name=piece.key_piece_name,
                     fabric_names=fabric_names,
@@ -175,9 +201,9 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     key_accessories=", ".join(sampled_accessories),
                 ),
                 "final_garment": prompt_library.FINAL_GARMENT_PROMPT_TEMPLATE.format(
-                    brand_ethos=brand_ethos
-                    or "A focus on creating a beautiful and compelling image.",
-                    model_style=best_muse,
+                    photographic_style_guide=style_guide.get("photographic_style"),
+                    model_persona=style_guide.get("model_persona"),
+                    negative_style_keywords=style_guide.get("negative_style_keywords"),
                     key_piece_name=piece.key_piece_name,
                     description_snippet=description_snippet,
                     main_color=main_color,
