@@ -36,6 +36,9 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("CRITICAL ERROR: GEMINI_API_KEY is not set in the .env file.")
 
+DALLE_API_KEY = os.getenv("DALLE_API_KEY")
+if not DALLE_API_KEY:
+    raise ValueError("CRITICAL ERROR: DALLE_API_KEY is not set in the .env file.")
 
 # --- 3. LLM Configuration ---
 # Tunable parameters for the AI.

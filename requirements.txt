@@ -22,3 +22,15 @@ chromadb
 
 # YAML Parsing
 PyYAML            # For parsing the sources.yaml configuration file.
+
+# --- Image Generation ---
+openai
+
+# --- API & Web Server ---
+fastapi
+uvicorn[standard]  # High-performance ASGI server
+
+# --- Background Task Queue ---
+celery
+redis          # Celery's message broker and result backend
+eventlet

@@ -22,6 +22,7 @@ from .processors.synthesis import (
     DirectKnowledgeSynthesisProcessor,
 )
 from .processors.reporting import FinalOutputGeneratorProcessor
+from .processors.generation import DalleImageGenerationProcessor
 
 
 class PipelineOrchestrator:
@@ -96,6 +97,9 @@ class PipelineOrchestrator:
             if context.final_report:
                 final_processor = FinalOutputGeneratorProcessor()
                 context = await self._run_step(final_processor, context)
+                # STAGE 6: IMAGE GENERATION
+                image_gen_processor = DalleImageGenerationProcessor()
+                context = await self._run_step(image_gen_processor, context)
             else:
                 self.logger.critical(
                     "❌ CRITICAL: All synthesis paths failed. Cannot generate a final report."
