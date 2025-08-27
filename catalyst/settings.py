@@ -59,3 +59,8 @@ PROMPTS_FILENAME = "generated_prompts.json"
 
 # --- 6. Results Management ---
 KEEP_N_RESULTS = 10  # Keep the 10 most recent result folders
+
+# --- 7. Feature Flags ---
+# A master switch to enable or disable costly features like image generation.
+# Reads from the .env file, defaulting to True if not specified.
+ENABLE_IMAGE_GENERATION = os.getenv("ENABLE_IMAGE_GENERATION", "True").lower() == "true"

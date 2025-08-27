@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 # This is the single point of interaction for local testing runs.
 # In production, the API will provide the user_passage.
 USER_PASSAGE = """
-A report on the 'New Look' silhouette, modernized for today's Dior.
+Highlight Off-White streetwear hoodies and sweatshirts with bold graphics.
 """
 
 

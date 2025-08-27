@@ -8,6 +8,7 @@ from catalyst.context import RunContext
 from .base_processor import BaseProcessor
 from ..utilities.logger import get_logger
 from ..caching import cache_manager
+from .. import settings
 
 # Import all processors
 from .processors.briefing import (
@@ -98,8 +99,13 @@ class PipelineOrchestrator:
                 final_processor = FinalOutputGeneratorProcessor()
                 context = await self._run_step(final_processor, context)
                 # STAGE 6: IMAGE GENERATION
-                image_gen_processor = DalleImageGenerationProcessor()
-                context = await self._run_step(image_gen_processor, context)
+                if settings.ENABLE_IMAGE_GENERATION:
+                    image_gen_processor = DalleImageGenerationProcessor()
+                    context = await self._run_step(image_gen_processor, context)
+                else:
+                    self.logger.warning(
+                        "⚠️ Image generation is disabled via settings. Skipping DALL-E step."
+                    )
             else:
                 self.logger.critical(
                     "❌ CRITICAL: All synthesis paths failed. Cannot generate a final report."
