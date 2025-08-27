@@ -13,7 +13,7 @@ from ... import settings
 class DalleImageGenerationProcessor(BaseProcessor):
     """
     The final pipeline step. Takes the generated prompts from the context
-    and calls the DALL-E 3 API to generate and save the final images.
+    and calls the GPT Image API to generate and save the final images.
     """
 
     def __init__(self):
@@ -24,7 +24,7 @@ class DalleImageGenerationProcessor(BaseProcessor):
         """
         Iterates through the final prompts and generates an image for each.
         """
-        self.logger.info("🎨 Starting DALL-E 3 image generation...")
+        self.logger.info("🎨 Starting GPT Image generation...")
 
         if not context.final_report.get("detailed_key_pieces"):
             self.logger.warning(
@@ -68,45 +68,63 @@ class DalleImageGenerationProcessor(BaseProcessor):
         """Generates a single image and saves it to the results directory."""
         self.logger.info(f"Generating image for: '{garment_name}'...")
         try:
+            # FIXED: GPT Image API call with correct parameters
             response = await self.client.images.generate(
-                model="dall-e-3",
+                model="gpt-image-1",
                 prompt=prompt,
                 size="1024x1024",
-                quality="hd",
+                quality="high",  # FIXED: Use "high" instead of "hd" for gpt-image-1
                 n=1,
-                response_format="b64_json",
+                # REMOVED: response_format parameter - not supported by gpt-image-1
+                # GPT Image 1 always returns base64-encoded images by default
             )
 
-            # --- START OF FIX: DEFENSIVE DATA HANDLING ---
-            # Safely check if the response contains the data we need before accessing it.
-            if response.data and response.data[0].b64_json:
-                image_data_b64 = response.data[0].b64_json
-                image_data = base64.b64decode(image_data_b64)
+            # --- START OF FIX: UPDATED DATA HANDLING FOR GPT IMAGE 1 ---
+            # GPT Image 1 returns images differently than DALL-E 3
+            if response.data and len(response.data) > 0:
+                image_item = response.data[0]
 
-                slug = "".join(
-                    c for c in garment_name.lower() if c.isalnum() or c in " -"
-                ).replace(" ", "-")
-                image_filename = f"{slug}.png"
-                image_path = Path(context.results_dir) / image_filename
+                # GPT Image 1 returns base64 data directly in b64_json field
+                if hasattr(image_item, "b64_json") and image_item.b64_json:
+                    image_data_b64 = image_item.b64_json
+                    image_data = base64.b64decode(image_data_b64)
 
-                with open(image_path, "wb") as f:
-                    f.write(image_data)
+                    slug = "".join(
+                        c for c in garment_name.lower() if c.isalnum() or c in " -"
+                    ).replace(" ", "-")
+                    image_filename = f"{slug}.png"
+                    image_path = Path(context.results_dir) / image_filename
 
-                self.logger.info(f"✅ Successfully saved image to '{image_path}'")
+                    with open(image_path, "wb") as f:
+                        f.write(image_data)
+
+                    self.logger.info(f"✅ Successfully saved image to '{image_path}'")
+
+                    # Log revised prompt if available
+                    if (
+                        hasattr(image_item, "revised_prompt")
+                        and image_item.revised_prompt
+                    ):
+                        self.logger.info(
+                            f"📝 Revised prompt: {image_item.revised_prompt}"
+                        )
+
+                else:
+                    # Handle case where no image data is returned (content filter, etc.)
+                    revised_prompt = getattr(image_item, "revised_prompt", "N/A")
+                    self.logger.error(
+                        f"❌ GPT Image API call for '{garment_name}' was successful but returned no image data. "
+                        f"This may be due to a content filter. Revised prompt was: '{revised_prompt}'"
+                    )
             else:
-                # This handles cases like content filter blocks or other API issues.
-                revised_prompt = (
-                    response.data[0].revised_prompt if response.data else "N/A"
-                )
                 self.logger.error(
-                    f"❌ DALL-E 3 API call for '{garment_name}' was successful but returned no image data. "
-                    f"This may be due to a content filter. Revised prompt was: '{revised_prompt}'"
+                    f"❌ GPT Image API call for '{garment_name}' returned no data."
                 )
             # --- END OF FIX ---
 
         except Exception as e:
             self.logger.error(
-                f"❌ DALL-E 3 API call failed for '{garment_name}': {e}",
+                f"❌ GPT Image API call failed for '{garment_name}': {e}",
                 exc_info=True,
             )
 
