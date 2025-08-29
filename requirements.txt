@@ -11,20 +11,8 @@
 google-genai      # The official Python SDK for the Google Gemini API.
 pydantic          # For robust data modeling, validation, and settings management.
 
-# --- Configuration & Environment ---
-python-dotenv     # For loading environment variables from the .env file.
-
-# --- Utilities ---
-python-json-logger # For creating structured, machine-readable JSON logs.
-
-# --- Vector Database Caching ---
-chromadb
-
-# YAML Parsing
-PyYAML            # For parsing the sources.yaml configuration file.
-
 # --- Image Generation ---
-openai
+openai            # For DALL-E 3 API calls.
 
 # --- API & Web Server ---
 fastapi
@@ -32,5 +20,16 @@ uvicorn[standard]  # High-performance ASGI server
 
 # --- Background Task Queue ---
 celery
-redis          # Celery's message broker and result backend
-eventlet
+redis             # Celery's message broker and result backend.
+eventlet          # Concurrency pool for macOS compatibility.
+
+# --- API Client ---
+requests          # For making HTTP requests in the api_client.
+
+# --- Vector Database Caching ---
+chromadb
+
+# --- Configuration & Utilities ---
+python-dotenv     # For loading environment variables from the .env file.
+PyYAML            # For parsing the sources.yaml configuration file.
+python-json-logger # For creating structured, machine-readable JSON logs.

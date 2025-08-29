@@ -1,6 +1,7 @@
 """
 This module contains the PipelineOrchestrator, which executes the final,
-robust, multi-step synthesis pipeline with enhanced, readable logging.
+robust, multi-step synthesis pipeline with enhanced, readable logging and
+configurable feature flags.
 """
 
 import json
@@ -28,8 +29,8 @@ from .processors.generation import DalleImageGenerationProcessor
 
 class PipelineOrchestrator:
     """
-    Manages the pipeline execution, including a high-level cache check
-    and intelligent fallback logic, with clear, structured logging.
+    Manages the pipeline execution, including a high-level cache check,
+    intelligent fallback logic, and configurable feature flags for expensive steps.
     """
 
     def __init__(self):
@@ -40,7 +41,8 @@ class PipelineOrchestrator:
         self.logger.info(f"▶️ PIPELINE START | Run ID: {context.run_id}")
 
         try:
-            # STAGE 1: BRIEFING (NOW WITH ETHOS CLARIFICATION)
+            # STAGE 1: BRIEFING
+            # Deconstructs the user's input into a rich, structured brief.
             briefing_pipeline: list[BaseProcessor] = [
                 BriefDeconstructionProcessor(),
                 EthosClarificationProcessor(),
@@ -50,6 +52,7 @@ class PipelineOrchestrator:
                 context = await self._run_step(processor, context)
 
             # STAGE 2: L1 CACHE CHECK
+            # Checks for a semantically similar report to avoid re-running the expensive synthesis.
             self.logger.info(
                 "⚙️ Caching: Checking L1 Report Cache for completed report..."
             )
@@ -62,13 +65,13 @@ class PipelineOrchestrator:
                     "🎯 L1 CACHE HIT! Bypassing synthesis pipeline. A similar report was found."
                 )
                 context.final_report = json.loads(cached_report_json)
-
             else:
                 self.logger.info(
-                    "💨 ... L1 CACHE MISS. Proceeding with full synthesis pipeline."
+                    "💨 L1 CACHE MISS. Proceeding with full synthesis pipeline."
                 )
 
                 # STAGE 3: PRIMARY SYNTHESIS PATH
+                # The main path: web research -> structure -> synthesize.
                 primary_synthesis_pipeline: list[BaseProcessor] = [
                     WebResearchProcessor(),
                     ContextStructuringProcessor(),
@@ -78,6 +81,7 @@ class PipelineOrchestrator:
                     context = await self._run_step(processor, context)
 
                 # STAGE 4: DECISION POINT & FALLBACK
+                # If the primary path fails to produce a report, activate the fallback.
                 if not context.final_report:
                     self.logger.warning(
                         "⚠️ Primary synthesis path failed. Activating Direct Knowledge Fallback."
@@ -85,7 +89,7 @@ class PipelineOrchestrator:
                     fallback_processor = DirectKnowledgeSynthesisProcessor()
                     context = await self._run_step(fallback_processor, context)
 
-                # After a successful synthesis (either primary or fallback), add the new report to the cache.
+                # After a successful synthesis, add the new report to the cache for future use.
                 if context.final_report:
                     self.logger.info(
                         "⚙️ Caching: Adding newly synthesized report to L1 cache..."
@@ -94,11 +98,13 @@ class PipelineOrchestrator:
                         context.enriched_brief, context.final_report
                     )
 
-            # STAGE 5: REPORTING
+            # STAGE 5 & 6: FINAL OUTPUT GENERATION
             if context.final_report:
+                # Always generate the JSON files and prompts.
                 final_processor = FinalOutputGeneratorProcessor()
                 context = await self._run_step(final_processor, context)
-                # STAGE 6: IMAGE GENERATION
+
+                # Conditionally run the expensive image generation step based on the feature flag.
                 if settings.ENABLE_IMAGE_GENERATION:
                     image_gen_processor = DalleImageGenerationProcessor()
                     context = await self._run_step(image_gen_processor, context)
@@ -131,10 +137,22 @@ class PipelineOrchestrator:
     async def _run_step(
         self, processor: BaseProcessor, context: RunContext
     ) -> RunContext:
-        """Helper method to run a single processor and handle logging/artifacts."""
+        """
+        Helper method to run a single processor and handle logging and artifact recording.
+        """
         step_name = processor.__class__.__name__
         self.logger.info(f"--- ▶️ START: {step_name} ---")
         processed_context = await processor.process(context)
         self.logger.info(f"--- ✅ END: {step_name} ---")
-        processed_context.record_artifact(step_name, processed_context.to_dict())
+
+        # --- START OF IMPROVEMENT: ROBUST ARTIFACT RECORDING ---
+        # This ensures that a failure to serialize artifacts does not crash the entire pipeline.
+        try:
+            processed_context.record_artifact(step_name, processed_context.to_dict())
+        except Exception as e:
+            self.logger.warning(
+                f"⚠️ Could not record artifact for step {step_name} due to a serialization error: {e}"
+            )
+        # --- END OF IMPROVEMENT ---
+
         return processed_context

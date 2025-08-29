@@ -1,12 +1,12 @@
 """
 This module contains the processor for the final reporting stage, with
 an advanced "Creative Direction" step to generate highly specific and
-art-directed image prompts.
+art-directed image prompts using a professional-grade data model.
 """
 
 import json
 import random
-from typing import Dict, Any
+from typing import Dict, Any, List
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from catalyst.pipeline.base_processor import BaseProcessor
 from catalyst.context import RunContext
 from ... import settings
-from ...models.trend_report import FashionTrendReport
+from ...models.trend_report import FashionTrendReport, FabricDetail, PatternDetail
 from ...prompts import prompt_library
 from ...clients import gemini_client
 
@@ -60,6 +60,14 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                 brand_ethos=context.brand_ethos,
                 enriched_brief=context.enriched_brief,
             )
+
+            # --- START OF FIX: SAVE PROMPTS TO CONTEXT ARTIFACTS ---
+            # This makes the prompts available to downstream processors like DalleImageGenerationProcessor
+            # without needing to re-read the file from disk.
+            if "FinalOutputGeneratorProcessor" not in context.artifacts:
+                context.artifacts["FinalOutputGeneratorProcessor"] = {}
+            context.artifacts["FinalOutputGeneratorProcessor"]["prompts"] = prompts_data
+            # --- END OF FIX ---
 
             self._save_json_file(
                 data=prompts_data, filename=settings.PROMPTS_FILENAME, context=context
@@ -129,19 +137,44 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
         else:
             self.logger.warning("⚠️ AI call for style guide failed. Using fallback.")
 
-        # Fallback to safe defaults if the AI call fails
         return {
             "photographic_style": "The lighting should be soft and natural, creating a timeless and elegant mood.",
             "model_persona": "The model embodies the core theme with a confident and authentic presence.",
             "negative_style_keywords": "generic, boring, poorly lit, blurry",
         }
 
+    def _format_fabric_details(self, fabrics: List[FabricDetail]) -> str:
+        """Formats fabric details into a descriptive list for the mood board."""
+        lines = []
+        for f in fabrics:
+            details = [f.texture, f.material]
+            if f.weight_gsm:
+                details.append(f"{f.weight_gsm} gsm")
+            if f.drape:
+                details.append(f"{f.drape} drape")
+            if f.finish:
+                details.append(f"{f.finish} finish")
+            lines.append(f"- {' / '.join(details)}")
+        return "\n      ".join(lines)
+
+    def _format_pattern_details(self, patterns: List[PatternDetail]) -> str:
+        """Formats pattern details into a descriptive list for the mood board."""
+        if not patterns:
+            return "- No specific patterns defined."
+        lines = []
+        for p in patterns:
+            details = [p.motif, p.placement]
+            if p.scale_cm:
+                details.append(f"{p.scale_cm}cm scale")
+            lines.append(f"- {' / '.join(details)}")
+        return "\n      ".join(lines)
+
     async def _generate_image_prompts(
         self, report: FashionTrendReport, brand_ethos: str, enriched_brief: Dict
     ) -> Dict[str, Any]:
         """
         Generates prompts by first creating an AI-driven style guide, then applying
-        it to each key piece.
+        it to each key piece using the new, highly detailed data model.
         """
         all_prompts = {}
 
@@ -154,48 +187,53 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
         ]
 
         for piece in report.detailed_key_pieces:
-            main_fabric = (
-                piece.fabrics[0].material if piece.fabrics else "a high-quality fabric"
+
+            # --- START OF FIX: PROVIDE ALL DEFAULT ARGUMENTS FOR FALLBACK ---
+            main_fabric = piece.fabrics[0] if piece.fabrics else FabricDetail(
+                material="high-quality fabric",
+                texture="woven",
+                sustainable=None,
+                weight_gsm=None,
+                drape=None,
+                finish=None
             )
+            # --- END OF FIX ---
+
             main_color = piece.colors[0].name if piece.colors else "a core color"
-            silhouette = (
-                piece.silhouettes[0] if piece.silhouettes else "a modern silhouette"
-            )
+            silhouette = piece.silhouettes[0] if piece.silhouettes else "a modern silhouette"
 
             description_snippet = piece.description.split(".")[0]
-            styling_elements = piece.suggested_pairings[:2]
 
-            # --- START OF FIX: CORRECTED STRING CONSTRUCTION ---
-            # This logic now only produces the list of items, preventing duplication.
+            styling_elements = piece.suggested_pairings[:2]
             if len(styling_elements) >= 2:
                 styling_description = f"{styling_elements[0]} and {styling_elements[1]}"
             elif len(styling_elements) == 1:
                 styling_description = f"{styling_elements[0]}"
             else:
-                styling_description = (
-                    "the piece is styled to feel authentic and personally curated"
-                )
-            # --- END OF FIX ---
+                styling_description = "the piece is styled to feel authentic and personally curated"
 
-            # --- START OF FIX: ADDED ROBUST ACCESSORY FALLBACK ---
-            # This ensures that even if no accessories are found, we have a safe default.
             if all_accessories:
                 num_accessories = min(len(all_accessories), 3)
                 sampled_accessories = random.sample(all_accessories, num_accessories)
             else:
                 sampled_accessories = ["a statement handbag", "elegant sunglasses"]
-            # --- END OF FIX ---
+
+            fabric_details_list = self._format_fabric_details(piece.fabrics)
+            pattern_details_list = self._format_pattern_details(piece.patterns)
+
+            main_pattern = piece.patterns[0] if piece.patterns else None
+            pattern_description = "The garment is a solid color without a prominent pattern."
+            if main_pattern:
+                pattern_description = f"The garment features a '{main_pattern.motif}' pattern, applied as an {main_pattern.placement}."
 
             color_names = ", ".join([c.name for c in piece.colors])
-            fabric_names = ", ".join(
-                [f"{f.texture} {f.material}" for f in piece.fabrics]
-            )
             details_trims_list = ", ".join(piece.details_trims)
 
             piece_prompts = {
                 "mood_board": prompt_library.MOOD_BOARD_PROMPT_TEMPLATE.format(
                     key_piece_name=piece.key_piece_name,
-                    fabric_names=fabric_names,
+                    fabric_details_list=fabric_details_list,
+                    pattern_details_list=pattern_details_list,
                     color_names=color_names,
                     details_trims=details_trims_list,
                     key_accessories=", ".join(sampled_accessories),
@@ -205,13 +243,18 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     model_persona=style_guide.get("model_persona"),
                     negative_style_keywords=style_guide.get("negative_style_keywords"),
                     key_piece_name=piece.key_piece_name,
-                    description_snippet=description_snippet,
-                    main_color=main_color,
-                    main_fabric=main_fabric,
                     silhouette=silhouette,
-                    details_trims=details_trims_list,
-                    narrative_setting=report.narrative_setting_description,
+                    main_fabric=main_fabric.material,
+                    main_fabric_texture=main_fabric.texture,
+                    main_fabric_weight_gsm=main_fabric.weight_gsm or 200,
+                    main_fabric_drape=main_fabric.drape or "moderate",
+                    main_fabric_finish=main_fabric.finish or "matte",
+                    main_color=main_color,
+                    pattern_description=pattern_description,
+                    lining_description=piece.lining or "The garment's lining is not specified.",
                     styling_description=styling_description,
+                    narrative_setting=report.narrative_setting_description,
+                    details_trims=details_trims_list,
                 ),
             }
             all_prompts[piece.key_piece_name] = piece_prompts

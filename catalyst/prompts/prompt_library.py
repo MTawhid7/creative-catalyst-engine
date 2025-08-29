@@ -27,13 +27,6 @@ You are an expert fashion strategist. Your task is to analyze the user's natural
 USER REQUEST:
 Generate a report on Streetwear Influence.
 
-AI'S THOUGHT PROCESS (for inference):
-- theme_hint: "Streetwear Influence" is clear.
-- garment_type: Not specified, so null.
-- brand_category: Streetwear's influence is strongest in the 'Contemporary' and 'Streetwear' categories, not typically 'Luxury' by default. 'Contemporary' is a good fit.
-- target_audience: The core audience is young and urban. "Young, urban consumers" is appropriate.
-- key_attributes: What defines streetwear? 'Comfort', 'Authenticity', 'Self-Expression'.
-
 JSON OUTPUT:
 {{
   "theme_hint": "Streetwear Influence",
@@ -286,45 +279,97 @@ You are an expert fashion stylist and data analyst. Your task is to extract all 
 """
 
 KEY_PIECE_SYNTHESIS_PROMPT = """
-You are a fashion data analyst and creative consultant. Your task is to extract and enrich the details for a single fashion garment from the provided text and structure it as a valid JSON object.
+You are a fashion data analyst and technical designer. Your task is to extract and enrich the details for a single fashion garment from the provided text and structure it as a valid JSON object, including professional-grade technical specifications.
+
 **CRITICAL RULES:**
 1.  **Use Exact Structure:** You MUST use the exact field names and data types from the JSON OUTPUT EXAMPLE.
-2.  **Enrich with Expertise:** If the context lacks specific details (e.g., fabric textures, Pantone/HEX codes), you MUST use your internal knowledge of fashion, textile science, and color theory to provide creative, insightful, and relevant suggestions that fit the theme.
-3.  **Cultural Patterns Mandate:** For the `cultural_patterns` field, if the source text contains no relevant patterns, you MUST invent 1-2 creative patterns that align with the overarching theme (e.g., 'Art Deco motifs', 'Baroque scrollwork', 'traditional Shibori dyeing techniques'). Do NOT leave this field empty.
+2.  **Enrich with Expertise:** If the context lacks specific technical details (e.g., fabric weight, drape, finish, pattern scale), you MUST use your expert knowledge of textile science and fashion production to infer logical, creative, and relevant values that fit the theme. Do not leave optional technical fields null unless it is impossible to infer a value.
+3.  **Pattern Mandate:** For the `patterns` field, you MUST create at least one detailed pattern object. If the source text contains no relevant patterns, invent a creative pattern that aligns with the overarching theme.
 4.  **Be Commercially Aware:**
-    - For `inspired_by_designers`, include BOTH high-fashion references AND commercially successful, trend-driven brands relevant to the target market (e.g., for fast-fashion, think of brands like Ganni or Self-Portrait).
-    - For `sustainable` fabrics, be realistic. For a fast-fashion context, it's more credible to suggest a "hero" sustainable fabric or a blend with recycled content rather than claim everything is sustainable.
-5.  The output MUST be ONLY the single, valid JSON object for this one key piece.
+    - For `inspired_by_designers`, include BOTH high-fashion references AND commercially successful, trend-driven brands.
+    - For `sustainable` fabrics, be realistic and credible for the brand context.
+5.  **Output:** Your response MUST be ONLY the single, valid JSON object for this one key piece.
+
 --- KEY PIECE CONTEXT ---
 {key_piece_context}
 ---
 --- JSON OUTPUT EXAMPLE (Structure to Follow) ---
 {{
   "key_piece_name": "The Sculpted Parka",
-  "description": "An oversized parka with clean lines that embodies quiet strength.",
+  "description": "An oversized parka with clean lines that embodies quiet strength and architectural form.",
   "inspired_by_designers": ["Jil Sander", "Helmut Lang", "COS"],
   "wearer_profile": "The urban creative who values form and function.",
-  "cultural_patterns": ["Glitch Art Print", "Datamoshing"],
+  "patterns": [
+    {{
+      "motif": "Architectural Grid",
+      "placement": "All-over print",
+      "scale_cm": 10
+    }}
+  ],
   "fabrics": [
-    {{"material": "Recycled Nylon", "texture": "Matte", "sustainable": true}},
-    {{"material": "Technical Wool Blend", "texture": "Brushed", "sustainable": false}}
+    {{
+      "material": "Recycled Nylon",
+      "texture": "Matte",
+      "sustainable": true,
+      "weight_gsm": 250,
+      "drape": "Structured",
+      "finish": "Water-resistant"
+    }},
+    {{
+      "material": "Technical Wool Blend",
+      "texture": "Brushed",
+      "sustainable": false,
+      "weight_gsm": 320,
+      "drape": "Stiff",
+      "finish": "Matte"
+    }}
   ],
   "colors": [
-    {{"name": "Glacial Blue", "pantone_code": "14-4122 TCX", "hex_value": "#A2C4D1"}},
-    {{"name": "Charcoal Gray", "pantone_code": "18-0601 TCX", "hex_value": "#5B5E5E"}}
+    {{
+      "name": "Glacial Blue",
+      "pantone_code": "14-4122 TCX",
+      "hex_value": "#A2C4D1"
+    }},
+    {{
+      "name": "Charcoal Gray",
+      "pantone_code": "18-0601 TCX",
+      "hex_value": "#5B5E5E"
+    }}
   ],
-  "silhouettes": ["Oversized", "A-Line"],
-  "details_trims": ["Magnetic closures", "Waterproof zippers"],
+  "silhouettes": ["Oversized", "A-Line", "Cocoon"],
+  "lining": "Fully lined in recycled satin for comfort and easy layering.",
+  "details_trims": ["Magnetic closures", "Waterproof zippers", "Bonded seams"],
   "suggested_pairings": ["Technical knit leggings", "Chunky sole boots"]
 }}
 ---
 """
 
 NARRATIVE_SETTING_PROMPT = """
-You are a world-class art director and storyteller. Based on the following core concepts, write a single, evocative paragraph describing the ideal setting for a fashion editorial photoshoot. The setting must tell the story of the collection's theme.
+You are a world-class art director and storyteller. Based on the following core concepts, write a response containing a single, evocative paragraph describing the ideal setting for a fashion editorial photoshoot.
+
+**CRITICAL RULES:**
+1.  The setting must tell the story of the collection's theme.
+2.  Your response MUST be ONLY a valid JSON object with the keys "narrative_setting", "time_of_day", and "weather_condition".
+
+---
+**CORE CONCEPTS:**
 - Overarching Theme: {overarching_theme}
 - Cultural Drivers: {cultural_drivers}
-The response MUST be a single paragraph of text. Do not use JSON.
+---
+--- EXAMPLE ---
+**CORE CONCEPTS:**
+- Overarching Theme: "Arctic Minimalism"
+- Cultural Drivers: "Bauhaus architecture, sustainable living"
+
+**JSON RESPONSE:**
+{{
+  "narrative_setting": "A minimalist, glass-walled cabin set against a vast, snow-covered landscape under a pale winter sun. The interior is sparse, with clean lines and natural wood, creating a stark contrast between the cozy interior and the wild, frozen exterior.",
+  "time_of_day": "Late afternoon golden hour",
+  "weather_condition": "Crisp, clear winter day with a light dusting of snow"
+}}
+---
+
+**JSON RESPONSE:**
 """
 
 CREATIVE_STYLE_GUIDE_PROMPT = """
@@ -368,26 +413,33 @@ MOOD_BOARD_PROMPT_TEMPLATE = """
 Create a professional, atmospheric fashion mood board laid out on a raw concrete or linen surface. The board's goal is to evoke the mood, story, and world of a single garment: '{key_piece_name}'.
 
 **Composition & Feel:**
-- Use a top-down flat-lay composition. The layout should be a dynamic, slightly overlapping collage, not a rigid grid. Layer elements to create a sense of texture and depth.
-- The lighting should be soft and diffused, as if from a large studio window, creating a narrative and emotional mood.
-- Feature a printed, Polaroid-style portrait of a professional fashion model with artistic features, representing the garment's wearer. This portrait should appear as an object clipped or pinned into the flat-lay.
+- Use a top-down flat-lay composition. The layout should be a dynamic, slightly overlapping collage.
+- The lighting should be soft and diffused, as if from a large studio window.
+- Feature a printed, Polaroid-style portrait of a professional fashion model with artistic features, representing the garment's wearer. This portrait should be an object clipped or pinned into the flat-lay.
 
 **Required Elements:**
 1.  **Material & Color Story:**
-    - Include hyper-realistic, tactile fabric swatches of: {fabric_names}. Arrange some neatly stacked and some casually draped to show their texture.
+    - Include hyper-realistic, tactile fabric swatches with visible technical details:
+      {fabric_details_list}
     - Feature a focused color palette arranged with official, Pantone-like color chips for: {color_names}.
 
-2.  **Details & Craftsmanship:**
-    - Include a dedicated section with macro-photography close-ups of key design details and trims, such as: {details_trims}. These should clearly show the stitch, weave, and surface texture.
+2.  **Pattern & Print Story:**
+    - Include printed samples or sketches of the key patterns:
+      {pattern_details_list}
 
-3.  **Styling & Accessories:**
-    - Show key physical accessories, like {key_accessories}, interacting with other elements to create a sense of process and curation.
+3.  **Details & Craftsmanship:**
+    - Include a dedicated section with macro-photography close-ups of key design details and trims, such as: {details_trims}.
+
+4.  **Styling & Accessories:**
+    - Show key physical accessories, like {key_accessories}, interacting with other elements.
 
 **Style & Negative Constraints:**
 - Style: Professional studio photography, editorial, tactile, atmospheric, high-detail.
-- Negative Prompts: Avoid text, watermarks, logos, brand names, and recognizable public figures. The image should be clean and professional.
+- Negative Prompts: Avoid text, watermarks, logos, brand names, and recognizable public figures.
 """
+# --- END OF CHANGE ---
 
+# --- START OF CHANGE: UPGRADED FINAL_GARMENT PROMPT ---
 FINAL_GARMENT_PROMPT_TEMPLATE = """
 Full-body editorial fashion photograph for a high-end magazine lookbook, featuring the '{key_piece_name}'.
 
@@ -396,15 +448,19 @@ Full-body editorial fashion photograph for a high-end magazine lookbook, featuri
 - The photograph should have a shallow depth of field, keeping the garment's texture and details in sharp focus while the background is softly blurred.
 
 **Model Persona & Garment:**
-- **Model:** {model_persona} The model is a professional fashion model with artistic features.
-- **Garment:** The model is wearing the '{key_piece_name}', crafted from {main_fabric} in a rich '{main_color}'. The rendering should showcase the material's texture, weave, and drape with photorealistic detail.
+- **Model:** {model_persona}. The model is a professional fashion model with artistic features.
+- **Garment:** The model is wearing the '{key_piece_name}', a garment with a modern '{silhouette}' silhouette, crafted from {main_fabric}.
+- **Fabric Behavior:** The rendering must showcase the material's properties with photorealistic detail: its texture is '{main_fabric_texture}', its weight of {main_fabric_weight_gsm} gsm gives it a '{main_fabric_drape}' drape, and it has a '{main_fabric_finish}' finish.
+- **Pattern Details:** {pattern_description}
+- **Construction:** {lining_description}
 - **Styling:** The garment is styled with {styling_description} to create a look that feels authentic and personally curated.
 
 **Composition & Setting:**
 - **Setting:** {narrative_setting}
-- **Composition:** The primary shot is a full-body view capturing the garment's modern '{silhouette}'. The model should have a dynamic, candid pose that suggests movement.
+- **Composition:** The primary shot is a full-body view. The model should have a dynamic, candid pose that suggests movement.
 
 **Style & Negative Constraints:**
 - **Style:** Editorial, photorealistic, cinematic, tactile, high-detail, authentic.
 - **Negative Prompts:** Avoid {negative_style_keywords}, nsfw, deformed anatomy, extra limbs, poor quality, watermarks, logos, text overlays, and any likeness of real public figures or celebrities.
 """
+# --- END OF CHANGE ---
