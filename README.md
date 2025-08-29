@@ -53,7 +53,6 @@ Built on FastAPI, Celery, and Redis, the engine is designed for resilience, scal
 
 The engine is architected as a modern, decoupled web service for scalability and resilience. The diagram below illustrates the flow of a request from the client to the final result.
 
-![Creative Catalyst Engine Architecture](docs/images/architecture.png)
 
 <br>
 

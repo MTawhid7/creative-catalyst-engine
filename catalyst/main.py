@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 # This is the single point of interaction for local testing runs.
 # In production, the API will provide the user_passage.
 USER_PASSAGE = """
-Generate a trend report on 'gorpcore' for men, focusing on technical outerwear and functional trousers.
+Show me a collection of dresses featuring the Bengali New Year (Pohela Boishakh). Incorporate traditional motifs, vibrant colors, and elements of Bengali culture.
 """
 
 

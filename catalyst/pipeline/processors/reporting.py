@@ -224,7 +224,7 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
             main_pattern = piece.patterns[0] if piece.patterns else None
             pattern_description = "The garment is a solid color without a prominent pattern."
             if main_pattern:
-                pattern_description = f"The garment features a '{main_pattern.motif}' pattern, applied as an {main_pattern.placement}."
+                pattern_description = f"The garment features a '{main_pattern.motif}' pattern, applied as a {main_pattern.placement}."
 
             color_names = ", ".join([c.name for c in piece.colors])
             details_trims_list = ", ".join(piece.details_trims)

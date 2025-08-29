@@ -202,28 +202,32 @@ class BriefEnrichmentProcessor(BaseProcessor):
         correction_prompt_template: str,
         prompt_args: Dict,
         task_name: str,
-    ) -> Optional[str]:
-        """A resilient helper function that attempts to get enrichment data, with a self-correction retry."""
+    ) -> Dict | None:
+        """
+        A resilient helper function that attempts to get enrichment data, with a
+        self-correction retry. Now returns a parsed JSON dictionary.
+        """
         self.logger.debug(f"⏳ Attempting to generate {task_name} (Attempt 1)...")
+
+        # --- START OF CHANGE: EXPECT JSON RESPONSE ---
+        # The AI is now expected to return a dictionary (as a JSON string).
         initial_response = await gemini_client.generate_content_async(
             prompt_parts=[initial_prompt]
         )
-        if (
-            initial_response
-            and initial_response.get("text")
-            and initial_response["text"].strip()
-        ):
+
+        if initial_response and isinstance(initial_response, dict):
             self.logger.debug(
-                f"✅ Successfully generated {task_name} on the first attempt."
+                f"✅ Successfully generated and parsed {task_name} on the first attempt."
             )
-            return initial_response["text"].strip()
+            return initial_response
 
         self.logger.warning(
-            f"⚠️ First attempt to generate {task_name} failed or returned empty. Triggering self-correction."
+            f"⚠️ First attempt to generate {task_name} failed or returned invalid format. Triggering self-correction."
         )
-        failed_output = (
-            initial_response.get("text", "None") if initial_response else "None"
-        )
+
+        failed_output = str(
+            initial_response
+        )  # Convert potential error to string for the prompt
         correction_prompt = correction_prompt_template.format(
             failed_output=failed_output, **prompt_args
         )
@@ -234,48 +238,35 @@ class BriefEnrichmentProcessor(BaseProcessor):
         correction_response = await gemini_client.generate_content_async(
             prompt_parts=[correction_prompt]
         )
-        if (
-            correction_response
-            and correction_response.get("text")
-            and correction_response["text"].strip()
-        ):
+
+        if correction_response and isinstance(correction_response, dict):
             self.logger.info(
-                f"✅ Successfully generated {task_name} on the second (correction) attempt."
+                f"✅ Successfully generated and parsed {task_name} on the second (correction) attempt."
             )
-            return correction_response["text"].strip()
+            return correction_response
 
         self.logger.critical(
-            f"❌ Self-correction also failed for {task_name}. The model could not produce a valid output."
+            f"❌ Self-correction also failed for {task_name}. The model could not produce a valid JSON output."
         )
         return None
+        # --- END OF CHANGE ---
 
-    def _parse_llm_creative_output(self, text: Optional[str], expected_key: str) -> Any:
-        """Robustly parses raw LLM text output, handling plain text, lists, and JSON."""
-        if not text:
-            return None
-        cleaned_text = text.strip().removeprefix("```json").removesuffix("```").strip()
-        try:
-            data = json.loads(cleaned_text)
-            return data.get(expected_key)
-        except (json.JSONDecodeError, AttributeError):
-            return cleaned_text
-
+    # --- START OF CHANGE: REWRITTEN PARSING LOGIC AND MAIN METHOD ---
     async def _enrich_brief_async(self, brief: Dict, brand_ethos: str) -> Dict:
-        """The main enrichment logic, calling out to the LLM for creative expansion."""
+        """The main enrichment logic, now updated to handle structured JSON responses."""
 
-        # Add the brand_ethos to the prompt arguments to guide concept generation
         concept_prompt_args = {
             "theme_hint": brief.get("theme_hint", "general fashion"),
             "garment_type": brief.get("garment_type", "clothing"),
             "key_attributes": ", ".join(brief.get("key_attributes", [])),
-            "brand_ethos": brand_ethos
-            or "No specific ethos provided.",  # Handle empty ethos
+            "brand_ethos": brand_ethos or "No specific ethos provided.",
         }
 
         antagonist_prompt_args = {
             "theme_hint": brief.get("theme_hint", "general fashion")
         }
 
+        # The helper function now returns a dictionary, so we expect that.
         expansion_task = self._get_enrichment_data_async(
             prompt_library.THEME_EXPANSION_PROMPT.format(**concept_prompt_args),
             prompt_library.CONCEPTS_CORRECTION_PROMPT,
@@ -289,43 +280,35 @@ class BriefEnrichmentProcessor(BaseProcessor):
             "antagonist",
         )
 
-        concepts_output, antagonist_output = await asyncio.gather(
+        concepts_result, antagonist_result = await asyncio.gather(
             expansion_task, antagonist_task
         )
 
-        parsed_concepts = self._parse_llm_creative_output(concepts_output, "concepts")
-        if isinstance(parsed_concepts, list):
-            brief["expanded_concepts"] = parsed_concepts
-        elif isinstance(parsed_concepts, str):
-            brief["expanded_concepts"] = [
-                c.strip() for c in parsed_concepts.split(",") if c.strip()
-            ]
-        else:
-            brief["expanded_concepts"] = []
-
-        parsed_antagonist = self._parse_llm_creative_output(
-            antagonist_output, "antagonist"
+        # Safely extract the data from the dictionaries.
+        brief["expanded_concepts"] = (
+            concepts_result.get("concepts", []) if concepts_result else []
         )
         brief["creative_antagonist"] = (
-            parsed_antagonist if isinstance(parsed_antagonist, str) else None
+            antagonist_result.get("antagonist") if antagonist_result else None
         )
 
+        # The keyword extraction part remains the same as it already expected a JSON response.
         search_keywords = set()
         if brief.get("theme_hint"):
             search_keywords.add(brief["theme_hint"])
+
         if brief.get("expanded_concepts"):
+            # This prompt already expected a JSON list, so no changes needed here.
             extraction_prompt = prompt_library.KEYWORD_EXTRACTION_PROMPT.format(
                 concepts_list=json.dumps(brief["expanded_concepts"])
             )
             keyword_response = await gemini_client.generate_content_async(
                 prompt_parts=[extraction_prompt]
             )
-            if keyword_response and keyword_response.get("text"):
-                keyword_data = self._parse_llm_creative_output(
-                    keyword_response["text"], "keywords"
-                )
-                if isinstance(keyword_data, list):
-                    search_keywords.update(keyword_data)
+            if keyword_response and keyword_response.get("keywords"):
+                search_keywords.update(keyword_response["keywords"])
 
-        brief["search_keywords"] = list(search_keywords)
+        brief["search_keywords"] = sorted(list(search_keywords))
         return brief
+
+    # --- END OF CHANGE ---
