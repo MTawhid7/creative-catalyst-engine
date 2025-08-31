@@ -4,6 +4,7 @@ import asyncio
 from celery import Celery
 import sys
 from pathlib import Path
+import os
 
 # We keep the global scope clean. No application imports here.
 
@@ -33,7 +34,23 @@ def create_creative_task(user_passage: str) -> dict:
 
     result_context = asyncio.run(run_pipeline(user_passage))
 
+    image_urls = []
+    # In a real production app, this would come from a config file.
+    # For now, we assume the server is running on localhost.
+    # IMPORTANT: Change this if your server has a public domain name.
+    base_url = "http://127.0.0.1:9500"
+
+    results_dir = result_context.results_dir
+    if os.path.exists(results_dir):
+        for filename in os.listdir(results_dir):
+            if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                # Construct the public URL path
+                # results_dir.name gives the timestamped folder name
+                url_path = f"/results/{results_dir.name}/{filename}"
+                image_urls.append(base_url + url_path)
+
     return {
         "final_report": result_context.final_report,
         "artifacts_path": str(result_context.results_dir),
+        "image_urls": image_urls,
     }

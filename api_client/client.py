@@ -18,7 +18,7 @@ class CreativeCatalystClient:
     into a single, synchronous method call.
     """
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8000"):
+    def __init__(self, base_url: str = "http://127.0.0.1:9500"):
         self.base_url = base_url.rstrip("/")
         self.submit_url = f"{self.base_url}/v1/creative-jobs"
 

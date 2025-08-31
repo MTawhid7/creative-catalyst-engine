@@ -4,6 +4,7 @@ from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from celery.result import AsyncResult
+from fastapi.staticfiles import StaticFiles
 
 # --- START OF FIX ---
 # Import your configured Celery app instance from the worker file
@@ -32,6 +33,7 @@ class ResultResponse(BaseModel):
     status: str
     result: dict | None = None
 
+app.mount("/results", StaticFiles(directory="results"), name="results")
 
 @app.post(
     "/v1/creative-jobs",

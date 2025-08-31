@@ -219,10 +219,10 @@ Terminal 2:
 
 ```bash
 source venv/bin/activate
-uvicorn api.main:app --reload
+uvicorn api.main:app --reload --port 9500
 ```
 
-Server URL: `http://127.0.0.1:8000` (note: corrected from `122.0.0.1`).
+Server URL: `http://127.0.0.1:9500` (note: corrected from `122.0.0.1`).
 
 ---
 
@@ -241,7 +241,7 @@ python -m api_client.example
 Submit a job:
 
 ```bash
-curl -X POST "http://127.0.0.1:8000/v1/creative-jobs" \
+curl -X POST "http://127.0.0.1:9500/v1/creative-jobs" \
   -H "Content-Type: application/json" \
   -d '{"user_passage": "A report on the New Look silhouette, modernized for today\'s Dior."}'
 ```
