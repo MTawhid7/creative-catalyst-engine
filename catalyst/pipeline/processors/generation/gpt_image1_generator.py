@@ -1,36 +1,41 @@
-# catalyst/pipeline/processors/generation.py
+# catalyst/pipeline/processors/generation/gpt_image1_generator.py
 
+import asyncio
 import base64
 import json
 import re
 from pathlib import Path
 
-# --- START OF CHANGE: ADD ASYNCIO FOR PARALLEL EXECUTION ---
-import asyncio
-
-# --- END OF CHANGE ---
 from openai import AsyncOpenAI
 
-from catalyst.pipeline.base_processor import BaseProcessor
+from .base_generator import BaseImageGenerator
 from catalyst.context import RunContext
-from ... import settings
+from catalyst import settings
 
 
-class DalleImageGenerationProcessor(BaseProcessor):
+class GptImage1Generation(BaseImageGenerator):
     """
-    The final pipeline step. Takes the generated prompts from the context
-    and calls the DALL-E 3 API to generate and save the final images concurrently.
+    An image generation strategy for the legacy gpt-image-1 model.
+
+    This class serves as an archived example of how to interact with the older
+    model, adapted to the new pluggable generator architecture. It generates
+    images in parallel.
     """
 
     def __init__(self):
         super().__init__()
+        # NOTE: The API key setting might be different for this model.
+        # We use DALLE_API_KEY for consistency as per the original file.
         self.client = AsyncOpenAI(api_key=settings.DALLE_API_KEY)
+        from catalyst.utilities.logger import get_logger
 
-    async def process(self, context: RunContext) -> RunContext:
+        self.logger = get_logger(self.__class__.__name__)
+
+    async def generate_images(self, context: RunContext) -> RunContext:
         """
         Creates a list of all image generation tasks and runs them in parallel.
         """
-        self.logger.info("🎨 Starting DALL-E 3 image generation...")
+        self.logger.info("🎨 Activating legacy GPT-Image-1 generation strategy...")
 
         if not context.final_report.get("detailed_key_pieces"):
             self.logger.warning(
@@ -45,7 +50,7 @@ class DalleImageGenerationProcessor(BaseProcessor):
             )
             return context
 
-        # --- START OF CHANGE: SHIFT FROM SERIAL LOOP TO PARALLEL TASK GATHERING ---
+        # --- ASYNCHRONOUS TASK GATHERING ---
         self.logger.info(
             "Building a list of image generation tasks to run in parallel..."
         )
@@ -58,7 +63,7 @@ class DalleImageGenerationProcessor(BaseProcessor):
                 )
                 continue
 
-            # Create a coroutine for each image generation task but don't run it yet.
+            # Create a coroutine for each image generation task
             task = self._generate_and_save_image(
                 final_garment_prompt, garment_name, context
             )
@@ -68,74 +73,73 @@ class DalleImageGenerationProcessor(BaseProcessor):
             self.logger.warning("No valid image generation tasks were created.")
             return context
 
-        # Now, run all the created tasks concurrently and wait for them all to complete.
+        # Run all the created tasks concurrently and wait for them to complete
         self.logger.info(
             f"🚀 Launching {len(tasks)} image generation tasks in parallel..."
         )
         await asyncio.gather(*tasks)
-        # --- END OF CHANGE ---
+        # --- END OF ASYNCHRONOUS LOGIC ---
 
-        self.logger.info("✅ All image generation tasks complete.")
+        self.logger.info("✅ All GPT-Image-1 generation tasks complete.")
         return context
 
     async def _generate_and_save_image(
         self, prompt: str, garment_name: str, context: RunContext
     ):
-        """
-        Generates and saves a single image. This method is now called concurrently.
-        """
-        # --- START OF CHANGE: ADD PROMPT CLEANING LOGIC ---
-        self.logger.info(f"Cleaning prompt for DALL-E 3: '{garment_name}'...")
-        # 1. Remove markdown headings and bullets
+        """Generates a single image and saves it to the results directory."""
+
+        # It's good practice to clean prompts for all models
+        self.logger.info(f"Cleaning prompt for GPT-Image-1: '{garment_name}'...")
         cleaned_prompt = re.sub(r"\*\*.*?\*\*|^- ", "", prompt, flags=re.MULTILINE)
-        # 2. Replace all newline characters with spaces
         cleaned_prompt = cleaned_prompt.replace("\n", " ")
-        # 3. Collapse multiple spaces into a single space
         cleaned_prompt = " ".join(cleaned_prompt.split())
-        # --- END OF CHANGE ---
 
         self.logger.info(f"Generating image for: '{garment_name}'...")
         try:
+            # This block is adapted directly from your provided gpt-image-1 code
             response = await self.client.images.generate(
-                model="dall-e-3",
-                prompt=cleaned_prompt,  # Use the cleaned prompt
+                model="gpt-image-1",
+                prompt=cleaned_prompt,
                 size="1024x1024",
-                quality="hd",
+                quality="high",  # Use "high" for gpt-image-1
                 n=1,
-                response_format="b64_json",
             )
 
-            if response.data and response.data[0].b64_json:
-                image_data_b64 = response.data[0].b64_json
-                image_data = base64.b64decode(image_data_b64)
+            if response.data and len(response.data) > 0:
+                image_item = response.data[0]
+                if hasattr(image_item, "b64_json") and image_item.b64_json:
+                    image_data = base64.b64decode(image_item.b64_json)
 
-                slug = "".join(
-                    c for c in garment_name.lower() if c.isalnum() or c in " -"
-                ).replace(" ", "-")
-                image_filename = f"{slug}.png"
-                image_path = Path(context.results_dir) / image_filename
+                    slug = "".join(
+                        c for c in garment_name.lower() if c.isalnum() or c in " -"
+                    ).replace(" ", "-")
+                    image_filename = f"{slug}.png"
+                    image_path = Path(context.results_dir) / image_filename
 
-                with open(image_path, "wb") as f:
-                    f.write(image_data)
+                    with open(image_path, "wb") as f:
+                        f.write(image_data)
 
-                self.logger.info(f"✅ Successfully saved image to '{image_path}'")
+                    self.logger.info(f"✅ Successfully saved image to '{image_path}'")
+                else:
+                    revised_prompt = getattr(image_item, "revised_prompt", "N/A")
+                    self.logger.error(
+                        f"❌ GPT Image API call for '{garment_name}' returned no image data. "
+                        f"Revised prompt was: '{revised_prompt}'"
+                    )
             else:
-                revised_prompt = (
-                    response.data[0].revised_prompt if response.data else "N/A"
-                )
                 self.logger.error(
-                    f"❌ DALL-E 3 API call for '{garment_name}' was successful but returned no image data. "
-                    f"This may be due to a content filter. Revised prompt was: '{revised_prompt}'"
+                    f"❌ GPT Image API call for '{garment_name}' returned no data."
                 )
 
         except Exception as e:
             self.logger.error(
-                f"❌ DALL-E 3 API call failed for '{garment_name}': {e}",
+                f"❌ GPT Image API call failed for '{garment_name}': {e}",
                 exc_info=True,
             )
 
     def _load_prompts_from_file(self, context: RunContext) -> dict:
         """A fallback to load prompts directly from the JSON file if needed."""
+        # This helper function is generic and can be reused
         try:
             prompts_path = Path(context.results_dir) / settings.PROMPTS_FILENAME
             if prompts_path.exists():

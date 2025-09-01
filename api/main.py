@@ -5,7 +5,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from celery.result import AsyncResult
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 
 # --- START OF FIX ---
 # Import your configured Celery app instance from the worker file
@@ -17,15 +16,6 @@ app = FastAPI(
     title="Creative Catalyst Engine API",
     description="An API for generating fashion trend reports and images.",
     version="1.0.0",
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 class JobRequest(BaseModel):

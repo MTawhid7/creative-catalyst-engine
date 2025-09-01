@@ -33,3 +33,5 @@ chromadb
 python-dotenv     # For loading environment variables from the .env file.
 PyYAML            # For parsing the sources.yaml configuration file.
 python-json-logger # For creating structured, machine-readable JSON logs.
+
+pillow             # For image processing tasks.

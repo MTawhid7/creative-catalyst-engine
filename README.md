@@ -1,6 +1,3 @@
-
----
-
 # 🚀 Creative Catalyst Engine
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/your-username/creative-catalyst-engine)
@@ -39,20 +36,19 @@ Built on FastAPI, Celery, and Redis, the engine is designed for resilience, scal
 
 ## Key Features
 
-* **Asynchronous & Scalable**: FastAPI front end accepts jobs immediately and queues them to Celery + Redis for background processing.
-* **High-quality Image Generation**: Integrates with OpenAI-style image models to produce editorial-style images.
-* **AI Creative Direction**: Intermediate AI step converts brand ethos to photography direction (lighting, mood, model persona).
-* **Deep Ethos Analysis**: Uses semantic analysis to align outputs with the user's core creative philosophy.
-* **Robust Synthesis Engine**: Constraint-driven prompts and fallback strategies deliver logically-sound, detailed JSON reports.
-* **L1 Report Caching**: ChromaDB-backed cache speeds up re-runs for similar briefs.
-* **Configurable Feature Flags**: Toggle features (like image generation) via environment variables for testing/cost control.
+*   **Asynchronous & Scalable**: FastAPI front end accepts jobs immediately and queues them to Celery + Redis for background processing.
+*   **Multi-Model Image Generation**: Easily switch between different image generation models (DALL-E 3, Google Gemini, etc.) via a simple configuration change.
+*   **AI Creative Direction**: Intermediate AI step converts brand ethos to photography direction (lighting, mood, model persona).
+*   **Deep Ethos Analysis**: Uses semantic analysis to align outputs with the user's core creative philosophy.
+*   **Robust Synthesis Engine**: Constraint-driven prompts and fallback strategies deliver logically-sound, detailed JSON reports.
+*   **L1 Report Caching**: ChromaDB-backed cache speeds up re-runs for similar briefs.
+*   **Configurable Feature Flags**: Toggle features (like image generation) via environment variables for testing/cost control.
 
 ---
 
 ## Architecture Overview
 
 The engine is architected as a modern, decoupled web service for scalability and resilience. The diagram below illustrates the flow of a request from the client to the final result.
-
 
 <br>
 
@@ -78,7 +74,7 @@ graph LR
     end
 
     subgraph External Services
-        E[OpenAI API <br> gpt-image-1]
+        E[Image Generation APIs <br> DALL-E 3, Gemini]
         F[Google Gemini API]
     end
 
@@ -96,7 +92,6 @@ graph LR
     B -- 11. Send Final Report to Client --> A
 ```
 </details>
-
 
 ---
 
@@ -121,21 +116,7 @@ creative-catalyst-engine/
 └── catalyst/
     ├── main.py
     ├── settings.py
-    ├── context.py
-    ├── config/
-    │   └── sources.yaml
-    ├── clients/
-    │   └── gemini_client.py
-    ├── models/
-    │   └── trend_report.py
-    ├── prompts/
-    │   └── prompt_library.py
-    ├── caching/
-    │   ├── cache_manager.py
-    │   └── report_cache.py
-    ├── utilities/
-    │   ├── config_loader.py
-    │   └── logger.py
+    ├── ...
     └── pipeline/
         ├── base_processor.py
         ├── orchestrator.py
@@ -143,7 +124,12 @@ creative-catalyst-engine/
             ├── briefing.py
             ├── synthesis.py
             ├── reporting.py
-            └── generation.py
+            └── generation/
+                ├── __init__.py
+                ├── base_generator.py
+                ├── dalle3_generator.py
+                ├── gpt_image1_generator.py
+                └── nanobanana_generator.py
 ```
 
 ---
@@ -152,8 +138,8 @@ creative-catalyst-engine/
 
 ### Prerequisites
 
-* **Python 3.11+**
-* **Docker Desktop** (for Redis). Install: [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+*   **Python 3.11+**
+*   **Docker Desktop** (for Redis). Install: [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
 
 ### Installation
 
@@ -176,10 +162,13 @@ Create a `.env` file in the project root (ignored by Git).
 
 # Required API keys
 GEMINI_API_KEY="your_gemini_api_key_here"
-OPENAI_API_KEY="your_openai_api_key_here"   # previously DALLE_API_KEY — prefer OPENAI_API_KEY
+OPENAI_API_KEY="your_openai_api_key_here"
 
-# Feature flags
+# Feature flags & Model Selection
 ENABLE_IMAGE_GENERATION=True
+IMAGE_GENERATION_MODEL="dall-e-3"  # Options: "dall-e-3", "gpt-image-1", "nano-banana"
+
+# Infrastructure
 REDIS_URL="redis://localhost:6379/0"
 ```
 
@@ -187,7 +176,7 @@ REDIS_URL="redis://localhost:6379/0"
 
 ## Running the Engine
 
-You will typically run three processes (API, Celery worker, and Redis container).
+You will typically run three processes in separate terminals (API, Celery worker, and Redis container).
 
 ### 1) Start Redis (Docker)
 
@@ -200,14 +189,12 @@ docker start creative-catalyst-redis
 ### 2) Start Celery Worker
 
 Terminal 1 (Linux / WSL):
-
 ```bash
 source venv/bin/activate
 celery -A api.worker.celery_app worker --loglevel=info
 ```
 
 macOS (use eventlet to avoid certain macOS networking issues):
-
 ```bash
 source venv/bin/activate
 celery -A api.eventlet_worker.celery_app worker --loglevel=info -P eventlet
@@ -216,13 +203,14 @@ celery -A api.eventlet_worker.celery_app worker --loglevel=info -P eventlet
 ### 3) Start the API Server
 
 Terminal 2:
-
 ```bash
 source venv/bin/activate
-uvicorn api.main:app --reload --port 9500
+# Use --host 0.0.0.0 to make the server accessible from other computers on your network
+uvicorn api.main:app --reload --port 9500 --host 0.0.0.0
 ```
 
-Server URL: `http://127.0.0.1:9500` (note: corrected from `122.0.0.1`).
+Server URL for local testing: `http://127.0.0.1:9500`.
+(Use your computer's network IP address to connect from other machines).
 
 ---
 
@@ -230,7 +218,7 @@ Server URL: `http://127.0.0.1:9500` (note: corrected from `122.0.0.1`).
 
 ### Recommended: Use the API client
 
-Run the example client to submit a job and poll for results:
+Run the example client to submit a job, poll for results, and download the generated images:
 
 ```bash
 python -m api_client.example
@@ -239,19 +227,16 @@ python -m api_client.example
 ### Direct API (curl)
 
 Submit a job:
-
 ```bash
 curl -X POST "http://127.0.0.1:9500/v1/creative-jobs" \
   -H "Content-Type: application/json" \
   -d '{"user_passage": "A report on the New Look silhouette, modernized for today\'s Dior."}'
 ```
-
 That returns a `job_id` you can poll with `GET /v1/creative-jobs/{job_id}`.
 
 ### Local testing (debugging pipeline)
 
 Edit `catalyst/main.py` and change `USER_PASSAGE`, then:
-
 ```bash
 python -m catalyst.main
 ```
@@ -260,35 +245,27 @@ python -m catalyst.main
 
 ## Outputs
 
-On success, outputs are stored under `./results/` in a timestamped folder, e.g.:
-
-* `itemized_fashion_trends.json`
-* `generated_prompts.json`
-* `[garment-name].png`
-* `debug_run_artifacts.json`
+On success, outputs are stored under `./results/` in a timestamped folder. The API response will contain:
+*   `final_report`: The full, structured JSON trend report.
+*   `image_urls`: A list of public URLs to the generated images, which can be downloaded by the client.
 
 ---
 
 ## Troubleshooting
 
-* **422 Unprocessable Entity**: request body structure mismatch. Make sure you send `{"user_passage": "..."}`.
-* **500 Internal Server Error**: check Celery worker logs — examine the terminal running the worker for tracebacks.
-* **ModuleNotFoundError when running client:** run from repo root and use `python -m api_client.example`.
-* **Mermaid not rendering in your local preview:** see the Notes on Rendering below.
+*   **502 Bad Gateway / Could not connect:** This is a network issue.
+    1.  Ensure the API server is running (`uvicorn ...`).
+    2.  If connecting from another machine, ensure you started the server with `--host 0.0.0.0` and are using the correct network IP address, not `127.0.0.1`.
+    3.  Check for firewalls blocking port `9500`.
+*   **API response has an empty `image_urls` list:** Check the Celery worker logs. This means the image generation step was either disabled (`ENABLE_IMAGE_GENERATION=False`) or failed. The worker log will contain the specific error traceback.
+*   **500 Internal Server Error:** Check the Celery worker logs. This indicates an error during the background job execution.
+*   **ModuleNotFoundError when running client:** Run from the project's root directory and use `python -m api_client.example`.
 
 ---
 
 ## Notes on Rendering
 
-* **Project title visibility**: If your README begins with large badges or HTML comments before the first H1, some viewers or site integrations may display the repository name instead of the README H1. To be safe, place the `# Title` at the very top (as done above).
-* **Mermaid diagrams**:
-
-  * Use `\n` for multi-line node labels (avoid raw HTML like `<br>`).
-  * If the diagram still doesn’t render in your environment, try:
-
-    * Opening the file on GitHub (their renderer supports Mermaid).
-    * Using [https://mermaid.live/](https://mermaid.live/) to paste the diagram and preview.
-    * VS Code: install the "Markdown Preview Mermaid Support" extension.
-* **Badges**: badges are fine after the H1. If a specific badge blocks rendering, temporarily remove it to debug.
-
----
+*   **Project title visibility**: If your README begins with large badges or HTML comments before the first H1, some viewers or site integrations may display the repository name instead of the README H1. To be safe, place the `# Title` at the very top (as done above).
+*   **Mermaid diagrams**:
+    *   Use `\n` for multi-line node labels (avoid raw HTML like `<br>`).
+    *   If the diagram still doesn’t render in your environment, try using an online editor or a VS Code extension with Mermaid support.
