@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 # This is the single point of interaction for local testing runs.
 # In production, the API will provide the user_passage.
 USER_PASSAGE = """
-Explore how brands like Loro Piana and Olivia von Halle are elevating loungewear to daywear through the use of silk, cashmere, and tailored silhouettes.
+Show traditional Indonesian dress.
 """
 
 

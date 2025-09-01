@@ -64,3 +64,4 @@ KEEP_N_RESULTS = 10  # Keep the 10 most recent result folders
 # A master switch to enable or disable costly features like image generation.
 # Reads from the .env file, defaulting to True if not specified.
 ENABLE_IMAGE_GENERATION = os.getenv("ENABLE_IMAGE_GENERATION", "True").lower() == "true"
+IMAGE_GENERATION_MODEL = os.getenv("IMAGE_GENERATION_MODEL", "dall-e-3")

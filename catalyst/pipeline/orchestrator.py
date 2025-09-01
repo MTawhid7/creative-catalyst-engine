@@ -24,8 +24,7 @@ from .processors.synthesis import (
     DirectKnowledgeSynthesisProcessor,
 )
 from .processors.reporting import FinalOutputGeneratorProcessor
-from .processors.generation import DalleImageGenerationProcessor
-
+from .processors.generation import get_image_generator
 
 class PipelineOrchestrator:
     """
@@ -106,11 +105,22 @@ class PipelineOrchestrator:
 
                 # Conditionally run the expensive image generation step based on the feature flag.
                 if settings.ENABLE_IMAGE_GENERATION:
-                    image_gen_processor = DalleImageGenerationProcessor()
-                    context = await self._run_step(image_gen_processor, context)
+                    self.logger.info(
+                        f"🚀 Initializing '{settings.IMAGE_GENERATION_MODEL}' image generator..."
+                    )
+                    # 1. Get the currently configured generator from the factory
+                    image_generator = get_image_generator()
+                    # 2. Run its process method (polymorphism in action!)
+                    self.logger.info(
+                        f"--- ▶️ START: {image_generator.__class__.__name__} ---"
+                    )
+                    context = await image_generator.generate_images(context)
+                    self.logger.info(
+                        f"--- ✅ END: {image_generator.__class__.__name__} ---"
+                    )
                 else:
                     self.logger.warning(
-                        "⚠️ Image generation is disabled via settings. Skipping DALL-E step."
+                        "⚠️ Image generation is disabled via settings. Skipping image generation step."
                     )
             else:
                 self.logger.critical(
