@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 # This is the single point of interaction for local testing runs.
 # In production, the API will provide the user_passage.
 USER_PASSAGE = """
-Show traditional Indonesian dress.
+Showcase how Zara and Mango are translating runway trends for statement tops into commercially successful, mass-market products.
 """
 
 
