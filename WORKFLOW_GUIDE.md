@@ -90,7 +90,8 @@ This is the end-to-end process for taking a task from idea to completion.
 1.  **Fetch the latest history from the `company` remote.**
     ```bash
     git fetch company
-    ```2.  **Rebase your branch onto the official `main`.** This replays your work on top of the latest code.
+    ```
+2.  **Rebase your branch onto the official `main`.** This replays your work on top of the latest code.
     ```bash
     git rebase company/main
     ```
