@@ -23,11 +23,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 LOGS_DIR = BASE_DIR / "logs"
 RESULTS_DIR = BASE_DIR / "results"
 CHROMA_PERSIST_DIR = BASE_DIR / "chroma_cache"
+# A new, permanent directory for storing cached artifacts that will not be cleaned up.
+ARTIFACT_CACHE_DIR = BASE_DIR / "artifact_cache"
 
 # Ensure that the directories for logs, results, and the cache exist.
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
+ARTIFACT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # --- 2. API Keys & Secrets ---
@@ -58,7 +61,7 @@ PROMPTS_FILENAME = "generated_prompts.json"
 
 
 # --- 6. Results Management ---
-KEEP_N_RESULTS = 10  # Keep the 10 most recent result folders
+KEEP_N_RESULTS = 3  # Keep the 3 most recent result folders
 
 # --- 7. Feature Flags ---
 # A master switch to enable or disable costly features like image generation.

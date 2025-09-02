@@ -1,3 +1,5 @@
+# catalyst/main.py
+
 """
 The Main Entry Point for the Creative Catalyst Engine.
 
@@ -16,18 +18,20 @@ from . import settings
 from .context import RunContext
 from .pipeline.orchestrator import PipelineOrchestrator
 from .utilities.logger import get_logger, setup_logging_run_id
+from .caching import cache_manager
 
 logger = get_logger(__name__)
 
-# This is the single point of interaction for local testing runs.
-# In production, the API will provide the user_passage.
 USER_PASSAGE = """
 Showcase how Zara and Mango are translating runway trends for statement tops into commercially successful, mass-market products.
 """
 
 
 def cleanup_old_results():
-    """Keeps the most recent N result folders and deletes the rest."""
+    """
+    Keeps the most recent N result folders in the user-facing `results` directory
+    and deletes the rest. This function does NOT touch the permanent artifact cache.
+    """
     try:
         all_dirs = [d for d in settings.RESULTS_DIR.iterdir() if d.is_dir()]
         sorted_dirs = sorted(all_dirs, key=lambda p: p.name, reverse=True)
@@ -51,7 +55,6 @@ async def run_pipeline(user_passage: str) -> RunContext:
     The core, reusable function that executes the entire pipeline for a given
     user passage and returns the final context object.
     """
-    # 1. Create the RunContext to hold all data for this run
     context = RunContext(user_passage=user_passage, results_dir=settings.RESULTS_DIR)
     context.results_dir.mkdir(parents=True, exist_ok=True)
     setup_logging_run_id(context.run_id)
@@ -59,29 +62,60 @@ async def run_pipeline(user_passage: str) -> RunContext:
     logger.info("================== RUN ID: %s ==================", context.run_id)
     logger.info("      CREATIVE CATALYST ENGINE - PROCESS STARTED         ")
 
-    # 2. Instantiate and run the orchestrator
     orchestrator = PipelineOrchestrator()
-    await orchestrator.run(context)
+    is_from_cache = await orchestrator.run(context)
 
-    # 3. Finalize folder names and save artifacts
+    final_folder_name = ""
     try:
         timestamp_str = datetime.now().strftime("%Y%m%d-%H%M%S")
         slug = context.theme_slug or "untitled"
         final_folder_name = f"{timestamp_str}_{slug}"
         final_path = settings.RESULTS_DIR / final_folder_name
 
-        # Rename the folder from its temporary UUID name
         os.rename(context.results_dir, final_path)
-        context.results_dir = final_path  # Update context to point to the new path
+        context.results_dir = final_path
 
         latest_link_path = settings.RESULTS_DIR / "latest"
         if os.path.lexists(latest_link_path):
             os.remove(latest_link_path)
         os.symlink(final_folder_name, latest_link_path)
-        logger.info(f"✅ Results folder finalized as: '{final_folder_name}'")
+        logger.info(
+            f"✅ User-facing results folder finalized as: '{final_folder_name}'"
+        )
 
     except Exception as e:
         logger.warning(f"⚠️ Could not perform final rename or symlink: {e}")
+
+    # --- START OF CACHE FIX ---
+    # If the run was new, copy the final artifacts to the permanent cache location.
+    if not is_from_cache and context.final_report and final_path.exists():
+        logger.info("⚙️ Caching: Storing new artifacts in permanent cache...")
+
+        # Use the deterministic hash as the permanent folder name.
+        brief_key = cache_manager._create_composite_key(context.enriched_brief)
+        doc_id_str = str(hash(brief_key))
+        artifact_dest_path = settings.ARTIFACT_CACHE_DIR / doc_id_str
+
+        try:
+            # Copy the entire finalized results folder to the permanent cache.
+            shutil.copytree(final_path, artifact_dest_path, dirs_exist_ok=True)
+
+            # The payload now points to the stable, permanent folder name (the hash).
+            payload_to_cache = {
+                "final_report": context.final_report,
+                "cached_results_path": doc_id_str,
+            }
+            await cache_manager.add_to_report_cache_async(
+                context.enriched_brief, payload_to_cache
+            )
+            logger.info(
+                f"✅ Successfully stored artifacts in cache at '{artifact_dest_path}'"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ Failed to copy artifacts to permanent cache: {e}", exc_info=True
+            )
+    # --- END OF CACHE FIX ---
 
     logger.info("      CREATIVE PROCESS FINISHED for Run ID: %s", context.run_id)
     logger.info("=========================================================")

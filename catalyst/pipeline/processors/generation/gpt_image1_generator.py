@@ -16,16 +16,11 @@ from catalyst import settings
 class GptImage1Generation(BaseImageGenerator):
     """
     An image generation strategy for the legacy gpt-image-1 model.
-
-    This class serves as an archived example of how to interact with the older
-    model, adapted to the new pluggable generator architecture. It generates
-    images in parallel.
+    It generates all images (final garment and mood board) in parallel.
     """
 
     def __init__(self):
         super().__init__()
-        # NOTE: The API key setting might be different for this model.
-        # We use DALLE_API_KEY for consistency as per the original file.
         self.client = AsyncOpenAI(api_key=settings.DALLE_API_KEY)
         from catalyst.utilities.logger import get_logger
 
@@ -50,58 +45,54 @@ class GptImage1Generation(BaseImageGenerator):
             )
             return context
 
-        # --- ASYNCHRONOUS TASK GATHERING ---
         self.logger.info(
             "Building a list of image generation tasks to run in parallel..."
         )
         tasks = []
+        # --- START OF MOOD BOARD FIX ---
         for garment_name, prompts in prompts_data.items():
-            final_garment_prompt = prompts.get("final_garment")
-            if not final_garment_prompt:
-                self.logger.warning(
-                    f"⚠️ No 'final_garment' prompt found for '{garment_name}'. Skipping."
+            for prompt_type, prompt_text in prompts.items():
+                if not prompt_text:
+                    self.logger.warning(
+                        f"⚠️ No prompt text found for '{prompt_type}' on '{garment_name}'. Skipping."
+                    )
+                    continue
+                task = self._generate_and_save_image(
+                    prompt_text, garment_name, context, prompt_type
                 )
-                continue
-
-            # Create a coroutine for each image generation task
-            task = self._generate_and_save_image(
-                final_garment_prompt, garment_name, context
-            )
-            tasks.append(task)
+                tasks.append(task)
+        # --- END OF MOOD BOARD FIX ---
 
         if not tasks:
             self.logger.warning("No valid image generation tasks were created.")
             return context
 
-        # Run all the created tasks concurrently and wait for them to complete
         self.logger.info(
             f"🚀 Launching {len(tasks)} image generation tasks in parallel..."
         )
         await asyncio.gather(*tasks)
-        # --- END OF ASYNCHRONOUS LOGIC ---
 
         self.logger.info("✅ All GPT-Image-1 generation tasks complete.")
         return context
 
     async def _generate_and_save_image(
-        self, prompt: str, garment_name: str, context: RunContext
+        self, prompt: str, garment_name: str, context: RunContext, prompt_type: str
     ):
         """Generates a single image and saves it to the results directory."""
-
-        # It's good practice to clean prompts for all models
-        self.logger.info(f"Cleaning prompt for GPT-Image-1: '{garment_name}'...")
+        self.logger.info(
+            f"Cleaning prompt for GPT-Image-1: '{garment_name}' ({prompt_type})..."
+        )
         cleaned_prompt = re.sub(r"\*\*.*?\*\*|^- ", "", prompt, flags=re.MULTILINE)
         cleaned_prompt = cleaned_prompt.replace("\n", " ")
         cleaned_prompt = " ".join(cleaned_prompt.split())
 
-        self.logger.info(f"Generating image for: '{garment_name}'...")
+        self.logger.info(f"Generating image for: '{garment_name}' ({prompt_type})...")
         try:
-            # This block is adapted directly from your provided gpt-image-1 code
             response = await self.client.images.generate(
                 model="gpt-image-1",
                 prompt=cleaned_prompt,
                 size="1024x1024",
-                quality="high",  # Use "high" for gpt-image-1
+                quality="high",
                 n=1,
             )
 
@@ -113,7 +104,14 @@ class GptImage1Generation(BaseImageGenerator):
                     slug = "".join(
                         c for c in garment_name.lower() if c.isalnum() or c in " -"
                     ).replace(" ", "-")
-                    image_filename = f"{slug}.png"
+
+                    # --- START OF MOOD BOARD FIX ---
+                    if prompt_type == "mood_board":
+                        image_filename = f"{slug}-moodboard.png"
+                    else:
+                        image_filename = f"{slug}.png"
+                    # --- END OF MOOD BOARD FIX ---
+
                     image_path = Path(context.results_dir) / image_filename
 
                     with open(image_path, "wb") as f:
@@ -139,7 +137,6 @@ class GptImage1Generation(BaseImageGenerator):
 
     def _load_prompts_from_file(self, context: RunContext) -> dict:
         """A fallback to load prompts directly from the JSON file if needed."""
-        # This helper function is generic and can be reused
         try:
             prompts_path = Path(context.results_dir) / settings.PROMPTS_FILENAME
             if prompts_path.exists():

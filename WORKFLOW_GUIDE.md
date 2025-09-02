@@ -68,7 +68,8 @@ This is the end-to-end process for taking a task from idea to completion.
 2.  **Pull the latest official code from the `company` remote.** This downloads any changes your collaborators have merged and updates your local `main` to match.
     ```bash
     git pull company main
-    ```3.  **Create your feature branch.** This creates a safe, isolated sandbox for your work.
+    ```
+3.  **Create your feature branch.** This creates a safe, isolated sandbox for your work.
     ```bash
     git checkout -b feat/add-image-watermarking
     ```
@@ -146,25 +147,33 @@ This is the end-to-end process for taking a task from idea to completion.
 
 1.  **Merge the PR:** Once approved, an admin (you or a collaborator) will click the green **"Merge pull request"** button on GitHub. Your code is now in the company's `main` branch.
 
-### Step 7: The "Sync Back" and Cleanup
+### Step 7: The "Sync Back" and Final Cleanup
 
-**Goal:** Update your personal repository to reflect the new state of the official project.
+**Goal:** To reset your entire workspace to a clean state after your feature has been officially merged.
 
-1.  **Update your local `main` branch.**
+1.  **Update your local `main` branch.** This pulls the official "merge commit" from the company repo onto your local machine.
     ```bash
     git checkout main
     git pull company main
     ```
-2.  **Update your personal remote's `main` branch.** This is the final sync.
+
+2.  **Update your personal remote's `main` branch.** This ensures your personal backup is now in sync with the official project history.
     ```bash
     git push origin main
     ```
-3.  **Clean up your branches.**
-    -   GitHub will give you a button to delete the remote feature branch after merging. Use it.
-    -   Delete your local feature branch:
-        ```bash
-        git branch -d feat/add-image-watermarking
-        ```
+
+3.  **Delete the feature branch from all locations.** The feature branch has served its purpose and is no longer needed.
+    ```bash
+    # Delete the branch from your local machine
+    git branch -d feat/add-image-watermarking
+
+    # Delete the branch from your personal remote ('origin')
+    git push origin --delete feat/add-image-watermarking
+
+    # Delete the branch from the company remote ('company')
+    git push company --delete feat/add-image-watermarking
+    ```
+    *   **Pro Tip:** After merging a PR on the GitHub website, a "Delete branch" button often appears. Clicking this will perform the remote deletions (`origin` and `company`) for you, so you only need to run the local delete command (`git branch -d ...`).
 
 ---
 

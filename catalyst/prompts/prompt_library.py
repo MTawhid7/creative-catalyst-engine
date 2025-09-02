@@ -1,6 +1,7 @@
 """
 A library of master prompt templates for the Creative Catalyst Engine.
-This is the definitive, cleaned-up version for the final architecture.
+This is the definitive, cleaned-up version for the final architecture, now with
+enhanced demographic-aware deconstruction and image generation.
 """
 
 # --- Stage 1: Brief Deconstruction & Enrichment Prompts ---
@@ -11,75 +12,64 @@ You are an expert fashion strategist and cultural anthropologist. Your primary d
 
 **CORE PRINCIPLES:**
 1.  **Synthesize, Don't Repeat:** Synthesize the user's passage into a core, actionable creative concept for the `theme_hint`.
-2.  **Extract Explicitly:** First, extract any explicit values provided by the user.
-3.  **Infer Intelligently:** For any creative variable that is still missing, use your expert reasoning to infer a logical value. NO CREATIVE FIELD SHOULD BE NULL.
-4.  **Prioritize Cultural Specificity:** This is your most important rule. If the request mentions a specific culture, region, or cultural event (e.g., "Pohela Boishakh," "Scottish Highlands," "Day of the Dead"), you MUST infer the most iconic and traditional garments associated with it for the `garment_type`, even if the user uses a more generic term like "outfit" or "dresses."
-5.  **Strict JSON Output:** Your response MUST be ONLY the valid JSON object.
+2.  **Extract Explicitly:** First, extract any explicit values provided by the user for all fields.
+3.  **Infer Intelligently:** For any creative or demographic variable that is still missing, use your expert reasoning to infer a logical value. NO FIELD SHOULD BE NULL.
+4.  **Prioritize Cultural Specificity:** If the request mentions a specific culture, region, or cultural event (e.g., "Pohela Boishakh," "Scottish Highlands"), you MUST infer the most iconic garments for `garment_type` AND set the `target_model_ethnicity` to match.
+5.  **Demographic Inference Rules:**
+    - `target_gender`: Infer from keywords ("men's," "women's") or garment types ("dresses" -> Female). Default to "Unisex" if ambiguous.
+    - `target_age_group`: Infer from keywords ("children," "elderly") or context ("Coachella" -> Young Adult). Default to "Young Adult (20-30)" for general fashion.
+6.  **Strict JSON Output:** Your response MUST be ONLY the valid JSON object.
 ---
 **VARIABLES TO POPULATE:**
 - theme_hint: The core creative idea or aesthetic. (Required)
-- garment_type: The primary type of clothing. If not specified, infer a logical category, prioritizing cultural specificity.
-- brand_category: The market tier (e.g., 'Streetwear', 'Contemporary', 'Luxury').
+- garment_type: The primary type of clothing.
+- brand_category: The market tier (e.g., 'Streetwear', 'Luxury').
 - target_audience: The intended wearer.
 - region: The geographical or cultural context.
 - key_attributes: A list of 2-4 core descriptive attributes.
 - season: The fashion season (Default: auto).
 - year: The target year (Default: auto).
+- target_gender: The model's gender.
+- target_age_group: The model's age range.
+- target_model_ethnicity: The model's ethnicity.
 ---
---- GOLD STANDARD EXAMPLE 1 ---
-USER REQUEST:
-"Generate a report on Streetwear Influence."
-
-AI'S REASONING PROCESS (Emulate This):
-- Theme Hint: The user's request is broad. I will synthesize it into a core concept: "The Pervasive Influence of Streetwear on Contemporary Fashion".
-- Garment Type: The request is general. I will infer a representative category that covers the main items: "Core Streetwear Staples (e.g., Hoodies, Graphic Tees, Sneakers)".
-- Brand Category: Streetwear spans multiple tiers. "Contemporary" and "Streetwear" are the most relevant.
-- Target Audience: The core demographic is clear: "Young, urban, and culturally-aware consumers".
-- Region: Streetwear is global but has key origins. I will specify this nuance: "Global, with origins in US and Japanese street culture".
-- Key Attributes: The core values are well-established: "Comfort", "Authenticity", "Self-Expression".
-
-FINAL JSON OUTPUT:
-{{
-  "theme_hint": "The Pervasive Influence of Streetwear on Contemporary Fashion",
-  "garment_type": "Core Streetwear Staples (e.g., Hoodies, Graphic Tees, Sneakers)",
-  "brand_category": "Contemporary",
-  "target_audience": "Young, urban, and culturally-aware consumers",
-  "region": "Global, with origins in US and Japanese street culture",
-  "key_attributes": [
-    "Comfort",
-    "Authenticity",
-    "Self-Expression"
-  ],
-  "season": "auto",
-  "year": "auto"
-}}
---- END GOLD STANDARD EXAMPLE 1 ---
-
---- GOLD STANDARD EXAMPLE 2: CULTURAL SPECIFICITY ---
+--- GOLD STANDARD EXAMPLE 1: CULTURAL SPECIFICITY ---
 USER REQUEST:
 "Show me a collection of dresses featuring the Bengali New Year (Pohela Boishakh)."
-
-AI'S REASONING PROCESS (Emulate This):
-- The user mentioned "dresses," but the key context is "Bengali New Year (Pohela Boishakh)." My "Prioritize Cultural Specificity" rule is paramount here.
-- The most iconic and culturally mandatory garment for women for this event is the Saree. For men, it is the Punjabi. I must prioritize this cultural knowledge.
-- Therefore, for `garment_type`, I will specify "Saree for women, Punjabi for men." This is more accurate and useful than just "Dresses."
-- The rest of the brief (colors, region, target audience) flows from this central cultural event. I will change `brand_category` to "Cultural & Festive Wear" as it is more fitting than "Contemporary".
 
 FINAL JSON OUTPUT:
 {{
   "theme_hint": "A vibrant collection celebrating the cultural richness of Bengali New Year (Pohela Boishakh)",
   "garment_type": "Traditional Saree (for women) and Punjabi (for men)",
   "brand_category": "Cultural & Festive Wear",
-  "target_audience": "Individuals celebrating Bengali New Year and cultural enthusiasts",
+  "target_audience": "Individuals celebrating Bengali New Year",
   "region": "Bengal (Bangladesh & West Bengal, India)",
-  "key_attributes": [
-    "Vibrant",
-    "Traditional Motifs",
-    "Festive",
-    "Culturally Rich"
-  ],
+  "key_attributes": ["Vibrant", "Traditional Motifs", "Festive"],
   "season": "Spring",
-  "year": "auto"
+  "year": "auto",
+  "target_gender": "Female and Male",
+  "target_age_group": "Young Adult (20-35)",
+  "target_model_ethnicity": "Bengali"
+}}
+--- END GOLD STANDARD EXAMPLE 1 ---
+
+--- GOLD STANDARD EXAMPLE 2: DEMOGRAPHIC SPECIFICITY ---
+USER REQUEST:
+"Men's casual shirts for a 50-year-old."
+
+FINAL JSON OUTPUT:
+{{
+  "theme_hint": "A collection of sophisticated and comfortable casual shirts for the mature man",
+  "garment_type": "Casual Button-Down Shirts",
+  "brand_category": "Contemporary",
+  "target_audience": "Men in their late 40s to 50s",
+  "region": "Global",
+  "key_attributes": ["Comfort", "Sophistication", "Quality Fabrics"],
+  "season": "auto",
+  "year": "auto",
+  "target_gender": "Male",
+  "target_age_group": "Mature Adult (45-55)",
+  "target_model_ethnicity": "Diverse"
 }}
 --- END GOLD STANDARD EXAMPLE 2 ---
 
@@ -735,7 +725,8 @@ A full-body editorial fashion photograph for a high-end magazine lookbook, featu
 - **Technical Execution:** The photograph must have a shallow depth of field, keeping the garment's texture and details in sharp, tactile focus while the background is softly blurred.
 
 **Subject & Styling:**
-- **Model Persona:** {model_persona}. The subject is a professional fashion model with artistic, expressive features.
+- **Model Demographics:** The subject is a professional fashion model who is {target_gender}, in the {target_age_group} age range, and of {target_model_ethnicity} ethnicity.
+- **Model Persona:** {model_persona}. The subject embodies the core spirit of the collection.
 - **Garment Details:** The model is wearing the '{key_piece_name}', a garment defined by its modern '{silhouette}' silhouette. It is crafted from {main_fabric}, and its material properties are rendered with photorealistic detail: a texture that feels '{main_fabric_texture}', a weight of {main_fabric_weight_gsm} gsm that creates a '{main_fabric_drape}' drape, and a '{main_fabric_finish}' finish.
 - **Pattern & Construction:** {pattern_description} {lining_description}
 - **Styling:** The look is completed with {styling_description}, styled to feel authentic and personally curated, not like a mannequin.

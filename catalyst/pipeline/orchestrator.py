@@ -1,10 +1,13 @@
+# catalyst/pipeline/orchestrator.py
+
 """
 This module contains the PipelineOrchestrator, which executes the final,
 robust, multi-step synthesis pipeline with enhanced, readable logging and
-configurable feature flags.
+a comprehensive, two-level caching strategy.
 """
 
 import json
+import shutil
 from catalyst.context import RunContext
 from .base_processor import BaseProcessor
 from ..utilities.logger import get_logger
@@ -26,22 +29,32 @@ from .processors.synthesis import (
 from .processors.reporting import FinalOutputGeneratorProcessor
 from .processors.generation import get_image_generator
 
+
+# --- START OF FIX ---
+# The orchestrator is the manager of the pipeline, not a step within it.
+# It should not inherit from BaseProcessor.
 class PipelineOrchestrator:
+    # --- END OF FIX ---
     """
     Manages the pipeline execution, including a high-level cache check,
-    intelligent fallback logic, and configurable feature flags for expensive steps.
+    artifact restoration, intelligent fallback logic, and configurable
+    feature flags for expensive steps.
     """
 
     def __init__(self):
+        # We can't use super() here anymore as there is no parent class.
         self.logger = get_logger(self.__class__.__name__)
 
-    async def run(self, context: RunContext):
-        """Executes the full, final pipeline with all architectural improvements."""
+    async def run(self, context: RunContext) -> bool:
+        """
+        Executes the full pipeline. Returns a boolean indicating if the result
+        was successfully served from cache.
+        """
         self.logger.info(f"▶️ PIPELINE START | Run ID: {context.run_id}")
+        is_from_cache = False
 
         try:
-            # STAGE 1: BRIEFING
-            # Deconstructs the user's input into a rich, structured brief.
+            # STAGE 1: BRIEFING (Always runs to get a stable cache key)
             briefing_pipeline: list[BaseProcessor] = [
                 BriefDeconstructionProcessor(),
                 EthosClarificationProcessor(),
@@ -50,67 +63,85 @@ class PipelineOrchestrator:
             for processor in briefing_pipeline:
                 context = await self._run_step(processor, context)
 
-            # STAGE 2: L1 CACHE CHECK
-            # Checks for a semantically similar report to avoid re-running the expensive synthesis.
+            # STAGE 2: CACHE CHECK & ARTIFACT RESTORATION
             self.logger.info(
-                "⚙️ Caching: Checking L1 Report Cache for completed report..."
+                "⚙️ Caching: Checking L0/L1 cache for completed report and images..."
             )
-            cached_report_json = await cache_manager.check_report_cache_async(
+            cached_payload_json = await cache_manager.check_report_cache_async(
                 context.enriched_brief
             )
 
-            if cached_report_json:
+            if cached_payload_json:
                 self.logger.warning(
-                    "🎯 L1 CACHE HIT! Bypassing synthesis pipeline. A similar report was found."
+                    "🎯 CACHE HIT! Payload found. Attempting to restore artifacts."
                 )
-                context.final_report = json.loads(cached_report_json)
-            else:
-                self.logger.info(
-                    "💨 L1 CACHE MISS. Proceeding with full synthesis pipeline."
-                )
+                cached_payload = json.loads(cached_payload_json)
+                cached_folder_name = cached_payload.get("cached_results_path")
 
-                # STAGE 3: PRIMARY SYNTHESIS PATH
-                # The main path: web research -> structure -> synthesize.
-                primary_synthesis_pipeline: list[BaseProcessor] = [
-                    WebResearchProcessor(),
-                    ContextStructuringProcessor(),
-                    ReportSynthesisProcessor(),
-                ]
-                for processor in primary_synthesis_pipeline:
-                    context = await self._run_step(processor, context)
+                if cached_folder_name:
+                    source_path = settings.ARTIFACT_CACHE_DIR / cached_folder_name
+                    dest_path = context.results_dir
 
-                # STAGE 4: DECISION POINT & FALLBACK
-                # If the primary path fails to produce a report, activate the fallback.
-                if not context.final_report:
+                    if source_path.exists() and source_path.is_dir():
+                        self.logger.info(
+                            f"Copying cached artifacts from '{source_path}' to '{dest_path}'..."
+                        )
+                        try:
+                            shutil.copytree(source_path, dest_path, dirs_exist_ok=True)
+                            context.final_report = cached_payload.get(
+                                "final_report", {}
+                            )
+                            self.logger.info(
+                                "✅ Successfully restored all artifacts from cache."
+                            )
+                            is_from_cache = True
+                            return is_from_cache
+                        except Exception as e:
+                            self.logger.error(
+                                f"❌ Failed to copy cached artifacts: {e}",
+                                exc_info=True,
+                            )
+                            self.logger.warning(
+                                "⚠️ Proceeding with full regeneration due to copy failure."
+                            )
+                    else:
+                        self.logger.warning(
+                            f"⚠️ Cached artifact path '{source_path}' does not exist. Regenerating."
+                        )
+                else:
                     self.logger.warning(
-                        "⚠️ Primary synthesis path failed. Activating Direct Knowledge Fallback."
-                    )
-                    fallback_processor = DirectKnowledgeSynthesisProcessor()
-                    context = await self._run_step(fallback_processor, context)
-
-                # After a successful synthesis, add the new report to the cache for future use.
-                if context.final_report:
-                    self.logger.info(
-                        "⚙️ Caching: Adding newly synthesized report to L1 cache..."
-                    )
-                    await cache_manager.add_to_report_cache_async(
-                        context.enriched_brief, context.final_report
+                        "⚠️ Cache payload is missing artifact path. Regenerating."
                     )
 
-            # STAGE 5 & 6: FINAL OUTPUT GENERATION
+            # STAGES 3 & 4: SYNTHESIS (Runs only on cache miss or restoration failure)
+            self.logger.info(
+                "💨 CACHE MISS or invalid cache. Proceeding with full synthesis."
+            )
+            primary_synthesis_pipeline: list[BaseProcessor] = [
+                WebResearchProcessor(),
+                ContextStructuringProcessor(),
+                ReportSynthesisProcessor(),
+            ]
+            for processor in primary_synthesis_pipeline:
+                context = await self._run_step(processor, context)
+
+            if not context.final_report:
+                self.logger.warning(
+                    "⚠️ Primary synthesis path failed. Activating Direct Knowledge Fallback."
+                )
+                fallback_processor = DirectKnowledgeSynthesisProcessor()
+                context = await self._run_step(fallback_processor, context)
+
+            # STAGES 5 & 6: FINAL OUTPUT GENERATION (Runs only on cache miss)
             if context.final_report:
-                # Always generate the JSON files and prompts.
                 final_processor = FinalOutputGeneratorProcessor()
                 context = await self._run_step(final_processor, context)
 
-                # Conditionally run the expensive image generation step based on the feature flag.
                 if settings.ENABLE_IMAGE_GENERATION:
                     self.logger.info(
                         f"🚀 Initializing '{settings.IMAGE_GENERATION_MODEL}' image generator..."
                     )
-                    # 1. Get the currently configured generator from the factory
                     image_generator = get_image_generator()
-                    # 2. Run its process method (polymorphism in action!)
                     self.logger.info(
                         f"--- ▶️ START: {image_generator.__class__.__name__} ---"
                     )
@@ -120,7 +151,7 @@ class PipelineOrchestrator:
                     )
                 else:
                     self.logger.warning(
-                        "⚠️ Image generation is disabled via settings. Skipping image generation step."
+                        "⚠️ Image generation is disabled via settings. Skipping."
                     )
             else:
                 self.logger.critical(
@@ -132,7 +163,6 @@ class PipelineOrchestrator:
                 f"❌ PIPELINE FAILED: A critical, unhandled exception occurred: {e}",
                 exc_info=True,
             )
-            self.logger.error("⚠️ Debug artifacts for the run will be saved.")
         finally:
             self.logger.info("⚙️ Saving all debug artifacts for the run...")
             try:
@@ -144,6 +174,8 @@ class PipelineOrchestrator:
                 )
             self.logger.info(f"⏹️ PIPELINE FINISHED | Run ID: {context.run_id}")
 
+        return is_from_cache
+
     async def _run_step(
         self, processor: BaseProcessor, context: RunContext
     ) -> RunContext:
@@ -154,15 +186,10 @@ class PipelineOrchestrator:
         self.logger.info(f"--- ▶️ START: {step_name} ---")
         processed_context = await processor.process(context)
         self.logger.info(f"--- ✅ END: {step_name} ---")
-
-        # --- START OF IMPROVEMENT: ROBUST ARTIFACT RECORDING ---
-        # This ensures that a failure to serialize artifacts does not crash the entire pipeline.
         try:
             processed_context.record_artifact(step_name, processed_context.to_dict())
         except Exception as e:
             self.logger.warning(
                 f"⚠️ Could not record artifact for step {step_name} due to a serialization error: {e}"
             )
-        # --- END OF IMPROVEMENT ---
-
         return processed_context

@@ -1,9 +1,15 @@
-"""
-The Report Cache: Level 1 Caching Service.
+# catalyst/caching/report_cache.py
 
-This module manages the semantic cache for complete, final FashionTrendReport objects.
-It checks for semantically similar creative briefs to return fully completed reports,
-offering the fastest path to a result and avoiding the entire generation workflow.
+"""
+The Report Cache: A Two-Level Caching Service.
+
+This module manages the cache for complete, final report payloads, which include
+both the structured report data and the path to the generated image artifacts.
+
+It implements a two-level lookup strategy for optimal performance:
+- L0 (Exact Match): A fast, hash-based lookup for identical creative briefs.
+- L1 (Semantic Match): A vector-based search for semantically similar briefs,
+  acting as a fallback if the L0 cache misses.
 """
 
 import json
@@ -25,62 +31,83 @@ try:
     chroma_client = chromadb.PersistentClient(path=str(settings.CHROMA_PERSIST_DIR))
     _report_collection = chroma_client.get_or_create_collection(name=_collection_name)
     logger.info(
-        f"✅ Report Cache (L1) initialized. Collection '{_collection_name}' loaded/created."
+        f"✅ Report Cache (L0/L1) initialized. Collection '{_collection_name}' loaded/created."
     )
 except Exception as e:
     logger.critical(
-        "❌ CRITICAL: Failed to initialize ChromaDB for Report Cache. L1 Caching will be disabled.",
+        "❌ CRITICAL: Failed to initialize ChromaDB for Report Cache. Caching will be disabled.",
         exc_info=True,
     )
 
 
 async def check(brief_key: str) -> Optional[str]:
     """
-    Checks the L1 cache for a semantically similar report using the brief's composite key.
-    Returns the JSON string of the report if a close match is found, otherwise None.
+    Checks the cache for a matching report payload using a two-level strategy.
+
+    Args:
+        brief_key: The deterministic, composite key generated from the user's brief.
+
+    Returns:
+        The JSON string of the entire cached payload if a match is found,
+        otherwise None.
     """
     if not _report_collection:
         logger.warning("⚠️ Report collection is not available. Skipping cache check.")
         return None
 
-    logger.info("⚙️ Checking Report Cache (L1) for similar briefs...")
+    doc_id = str(hash(brief_key))
 
+    # --- L0 Cache Check (Exact Match) ---
+    try:
+        logger.info(f"⚙️ Checking L0 Cache (Exact Match) with ID: {doc_id}...")
+        results = _report_collection.get(ids=[doc_id])
+        if results and results.get("documents") and results["documents"]:
+            logger.warning(
+                f"🎯 L0 CACHE HIT! (Exact Match) Found payload with ID: {doc_id}"
+            )
+            return results["documents"][0]
+    except Exception as e:
+        logger.error(
+            "❌ An error occurred during L0 ChromaDB get. Proceeding to L1.",
+            exc_info=True,
+        )
+
+    # --- L1 Cache Check (Semantic Match) ---
+    logger.info("💨 L0 MISS. Checking L1 Cache (Semantic Match)...")
     embedding = await gemini_client.generate_embedding_async(brief_key)
     if not embedding:
-        logger.error(
-            "❌ Could not generate embedding for L1 cache check. Skipping cache."
-        )
+        logger.error("❌ Could not generate embedding for L1 cache check. Skipping.")
         return None
 
     try:
         results = _report_collection.query(query_embeddings=[embedding], n_results=1)
 
-        # --- Defensive Parsing of Results ---
-        if not results or not results.get("ids") or not results["ids"][0]:
-            logger.info("💨 L1 CACHE MISS: No similar documents found in the cache.")
+        if (
+            not results
+            or not results.get("ids")
+            or not results["ids"]
+            or not results["ids"][0]
+            or not results.get("documents")
+            or not results["documents"]
+            or not results["documents"][0]
+            or not results.get("distances")
+            or not results["distances"]
+            or not results["distances"][0]
+        ):
+            logger.info("💨 L1 CACHE MISS: No similar documents found.")
             return None
 
-        distances = results.get("distances")
-        if not distances or not distances[0]:
-            logger.info("💨 L1 CACHE MISS: No valid distances found for this query.")
-            return None
-
-        documents = results.get("documents")
-        if not documents or not documents[0]:
-            logger.info("💨 L1 CACHE MISS: No valid documents found for this query.")
-            return None
-
-        distance = distances[0][0]
-        document = documents[0][0]
+        distance = results["distances"][0][0]
+        document = results["documents"][0][0]
 
         if distance < settings.CACHE_DISTANCE_THRESHOLD:
             logger.warning(
-                f"🎯 L1 CACHE HIT! Found a similar report with distance {distance:.4f}."
+                f"🎯 L1 CACHE HIT! (Semantic Match) Found a similar payload with distance {distance:.4f}."
             )
             return document
         else:
             logger.info(
-                f"💨 L1 CACHE MISS. Closest report distance ({distance:.4f}) is above the threshold."
+                f"💨 L1 CACHE MISS. Closest payload distance ({distance:.4f}) is above threshold."
             )
             return None
 
@@ -92,38 +119,40 @@ async def check(brief_key: str) -> Optional[str]:
         return None
 
 
-async def add(brief_key: str, report_data: Dict):
+async def add(brief_key: str, payload: Dict):
     """
-    Adds a newly generated report to the L1 cache. The report data is
-    stored as a JSON string, associated with the semantic vector of the brief key.
+    Adds or updates a result payload in the cache.
+
+    The payload is stored against a deterministic ID for L0 lookups and is
+    associated with a semantic vector of the brief key for L1 lookups.
+
+    Args:
+        brief_key: The deterministic, composite key from the user's brief.
+        payload: A dictionary containing the 'final_report' and 'cached_results_path'.
     """
     if not _report_collection:
         logger.warning("⚠️ Report collection is not available. Skipping cache add.")
         return
 
-    logger.info("📥 Adding new report to Report Cache (L1)...")
+    logger.info("🔥 Adding new payload to Report Cache (L0/L1)...")
 
     embedding = await gemini_client.generate_embedding_async(brief_key)
     if not embedding:
         logger.error(
-            "❌ Could not generate embedding for new L1 cache entry. Skipping add."
+            "❌ Could not generate embedding for new cache entry. Skipping add."
         )
         return
 
-    report_json = json.dumps(report_data)
+    payload_json = json.dumps(payload)
     doc_id = str(hash(brief_key))
 
     try:
         _report_collection.upsert(
             ids=[doc_id],
             embeddings=[embedding],
-            documents=[report_json],
+            documents=[payload_json],
             metadatas=[{"brief_key": brief_key}],
         )
-        logger.info(
-            f"✅ Successfully added/updated report in L1 cache with ID: {doc_id}"
-        )
+        logger.info(f"✅ Successfully added/updated payload in cache with ID: {doc_id}")
     except Exception as e:
-        logger.error(
-            "❌ Failed to add document to L1 ChromaDB collection.", exc_info=True
-        )
+        logger.error("❌ Failed to add document to ChromaDB collection.", exc_info=True)
