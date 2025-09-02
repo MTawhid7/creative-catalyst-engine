@@ -1,6 +1,6 @@
-# The Creative Catalyst Engine: Professional Git Workflow Guide
+# The Definitive Git Workflow Guide
 
-Welcome to the official development workflow for this project. This guide is the single source of truth for how we write, review, and submit code. Following these steps ensures our project history remains clean, our code stays stable, and our collaboration is efficient and safe.
+Welcome to the official development workflow for the Creative Catalyst Engine. This guide is the single source of truth for how we write, review, and submit code. Following these steps ensures our project history remains clean, our code stays stable, and our collaboration is efficient and safe.
 
 ### The Golden Rule: The Workshop vs. The Showroom
 
@@ -13,7 +13,7 @@ To understand this workflow, you only need to remember one core concept:
 
 -   **`feature` branches (e.g., `feat/add-new-model`):** Temporary "drafts" where all new work happens. They are created locally and deleted after being merged.
 -   **`main` branch:** The primary integration branch. It represents the latest, stable, development-ready version of the project. **Direct pushes to this branch are forbidden by process.**
--   **`release` branch:** A highly stable branch that represents the "shippable" or "production-ready" version of the code.
+-   **`release` branch:** A highly stable branch that is a "snapshot" of `main` at a specific point in time. It represents the "shippable" or "production-ready" version of the code.
 
 ---
 
@@ -29,23 +29,17 @@ To understand this workflow, you only need to remember one core concept:
 
 2.  **Add Your Personal Repo as a Remote:**
     ```bash
-    # The name 'origin' will now point to your personal repo
     git remote add origin <your-personal-repo-url>
     ```
 
 3.  **Rename the Original Remote to `company`:**
     ```bash
-    # The default remote name is 'origin', we rename it to be more descriptive
     git remote rename origin company
     ```
 
-4.  **Verify Your Remotes:**
-    ```bash
-    git remote -v
-    ```
-    *You should see both `company` and `origin` listed.*
+4.  **Verify Your Remotes:** `git remote -v` (You should see both `company` and `origin` listed).
 
-5.  **Set the Upstream for Your `main` Branch:** This is a critical step that tells `git status` to compare your local `main` against the company's `main`, which is our source of truth.
+5.  **Set the Upstream for Your `main` Branch:** This critical step tells `git status` to compare your local `main` against the company's `main`.
     ```bash
     git checkout main
     git branch --set-upstream-to=company/main
@@ -53,7 +47,7 @@ To understand this workflow, you only need to remember one core concept:
 
 ---
 
-## Phase 2: The Core Workflow Cycle
+## Phase 2: The Core Feature Workflow Cycle
 
 This is the end-to-end process for taking a task from idea to completion.
 
@@ -65,7 +59,7 @@ This is the end-to-end process for taking a task from idea to completion.
     ```bash
     git checkout main
     ```
-2.  **Pull the latest official code from the `company` remote.** This downloads any changes your collaborators have merged and updates your local `main` to match.
+2.  **Pull the latest official code from the `company` remote.**
     ```bash
     git pull company main
     ```
@@ -79,35 +73,28 @@ This is the end-to-end process for taking a task from idea to completion.
 **Goal:** Write code and safely back it up to your personal "Workshop" repo.
 
 1.  **Write and Test Your Code** on your feature branch.
-2.  **Commit Your Changes** in small, logical units.
+2.  **Commit Your Changes** in small, logical units with clear messages.
     ```bash
     git add .
     git commit -m "feat: Implement the core watermarking function"
     ```
 3.  **Push to Your Personal Repo (`origin`)**. This is your backup. The company repo is not affected.
     ```bash
-    # For the first time pushing a new branch:
     git push -u origin feat/add-image-watermarking
-    # For all subsequent pushes on this branch:
-    git push origin
     ```
 
 ### Step 3: Keeping Your Branch Synced (Rebasing)
 
-**Goal:** Keep your feature branch updated with the latest changes from the official `main` branch, preventing difficult merges later.
+**Goal:** Keep your feature branch updated with the latest changes from the official `main` branch to maintain a clean history.
 
-**Scenario:** A teammate has just merged a big feature into the company's `main` branch.
-
-1.  **Fetch the latest history from the `company` remote.** This downloads all new commits but doesn't change your code yet.
+1.  **Fetch the latest history from the `company` remote.**
     ```bash
     git fetch company
-    ```
-2.  **Rebase your branch onto the official `main`.** This rewrites your branch's history to be a clean, straight line starting from the latest official code.
+    ```2.  **Rebase your branch onto the official `main`.** This replays your work on top of the latest code.
     ```bash
-    # Make sure you are on your feature branch
     git rebase company/main
     ```
-3.  **Force-push the updated branch to your personal remote.** Because `rebase` rewrites history, you must force-push. This is safe because it's your own branch in your personal "Workshop."
+3.  **Force-push the updated branch to your personal remote.** This is required and safe after rebasing a feature branch.
     ```bash
     git push --force-with-lease origin feat/add-image-watermarking
     ```
@@ -120,9 +107,7 @@ This is the end-to-end process for taking a task from idea to completion.
     ```bash
     git push company feat/add-image-watermarking
     ```
-2.  **Open a Pull Request (PR) on the Company's GitHub Repo.**
-    -   Go to the company repository on GitHub. A banner for your recently pushed branch will automatically appear. Click **"Compare & pull request"**.
-    -   The PR form will be correctly pre-filled (`base: main` ← `compare: feat/add-image-watermarking`).
+2.  **Open a Pull Request (PR) on the Company's GitHub Repo.** A banner for your recently pushed branch will automatically appear. Click **"Compare & pull request"**.
 3.  **Write a clear title and a detailed description.** Explain what you did and why.
 4.  **Assign your teammates as Reviewers.**
 
@@ -130,97 +115,103 @@ This is the end-to-end process for taking a task from idea to completion.
 
 **Goal:** Collaboratively refine your code based on team feedback.
 
--   **If they request changes:**
-    1.  On your local machine, switch to your feature branch (`git checkout feat/add-image-watermarking`).
-    2.  Make the requested code changes.
-    3.  Commit and `git push origin`. Then `git push company`. The Pull Request will automatically update.
-    4.  Comment on GitHub to let them know you've addressed the feedback.
+-   **If they request changes:** Make the changes on your local feature branch, commit, and push to both `origin` and `company`. The PR will automatically update.
+-   **If you disagree with a suggestion:** Reply to the comment on GitHub. Respectfully explain your reasoning with evidence. The goal is a technical discussion to find the best solution.
 
--   **If you disagree with a suggestion:**
-    1.  Do not ignore it. Reply to the comment on GitHub.
-    2.  Respectfully explain your reasoning with evidence (e.g., performance, architecture, bug prevention).
-    3.  The goal is a technical discussion to find the best solution for the project.
+### Step 6: Finalizing the Merge (Best Practice: Squash and Merge)
 
-### Step 6: Finalizing the Merge
+**Goal:** Officially add your feature to the project with a clean, linear history.
 
-**Goal:** Officially add your feature to the project.
-
-1.  **Merge the PR:** Once approved, an admin (you or a collaborator) will click the green **"Merge pull request"** button on GitHub. Your code is now in the company's `main` branch.
+1.  **Merge the PR using "Squash and Merge":** Once the Pull Request is approved, click the **dropdown arrow** on the green merge button. Select **"Squash and merge"**.
+2.  **Edit the Commit Message:** Condense the automatically generated list of commits into a single, clear message that summarizes the feature (e.g., "feat: Add multi-model image generation support").
+3.  **Confirm the merge.** Your feature is now represented by a single, clean commit on the `main` branch.
 
 ### Step 7: The "Sync Back" and Final Cleanup
 
 **Goal:** To reset your entire workspace to a clean state after your feature has been officially merged.
 
-1.  **Update your local `main` branch.** This pulls the official "merge commit" from the company repo onto your local machine.
+1.  **Update your local `main` branch.**
     ```bash
     git checkout main
     git pull company main
     ```
-
-2.  **Update your personal remote's `main` branch.** This ensures your personal backup is now in sync with the official project history.
+2.  **Update your personal remote's `main` branch.**
     ```bash
     git push origin main
     ```
-
-3.  **Delete the feature branch from all locations.** The feature branch has served its purpose and is no longer needed.
+3.  **Delete the feature branch from all locations.**
     ```bash
-    # Delete the branch from your local machine
     git branch -d feat/add-image-watermarking
-
-    # Delete the branch from your personal remote ('origin')
     git push origin --delete feat/add-image-watermarking
-
-    # Delete the branch from the company remote ('company')
     git push company --delete feat/add-image-watermarking
     ```
-    *   **Pro Tip:** After merging a PR on the GitHub website, a "Delete branch" button often appears. Clicking this will perform the remote deletions (`origin` and `company`) for you, so you only need to run the local delete command (`git branch -d ...`).
 
 ---
 
-## Special Scenarios & Advanced Usage
+## Phase 3: Managing a Release
+
+**Goal:** To update the stable `release` branch with the latest approved features from `main`.
+
+### When to Update the `release` Branch
+
+This is not a daily task. You should update the `release` branch only when `main` has accumulated enough new, stable features to constitute a new "version" of the project, or before a planned deployment.
+
+### The Release Update Workflow
+
+1.  **Ensure your local `main` is fully synced** with the company's `main`.
+    ```bash
+    git checkout main
+    git pull company main
+    ```
+2.  **Switch to your local `release` branch.**
+    ```bash
+    git checkout release
+    ```
+3.  **Pull the latest `release` from the company repo.** This is a critical safety check to ensure you have any hotfixes that may have been applied.
+    ```bash
+    git pull company release
+    ```
+4.  **Merge `main` into `release`.** This brings all the new, approved features into your release candidate.
+    ```bash
+    git merge main
+    ```
+5.  **Push the updated `release` branch to the company repo.** This makes the new release official.
+    ```bash
+    git push company release
+    ```
+6.  **Switch back to `main`** to continue development work.
+    ```bash
+    git checkout main
+    ```
+
+---
+
+## Special Scenarios & Best Practices
+
+### Best Practices for Commit Messages
+
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) standard. This makes the history easy to read.
+-   `feat:` A new feature. (e.g., `feat: Add image watermarking`)
+-   `fix:` A bug fix. (e.g., `fix: Correct Gemini client initialization`)
+-   `docs:` Changes to documentation. (e.g., `docs: Update workflow guide`)
+-   `style:` Code style changes (formatting, etc).
+-   `refactor:` A code change that neither fixes a bug nor adds a feature.
+-   `chore:` Changes to the build process or auxiliary tools.
 
 ### Handling Experiments: `git stash`
 
 -   **Save uncommitted work for later:** `git stash`
 -   **See your list of stashes:** `git stash list`
 -   **Apply the most recent stash:** `git stash pop`
--   **Delete all stashes:** `git stash clear`
-
-### Handling Merge Conflicts During a Rebase
-
-If you `rebase` and Git finds a conflict, it will pause and tell you which file is conflicted.
-
-1.  **Open the conflicted file.** You will see markers:
-    ```
-    <<<<<<< HEAD
-    // Your changes
-    =======
-    // The incoming changes from main
-    >>>>>>> <commit-hash>
-    ```
-2.  **Edit the file manually.** Delete the markers and decide which code to keep (yours, theirs, or a combination of both).
-3.  **Stage the fixed file.**
-    ```bash
-    git add path/to/the/fixed/file.py
-    ```
-4.  **Continue the rebase.**
-    ```bash
-    git rebase --continue
-    ```
-5.  If you get stuck, you can always safely abort the rebase and return to where you started: `git rebase --abort`.
 
 ### Undoing Mistakes
 
 -   **Amend your last commit (if you haven't pushed yet):**
     ```bash
-    # Make your changes
     git add .
     git commit --amend --no-edit
     ```
--   **Revert a commit that has already been pushed:** This creates a *new* commit that undoes a previous one. It's the safest way to undo public changes.
+-   **Revert a pushed commit:** This creates a *new* commit that undoes a previous one.
     ```bash
-    # Find the hash of the commit you want to revert
-    git log
-    # Create the revert commit
     git revert <commit-hash>
     ```
