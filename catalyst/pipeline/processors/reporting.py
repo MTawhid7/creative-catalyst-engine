@@ -186,9 +186,6 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
         ]
 
         for piece in report.detailed_key_pieces:
-            # --- START OF FIX ---
-            # Provide all default arguments for the fallback FabricDetail object
-            # to prevent errors and ensure code clarity.
             main_fabric = (
                 piece.fabrics[0]
                 if piece.fabrics
@@ -201,7 +198,6 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     finish=None,
                 )
             )
-            # --- END OF FIX ---
 
             main_color = piece.colors[0].name if piece.colors else "a core color"
             silhouette = (
@@ -251,8 +247,13 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     model_persona=style_guide.get("model_persona"),
                     negative_style_keywords=style_guide.get("negative_style_keywords"),
                     target_gender=report.target_gender,
-                    target_age_group=report.target_age_group,
+                    # --- START OF MODIFICATION ---
+                    # The 'target_age_group' has been removed as per the new requirement.
+                    # This makes the prompt more flexible and less constrained.
+                    # NOTE: The corresponding '{target_age_group}' placeholder must also
+                    # be removed from the template string in prompt_library.py for this to work.
                     target_model_ethnicity=report.target_model_ethnicity,
+                    # --- END OF MODIFICATION ---
                     key_piece_name=piece.key_piece_name,
                     silhouette=silhouette,
                     main_fabric=main_fabric.material,

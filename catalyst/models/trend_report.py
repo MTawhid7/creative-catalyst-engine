@@ -120,6 +120,18 @@ class KeyPieceDetail(BaseModel):
     suggested_pairings: List[str] = Field(
         ..., description="Other items to style with this piece."
     )
+    # --- START OF MODIFICATION ---
+    # Add optional fields to hold the final, public-facing URLs for the generated images.
+    # These are populated after the core report and images have been generated.
+    final_garment_image_url: Optional[str] = Field(
+        default=None,
+        description="The public URL for the final generated garment image.",
+    )
+    mood_board_image_url: Optional[str] = Field(
+        default=None,
+        description="The public URL for the final generated mood board image.",
+    )
+    # --- END OF MODIFICATION ---
 
 
 # --- ENHANCED: Root model with new metadata and demographic fields ---
@@ -135,7 +147,6 @@ class FashionTrendReport(BaseModel):
     region: Optional[str] = Field(
         None, description="The geographical region for the trend report."
     )
-    # --- START OF DEMOGRAPHICS FIX ---
     target_gender: str = Field(
         ...,
         description="The target gender for the model (e.g., 'Male', 'Female', 'Unisex').",
@@ -148,7 +159,6 @@ class FashionTrendReport(BaseModel):
         ...,
         description="The appropriate model ethnicity for the target region or theme (e.g., 'Bengali', 'Scottish', 'Diverse').",
     )
-    # --- END OF DEMOGRAPHICS FIX ---
     narrative_setting_description: str = Field(
         ...,
         description="A detailed, atmospheric description of the ideal setting or environment that tells the story of the collection.",

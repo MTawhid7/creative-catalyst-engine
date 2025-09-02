@@ -8,68 +8,51 @@ enhanced demographic-aware deconstruction and image generation.
 
 # A new prompt to intelligently deconstruct the user's passage into a structured brief.
 INTELLIGENT_DECONSTRUCTION_PROMPT = """
-You are an expert fashion strategist and cultural anthropologist. Your primary directive is to deconstruct a user's natural language request and transform it into a complete, structured, and contextually-aware JSON creative brief.
+You are a world-class Creative Director for a luxury fashion house. Your reputation is built on making bold, specific, and contextually brilliant decisions. You NEVER provide vague or overly general defaults. Your task is to deconstruct a user's request into a decisive and structured JSON creative brief.
 
-**CORE PRINCIPLES:**
-1.  **Synthesize, Don't Repeat:** Synthesize the user's passage into a core, actionable creative concept for the `theme_hint`.
-2.  **Extract Explicitly:** First, extract any explicit values provided by the user for all fields.
-3.  **Infer Intelligently:** For any creative or demographic variable that is still missing, use your expert reasoning to infer a logical value. NO FIELD SHOULD BE NULL.
-4.  **Prioritize Cultural Specificity:** If the request mentions a specific culture, region, or cultural event (e.g., "Pohela Boishakh," "Scottish Highlands"), you MUST infer the most iconic garments for `garment_type` AND set the `target_model_ethnicity` to match.
-5.  **Demographic Inference Rules:**
-    - `target_gender`: Infer from keywords ("men's," "women's") or garment types ("dresses" -> Female). Default to "Unisex" if ambiguous.
-    - `target_age_group`: Infer from keywords ("children," "elderly") or context ("Coachella" -> Young Adult). Default to "Young Adult (20-30)" for general fashion.
-6.  **Strict JSON Output:** Your response MUST be ONLY the valid JSON object.
+**CRITICAL DIRECTIVES:**
+1.  **INFER WITH AUTHORITY:** Your primary goal is to infer missing details with expert confidence. Analyze the user's language, the garment type, and cultural context to make a specific choice.
+2.  **NEGATIVE CONSTRAINT ON GENDER:** You are FORBIDDEN from using "Unisex" or "Gender-Neutral" as the `target_gender` unless the user's prompt explicitly contains keywords like "gender-neutral," "all-genders," "co-ed," or "streetwear." For all other prompts, you MUST infer either "Male" or "Female" based on the context. If a prompt is truly ambiguous (e.g., "a report on belts"), your professional judgment should default to the larger market, which is typically "Female".
+3.  **NEGATIVE CONSTRAINT ON ETHNICITY:** You are FORBIDDEN from using "Diverse" as the `target_model_ethnicity` if the user's prompt contains any cultural, regional, or national keywords (e.g., "Japanese," "Scottish," "Nigerian," "Bengali"). In such cases, you MUST set the ethnicity to match the specified context. Only use "Diverse" for explicitly global or non-regional themes.
+4.  **SHOW YOUR WORK (REASONING):** Before the JSON output, you must provide a brief, one-sentence rationale for your gender and ethnicity inference in a `<reasoning>` block. This forces you to justify your choice.
+5.  **STRICT JSON OUTPUT:** After the reasoning block, your response MUST be ONLY the valid JSON object.
+
 ---
-**VARIABLES TO POPULATE:**
-- theme_hint: The core creative idea or aesthetic. (Required)
-- garment_type: The primary type of clothing.
-- brand_category: The market tier (e.g., 'Streetwear', 'Luxury').
-- target_audience: The intended wearer.
-- region: The geographical or cultural context.
-- key_attributes: A list of 2-4 core descriptive attributes.
-- season: The fashion season (Default: auto).
-- year: The target year (Default: auto).
-- target_gender: The model's gender.
-- target_age_group: The model's age range.
-- target_model_ethnicity: The model's ethnicity.
----
---- GOLD STANDARD EXAMPLE 1: CULTURAL SPECIFICITY ---
+--- GOLD STANDARD EXAMPLE 1: IMPLICIT GENDER ---
+USER REQUEST:
+"A report on the 'quiet luxury' trend, focusing on unstructured blazers and cashmere knits."
+
+<reasoning>The 'quiet luxury' aesthetic focusing on these specific garments is predominantly a womenswear trend, so I will confidently infer Female.</reasoning>
+{{
+  "theme_hint": "A trend report on the 'quiet luxury' aesthetic, focusing on unstructured blazers and cashmere knits",
+  "garment_type": "Blazers and Knitwear",
+  "brand_category": "Luxury",
+  "target_audience": "Affluent, professional women seeking timeless and understated elegance",
+  "region": "Global",
+  "key_attributes": ["Understated", "High-Quality Materials", "Timeless", "Minimalist"],
+  "season": "auto",
+  "year": "auto",
+  "target_gender": "Female",
+  "target_model_ethnicity": "Diverse"
+}}
+--- END GOLD STANDARD EXAMPLE 1 ---
+
+--- GOLD STANDARD EXAMPLE 2: EXPLICIT CULTURAL CONTEXT ---
 USER REQUEST:
 "Show me a collection of dresses featuring the Bengali New Year (Pohela Boishakh)."
 
-FINAL JSON OUTPUT:
+<reasoning>The prompt specifies a Bengali cultural event and the garment is a dress, therefore the ethnicity must be Bengali and the gender Female.</reasoning>
 {{
   "theme_hint": "A vibrant collection celebrating the cultural richness of Bengali New Year (Pohela Boishakh)",
-  "garment_type": "Traditional Saree (for women) and Punjabi (for men)",
+  "garment_type": "Traditional Saree",
   "brand_category": "Cultural & Festive Wear",
-  "target_audience": "Individuals celebrating Bengali New Year",
+  "target_audience": "Women celebrating Bengali New Year",
   "region": "Bengal (Bangladesh & West Bengal, India)",
   "key_attributes": ["Vibrant", "Traditional Motifs", "Festive"],
   "season": "Spring",
   "year": "auto",
-  "target_gender": "Female and Male",
-  "target_age_group": "Young Adult (20-35)",
+  "target_gender": "Female",
   "target_model_ethnicity": "Bengali"
-}}
---- END GOLD STANDARD EXAMPLE 1 ---
-
---- GOLD STANDARD EXAMPLE 2: DEMOGRAPHIC SPECIFICITY ---
-USER REQUEST:
-"Men's casual shirts for a 50-year-old."
-
-FINAL JSON OUTPUT:
-{{
-  "theme_hint": "A collection of sophisticated and comfortable casual shirts for the mature man",
-  "garment_type": "Casual Button-Down Shirts",
-  "brand_category": "Contemporary",
-  "target_audience": "Men in their late 40s to 50s",
-  "region": "Global",
-  "key_attributes": ["Comfort", "Sophistication", "Quality Fabrics"],
-  "season": "auto",
-  "year": "auto",
-  "target_gender": "Male",
-  "target_age_group": "Mature Adult (45-55)",
-  "target_model_ethnicity": "Diverse"
 }}
 --- END GOLD STANDARD EXAMPLE 2 ---
 
@@ -78,6 +61,7 @@ USER REQUEST:
 ---
 {user_passage}
 ---
+<reasoning>YOUR REASONING HERE</reasoning>
 JSON OUTPUT:
 """
 
@@ -725,7 +709,7 @@ A full-body editorial fashion photograph for a high-end magazine lookbook, featu
 - **Technical Execution:** The photograph must have a shallow depth of field, keeping the garment's texture and details in sharp, tactile focus while the background is softly blurred.
 
 **Subject & Styling:**
-- **Model Demographics:** The subject is a professional fashion model who is {target_gender}, in the {target_age_group} age range, and of {target_model_ethnicity} ethnicity.
+- **Model Demographics:** The subject is a professional fashion model who is {target_gender} and of {target_model_ethnicity} ethnicity.
 - **Model Persona:** {model_persona}. The subject embodies the core spirit of the collection.
 - **Garment Details:** The model is wearing the '{key_piece_name}', a garment defined by its modern '{silhouette}' silhouette. It is crafted from {main_fabric}, and its material properties are rendered with photorealistic detail: a texture that feels '{main_fabric_texture}', a weight of {main_fabric_weight_gsm} gsm that creates a '{main_fabric_drape}' drape, and a '{main_fabric_finish}' finish.
 - **Pattern & Construction:** {pattern_description} {lining_description}

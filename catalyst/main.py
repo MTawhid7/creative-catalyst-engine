@@ -23,7 +23,7 @@ from .caching import cache_manager
 logger = get_logger(__name__)
 
 USER_PASSAGE = """
-Showcase how Zara and Mango are translating runway trends for statement tops into commercially successful, mass-market products.
+How has Brunello Cucinelli elevated the basic T-shirt and polo shirt through the use of noble fibers and a philosophy of 'quiet luxury'?
 """
 
 
