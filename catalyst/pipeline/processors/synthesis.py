@@ -1,7 +1,7 @@
 """
 This module contains the processors for the core synthesis stage, using a
 robust, multi-step "research, structure, synthesize" pipeline with graceful
-handling for incomplete creative briefs.
+handling for incomplete creative briefs and full support for demographic data.
 """
 
 import json
@@ -14,15 +14,11 @@ from catalyst.pipeline.base_processor import BaseProcessor
 from catalyst.context import RunContext
 from ...clients import gemini_client
 from ...prompts import prompt_library
-
-# --- START OF CHANGE: IMPORT NEW MODELS ---
 from ...models.trend_report import (
     FashionTrendReport,
     KeyPieceDetail,
     PromptMetadata,
 )
-
-# --- END OF CHANGE ---
 from ...utilities.config_loader import FORMATTED_SOURCES
 
 
@@ -34,7 +30,6 @@ class WebResearchProcessor(BaseProcessor):
     """
 
     async def process(self, context: RunContext) -> RunContext:
-        # This processor is unchanged, but its output will be used by the updated processors below.
         self.logger.info(
             "🌐 Starting web research using Gemini's native search capabilities..."
         )
@@ -71,7 +66,6 @@ class ContextStructuringProcessor(BaseProcessor):
     """
 
     async def process(self, context: RunContext) -> RunContext:
-        # This processor is also unchanged.
         self.logger.info("⚙️ Organizing raw research into a structured outline...")
         if not context.raw_research_context:
             self.logger.warning(
@@ -267,14 +261,21 @@ class ReportSynthesisProcessor(BaseProcessor):
         final_report["prompt_metadata"] = PromptMetadata(
             run_id=context.run_id, user_passage=context.user_passage
         ).model_dump(mode="json")
+
+        # --- START OF DEMOGRAPHICS FIX ---
+        # Transfer the demographic data from the enriched brief to the final report.
         final_report["season"] = brief.get("season", "")
         final_report["year"] = brief.get("year", 0)
         final_report["region"] = brief.get("region")
-        final_report["target_model_ethnicity"] = "Diverse"
+        final_report["target_gender"] = brief.get("target_gender", "Unisex")
+        final_report["target_age_group"] = brief.get(
+            "target_age_group", "Young Adult (20-30)"
+        )
+        final_report["target_model_ethnicity"] = brief.get(
+            "target_model_ethnicity", "Diverse"
+        )
+        # --- END OF DEMOGRAPHICS FIX ---
 
-        # --- START OF FIX: REINTRODUCE DEFENSIVE PARSING BLOCK ---
-        # This handles cases where the AI returns the accessories as a JSON string
-        # instead of a proper dictionary object.
         accessories_data = final_report.get("accessories")
         if isinstance(accessories_data, str):
             try:
@@ -287,7 +288,6 @@ class ReportSynthesisProcessor(BaseProcessor):
                     "❌ Failed to parse accessories string. Defaulting to empty dict."
                 )
                 final_report["accessories"] = {}
-        # --- END OF FIX ---
 
         try:
             validated_report = FashionTrendReport.model_validate(final_report)
@@ -364,7 +364,7 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
             self.logger.error("❌ Fallback failed to generate top-level fields.")
             return None
 
-        # STEP 2: Generate Narrative Setting (Updated for new JSON structure)
+        # STEP 2: Generate Narrative Setting
         self.logger.info("✨ Fallback Step 2/4: Generating narrative setting...")
         setting_prompt = prompt_library.NARRATIVE_SETTING_PROMPT.format(
             overarching_theme=final_report.get("overarching_theme", ""),
@@ -374,7 +374,7 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
             prompt_parts=[setting_prompt]
         )
 
-        narrative_desc = "A minimalist, contemporary architectural setting."  # Fallback
+        narrative_desc = "A minimalist, contemporary architectural setting."
         if setting_response and setting_response.get("text"):
             try:
                 json_text = (
@@ -424,7 +424,7 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
         )
         final_report.update(accessories_response or {"accessories": {}})
 
-        # STEP 4: Generate Key Pieces (Updated to use the new, richer model)
+        # STEP 4: Generate Key Pieces
         self.logger.info("✨ Fallback Step 4/4: Generating detailed key pieces...")
 
         class KeyPieceNames(BaseModel):
@@ -450,8 +450,6 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
                 self.logger.info(
                     f"🔄 Processing Key Piece '{piece_name}' ({i + 1}/{len(names_response['names'])})..."
                 )
-
-                # The prompt now implicitly asks for the new, richer model via response_schema
                 key_piece_prompt = f"""
                 You are a fashion expert and technical designer. Based on the creative brief and guiding philosophy below, generate the detailed JSON data for a single key piece named '{piece_name}'.
                 You MUST include technical details like fabric weight (GSM), drape, finish, detailed pattern information, and lining.
@@ -479,17 +477,27 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
                     )
         final_report["detailed_key_pieces"] = processed_pieces
 
-        # STEP 5: Assemble and Validate (Updated with metadata)
+        # STEP 5: Assemble and Validate
         self.logger.info(
             "✨ Fallback Step 5/5: Assembling and validating final report..."
         )
         final_report["prompt_metadata"] = PromptMetadata(
             run_id=context.run_id, user_passage=context.user_passage
         ).model_dump(mode="json")
+
+        # --- START OF DEMOGRAPHICS FIX ---
+        # Transfer the demographic data from the enriched brief to the final report.
         final_report["season"] = brief.get("season", "")
         final_report["year"] = brief.get("year", 0)
         final_report["region"] = brief.get("region")
-        final_report["target_model_ethnicity"] = "Diverse"
+        final_report["target_gender"] = brief.get("target_gender", "Unisex")
+        final_report["target_age_group"] = brief.get(
+            "target_age_group", "Young Adult (20-30)"
+        )
+        final_report["target_model_ethnicity"] = brief.get(
+            "target_model_ethnicity", "Diverse"
+        )
+        # --- END OF DEMOGRAPHICS FIX ---
 
         try:
             validated_report = FashionTrendReport.model_validate(final_report)

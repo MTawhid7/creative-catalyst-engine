@@ -1,7 +1,10 @@
+# catalyst/pipeline/processors/reporting.py
+
 """
 This module contains the processor for the final reporting stage, with
 an advanced "Creative Direction" step to generate highly specific and
-art-directed image prompts using a professional-grade data model.
+art-directed image prompts using a professional-grade, demographic-aware
+data model.
 """
 
 import json
@@ -61,13 +64,9 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                 enriched_brief=context.enriched_brief,
             )
 
-            # --- START OF FIX: SAVE PROMPTS TO CONTEXT ARTIFACTS ---
-            # This makes the prompts available to downstream processors like DalleImageGenerationProcessor
-            # without needing to re-read the file from disk.
             if "FinalOutputGeneratorProcessor" not in context.artifacts:
                 context.artifacts["FinalOutputGeneratorProcessor"] = {}
             context.artifacts["FinalOutputGeneratorProcessor"]["prompts"] = prompts_data
-            # --- END OF FIX ---
 
             self._save_json_file(
                 data=prompts_data, filename=settings.PROMPTS_FILENAME, context=context
@@ -187,22 +186,27 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
         ]
 
         for piece in report.detailed_key_pieces:
-
-            # --- START OF FIX: PROVIDE ALL DEFAULT ARGUMENTS FOR FALLBACK ---
-            main_fabric = piece.fabrics[0] if piece.fabrics else FabricDetail(
-                material="high-quality fabric",
-                texture="woven",
-                sustainable=None,
-                weight_gsm=None,
-                drape=None,
-                finish=None
+            # --- START OF FIX ---
+            # Provide all default arguments for the fallback FabricDetail object
+            # to prevent errors and ensure code clarity.
+            main_fabric = (
+                piece.fabrics[0]
+                if piece.fabrics
+                else FabricDetail(
+                    material="high-quality fabric",
+                    texture="woven",
+                    sustainable=None,
+                    weight_gsm=None,
+                    drape=None,
+                    finish=None,
+                )
             )
             # --- END OF FIX ---
 
             main_color = piece.colors[0].name if piece.colors else "a core color"
-            silhouette = piece.silhouettes[0] if piece.silhouettes else "a modern silhouette"
-
-            description_snippet = piece.description.split(".")[0]
+            silhouette = (
+                piece.silhouettes[0] if piece.silhouettes else "a modern silhouette"
+            )
 
             styling_elements = piece.suggested_pairings[:2]
             if len(styling_elements) >= 2:
@@ -210,7 +214,9 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
             elif len(styling_elements) == 1:
                 styling_description = f"{styling_elements[0]}"
             else:
-                styling_description = "the piece is styled to feel authentic and personally curated"
+                styling_description = (
+                    "the piece is styled to feel authentic and personally curated"
+                )
 
             if all_accessories:
                 num_accessories = min(len(all_accessories), 3)
@@ -222,7 +228,9 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
             pattern_details_list = self._format_pattern_details(piece.patterns)
 
             main_pattern = piece.patterns[0] if piece.patterns else None
-            pattern_description = "The garment is a solid color without a prominent pattern."
+            pattern_description = (
+                "The garment is a solid color without a prominent pattern."
+            )
             if main_pattern:
                 pattern_description = f"The garment features a '{main_pattern.motif}' pattern, applied as a {main_pattern.placement}."
 
@@ -242,6 +250,9 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     photographic_style_guide=style_guide.get("photographic_style"),
                     model_persona=style_guide.get("model_persona"),
                     negative_style_keywords=style_guide.get("negative_style_keywords"),
+                    target_gender=report.target_gender,
+                    target_age_group=report.target_age_group,
+                    target_model_ethnicity=report.target_model_ethnicity,
                     key_piece_name=piece.key_piece_name,
                     silhouette=silhouette,
                     main_fabric=main_fabric.material,
@@ -251,7 +262,8 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                     main_fabric_finish=main_fabric.finish or "matte",
                     main_color=main_color,
                     pattern_description=pattern_description,
-                    lining_description=piece.lining or "The garment's lining is not specified.",
+                    lining_description=piece.lining
+                    or "The garment's lining is not specified.",
                     styling_description=styling_description,
                     narrative_setting=report.narrative_setting_description,
                     details_trims=details_trims_list,

@@ -122,7 +122,7 @@ class KeyPieceDetail(BaseModel):
     )
 
 
-# --- ENHANCED: Root model with new metadata field ---
+# --- ENHANCED: Root model with new metadata and demographic fields ---
 class FashionTrendReport(BaseModel):
     """The root model for the entire fashion trend report."""
 
@@ -135,9 +135,20 @@ class FashionTrendReport(BaseModel):
     region: Optional[str] = Field(
         None, description="The geographical region for the trend report."
     )
-    target_model_ethnicity: str = Field(
-        ..., description="The appropriate model ethnicity for the target region."
+    # --- START OF DEMOGRAPHICS FIX ---
+    target_gender: str = Field(
+        ...,
+        description="The target gender for the model (e.g., 'Male', 'Female', 'Unisex').",
     )
+    target_age_group: str = Field(
+        ...,
+        description="The target age group for the model (e.g., 'Young Adult (20-30)', 'Child (8-12)', 'Senior (65+)').",
+    )
+    target_model_ethnicity: str = Field(
+        ...,
+        description="The appropriate model ethnicity for the target region or theme (e.g., 'Bengali', 'Scottish', 'Diverse').",
+    )
+    # --- END OF DEMOGRAPHICS FIX ---
     narrative_setting_description: str = Field(
         ...,
         description="A detailed, atmospheric description of the ideal setting or environment that tells the story of the collection.",

@@ -1,3 +1,5 @@
+# catalyst/caching/cache_manager.py
+
 """
 The Cache Manager: A Simplified Facade for the L1 Report Caching System.
 
@@ -21,10 +23,8 @@ def _create_composite_key(brief: Dict) -> str:
     user-facing parts of the enriched brief. This ensures that the same core
     request always generates the same cache key.
     """
-    # --- START OF DEFINITIVE FIX ---
-    # Define the list of keys that are stable and represent the user's core intent.
-    # We explicitly EXCLUDE the non-deterministic creative fields:
-    # 'expanded_concepts', 'creative_antagonist', and 'search_keywords'.
+    # These keys are stable and represent the user's core intent.
+    # We explicitly EXCLUDE non-deterministic creative fields like 'expanded_concepts'.
     DETERMINISTIC_BRIEF_KEYS = [
         "theme_hint",
         "garment_type",
@@ -35,14 +35,13 @@ def _create_composite_key(brief: Dict) -> str:
         "season",
         "year",
     ]
-    # --- END OF DEFINITIVE FIX ---
 
     key_parts = []
-    # Iterate over our stable list of keys, not the entire brief dictionary.
+    # Iterate over our stable list of keys to ensure consistent order.
     for key in sorted(DETERMINISTIC_BRIEF_KEYS):
         value = brief.get(key)
-        if value:  # Only include keys that have a value
-            # Convert lists to a stable, sorted string format
+        if value:  # Only include keys that have a value.
+            # Convert lists to a stable, sorted string format.
             if isinstance(value, list):
                 key_parts.append(f"{key}: {', '.join(sorted(value))}")
             else:
@@ -53,23 +52,34 @@ def _create_composite_key(brief: Dict) -> str:
 
 async def check_report_cache_async(brief: Dict) -> Optional[str]:
     """
-    Checks the L1 (Report) cache for a semantically similar creative brief.
+    Checks the L0/L1 cache for a matching payload using a deterministic key.
+
+    Args:
+        brief: The enriched brief dictionary from the briefing stage.
+
+    Returns:
+        The JSON string of the cached payload if a match is found, otherwise None.
     """
     logger.info(
-        "⚙️ Creating deterministic composite key and dispatching check to L1 Report Cache..."
+        "⚙️ Creating deterministic composite key and dispatching check to Report Cache..."
     )
     composite_key = _create_composite_key(brief)
-    # Adding a debug log is excellent practice to verify the key's consistency.
+    # Good practice to log the generated key for debugging consistency issues.
     logger.debug(f"⚡ Generated Cache Key: {composite_key}")
     return await report_cache.check(composite_key)
 
 
-async def add_to_report_cache_async(brief: Dict, report_data: Dict):
+async def add_to_report_cache_async(brief: Dict, payload: Dict):
     """
-    Adds a final, validated report to the L1 (Report) cache.
+    Adds a final, validated result payload to the L0/L1 cache.
+
+    Args:
+        brief: The enriched brief dictionary used to generate the key.
+        payload: The full payload dictionary, including the final report and
+                 the path to the cached image artifacts.
     """
     logger.info(
-        "📥 Creating deterministic composite key and dispatching add to L1 Report Cache..."
+        "📥 Creating deterministic composite key and dispatching 'add' to Report Cache..."
     )
     composite_key = _create_composite_key(brief)
-    await report_cache.add(composite_key, report_data)
+    await report_cache.add(composite_key, payload)

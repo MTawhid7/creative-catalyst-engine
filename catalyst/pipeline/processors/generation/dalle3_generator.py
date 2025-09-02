@@ -16,8 +16,9 @@ from catalyst import settings
 class DalleImageGeneration(BaseImageGenerator):
     """
     An image generation strategy that uses the DALL-E 3 API.
-    It takes generated prompts from the context and creates images concurrently.
-    """  # <<< DOCSTRING UPDATE
+    It takes all generated prompts from the context (final garment and mood board)
+    and creates images concurrently.
+    """
 
     def __init__(self):
         super().__init__()
@@ -26,11 +27,10 @@ class DalleImageGeneration(BaseImageGenerator):
 
         self.logger = get_logger(self.__class__.__name__)
 
-    async def generate_images(
-        self, context: RunContext
-    ) -> RunContext:  # <<< CRITICAL FIX: Renamed 'process' to 'generate_images'
+    async def generate_images(self, context: RunContext) -> RunContext:
         """
-        Creates a list of all image generation tasks and runs them in parallel.
+        Creates a list of all image generation tasks for all prompt types
+        and runs them in parallel.
         """
         self.logger.info("🎨 Activating DALL-E 3 image generation strategy...")
 
@@ -48,21 +48,26 @@ class DalleImageGeneration(BaseImageGenerator):
             return context
 
         self.logger.info(
-            "Building a list of image generation tasks to run in parallel..."
+            "Building a list of all image generation tasks to run in parallel..."
         )
         tasks = []
+        # --- START OF MOOD BOARD FIX ---
+        # Iterate over each garment and its associated dictionary of prompts.
         for garment_name, prompts in prompts_data.items():
-            final_garment_prompt = prompts.get("final_garment")
-            if not final_garment_prompt:
-                self.logger.warning(
-                    f"⚠️ No 'final_garment' prompt found for '{garment_name}'. Skipping."
-                )
-                continue
+            # Iterate over each prompt type (e.g., "final_garment", "mood_board").
+            for prompt_type, prompt_text in prompts.items():
+                if not prompt_text:
+                    self.logger.warning(
+                        f"⚠️ No prompt text found for '{prompt_type}' on '{garment_name}'. Skipping."
+                    )
+                    continue
 
-            task = self._generate_and_save_image(
-                final_garment_prompt, garment_name, context
-            )
-            tasks.append(task)
+                # Create a task for each valid prompt.
+                task = self._generate_and_save_image(
+                    prompt_text, garment_name, context, prompt_type
+                )
+                tasks.append(task)
+        # --- END OF MOOD BOARD FIX ---
 
         if not tasks:
             self.logger.warning("No valid image generation tasks were created.")
@@ -77,17 +82,19 @@ class DalleImageGeneration(BaseImageGenerator):
         return context
 
     async def _generate_and_save_image(
-        self, prompt: str, garment_name: str, context: RunContext
+        self, prompt: str, garment_name: str, context: RunContext, prompt_type: str
     ):
         """
-        Generates and saves a single image. This method is now called concurrently.
+        Generates and saves a single image with a filename based on the prompt type.
         """
-        self.logger.info(f"Cleaning prompt for DALL-E 3: '{garment_name}'...")
+        self.logger.info(
+            f"Cleaning prompt for DALL-E 3: '{garment_name}' ({prompt_type})..."
+        )
         cleaned_prompt = re.sub(r"\*\*.*?\*\*|^- ", "", prompt, flags=re.MULTILINE)
         cleaned_prompt = cleaned_prompt.replace("\n", " ")
         cleaned_prompt = " ".join(cleaned_prompt.split())
 
-        self.logger.info(f"Generating image for: '{garment_name}'...")
+        self.logger.info(f"Generating image for: '{garment_name}' ({prompt_type})...")
         try:
             response = await self.client.images.generate(
                 model="dall-e-3",
@@ -105,7 +112,15 @@ class DalleImageGeneration(BaseImageGenerator):
                 slug = "".join(
                     c for c in garment_name.lower() if c.isalnum() or c in " -"
                 ).replace(" ", "-")
-                image_filename = f"{slug}.png"
+
+                # --- START OF MOOD BOARD FIX ---
+                # Use a different filename for the mood board image.
+                if prompt_type == "mood_board":
+                    image_filename = f"{slug}-moodboard.png"
+                else:
+                    image_filename = f"{slug}.png"
+                # --- END OF MOOD BOARD FIX ---
+
                 image_path = Path(context.results_dir) / image_filename
 
                 with open(image_path, "wb") as f:
