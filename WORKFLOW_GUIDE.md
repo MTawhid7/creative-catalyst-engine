@@ -68,8 +68,7 @@ This is the end-to-end process for taking a task from idea to completion.
 2.  **Pull the latest official code from the `company` remote.** This downloads any changes your collaborators have merged and updates your local `main` to match.
     ```bash
     git pull company main
-    ```
-3.  **Create your feature branch.** This creates a safe, isolated sandbox for your work.
+    ```3.  **Create your feature branch.** This creates a safe, isolated sandbox for your work.
     ```bash
     git checkout -b feat/add-image-watermarking
     ```
@@ -116,15 +115,13 @@ This is the end-to-end process for taking a task from idea to completion.
 
 **Goal:** Formally propose your completed feature for inclusion in the official project.
 
-1.  **Open a Pull Request (PR) on the Company's GitHub Repo.**
-    -   Go to the company repository on GitHub.
-    -   Click the **"Pull requests"** tab, then click the green **"New pull request"** button.
-    -   You will see a screen comparing branches *within* the company repo. **This is not what you want.** Look for a small blue link that says **"compare across forks"**. Click it.
-2.  **Configure the branches manually.** You will now see four dropdown menus. Set them as follows:
-    -   **`base repository`**: `technyxai/CreativeCatalystEngine`
-    -   **`base`**: `main` (The destination)
-    -   **`head repository`**: `MTawhid7/creative-catalyst-engine` (Your personal repo)
-    -   **`compare`**: `feat/add-image-watermarking` (The source)
+1.  **Push your feature branch to the `company` remote.** This is the "bridge" step that makes your work visible inside the company project.
+    ```bash
+    git push company feat/add-image-watermarking
+    ```
+2.  **Open a Pull Request (PR) on the Company's GitHub Repo.**
+    -   Go to the company repository on GitHub. A banner for your recently pushed branch will automatically appear. Click **"Compare & pull request"**.
+    -   The PR form will be correctly pre-filled (`base: main` ← `compare: feat/add-image-watermarking`).
 3.  **Write a clear title and a detailed description.** Explain what you did and why.
 4.  **Assign your teammates as Reviewers.**
 
@@ -135,7 +132,7 @@ This is the end-to-end process for taking a task from idea to completion.
 -   **If they request changes:**
     1.  On your local machine, switch to your feature branch (`git checkout feat/add-image-watermarking`).
     2.  Make the requested code changes.
-    3.  Commit and `git push origin`. The Pull Request will automatically update.
+    3.  Commit and `git push origin`. Then `git push company`. The Pull Request will automatically update.
     4.  Comment on GitHub to let them know you've addressed the feedback.
 
 -   **If you disagree with a suggestion:**
