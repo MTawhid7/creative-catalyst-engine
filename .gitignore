@@ -9,14 +9,21 @@ __pycache__/
 *.pyo
 *.pyd
 
-# User-generated output files
+# --- User-generated output files ---
+# User-facing results from runs (cleaned periodically)
 results/
+# Log files
 logs/
+# Images downloaded by the example API client
+downloaded_images/
 
-# Database cache
+# --- Database and Artifact Caches ---
+# Local vector database cache
 chroma_cache/
+# Permanent storage for cached image/report artifacts
+artifact_cache/
 
-# IDE and OS-specific files
+# --- IDE and OS-specific files ---
 .idea/
 .vscode/
 .DS_Store
