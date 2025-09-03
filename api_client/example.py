@@ -11,13 +11,10 @@ from .exceptions import APIClientError
 def download_images(image_urls: list[str], download_dir: Path):
     """
     Downloads images from a list of URLs into a specified directory.
-
-    Args:
-        image_urls: A list of strings, where each string is a URL to an image.
-        download_dir: A Path object representing the directory to save images to.
+    This helper function does not need to change.
     """
     if not image_urls:
-        print("--- No image URLs provided. Skipping download. ---")
+        print("--- No image URLs provided to download. ---")
         return
 
     print(f"\n--- 📥 Starting Image Download to '{download_dir}' ---")
@@ -53,7 +50,7 @@ def download_images(image_urls: list[str], download_dir: Path):
 def main():
     """
     A demonstration of how to use the CreativeCatalystClient to get a report
-    and download the associated images.
+    and download the associated images using the NEW, embedded URL structure.
     """
     # Initialize the client. In a real application, the URL might
     # come from a configuration file or environment variable.
@@ -70,20 +67,38 @@ def main():
 
         print("\n--- ✅ Final Report Received ---")
 
+        # --- START OF MODIFICATION: NEW RESPONSE PARSING LOGIC ---
+
         # 1. Extract the main report content
         final_report = response_data.get("final_report", {})
-        if final_report:
-            print(f"Theme: {final_report.get('overarching_theme')}")
-            print(f"Server Artifacts Path: {response_data.get('artifacts_path')}")
-        else:
-            print("Report content is empty.")
+        if not final_report:
+            print("Report content is empty. Cannot proceed.")
+            return
 
-        # 2. Extract the image URLs
-        image_urls = response_data.get("image_urls", [])
+        print(f"Theme: {final_report.get('overarching_theme')}")
+        print(f"Server Artifacts Path: {response_data.get('artifacts_path')}")
 
-        # 3. Call the helper function to download the images
+        # 2. Extract the embedded image URLs from each key piece
+        all_image_urls = []
+        key_pieces = final_report.get("detailed_key_pieces", [])
+
+        print(f"Found {len(key_pieces)} key pieces in the report.")
+
+        for piece in key_pieces:
+            # Safely get the URLs using .get() to avoid errors if a key is missing
+            garment_url = piece.get("final_garment_image_url")
+            moodboard_url = piece.get("mood_board_image_url")
+
+            if garment_url:
+                all_image_urls.append(garment_url)
+            if moodboard_url:
+                all_image_urls.append(moodboard_url)
+
+        # --- END OF MODIFICATION ---
+
+        # 3. Call the helper function to download all collected images
         #    We'll save them in a new folder named 'downloaded_images'
-        download_images(image_urls, download_dir=Path("downloaded_images"))
+        download_images(all_image_urls, download_dir=Path("downloaded_images"))
 
     except APIClientError as e:
         # Catch any of our custom client errors and print a friendly message.

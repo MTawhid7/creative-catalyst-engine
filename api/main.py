@@ -7,8 +7,8 @@ from celery.result import AsyncResult
 from fastapi.staticfiles import StaticFiles
 
 # --- START OF FIX ---
-# Import your configured Celery app instance from the worker file
-from .worker import celery_app, create_creative_task
+# We no longer need to import the function itself, only the celery_app instance.
+from .worker import celery_app
 
 # --- END OF FIX ---
 
@@ -17,6 +17,7 @@ app = FastAPI(
     description="An API for generating fashion trend reports and images.",
     version="1.0.0",
 )
+
 
 class JobRequest(BaseModel):
     user_passage: str
@@ -32,7 +33,10 @@ class ResultResponse(BaseModel):
     status: str
     result: dict | None = None
 
+
+# This allows the API to serve the generated images directly.
 app.mount("/results", StaticFiles(directory="results"), name="results")
+
 
 @app.post(
     "/v1/creative-jobs",
@@ -43,7 +47,13 @@ def submit_job(request: JobRequest):
     """
     Accepts a creative brief, queues it for processing, and returns a job ID.
     """
-    task = create_creative_task.delay(request.user_passage)
+    # --- START OF FIX ---
+    # Call the task by its registered name string using `send_task`.
+    # This is the most robust and type-safe method.
+    # The first argument is the task name, and the `args` argument is a
+    # list of positional arguments for the task function.
+    task = celery_app.send_task("create_creative_report", args=[request.user_passage])
+    # --- END OF FIX ---
     return {"job_id": task.id, "status": "queued"}
 
 
@@ -52,10 +62,7 @@ def get_job_status(job_id: str):
     """
     Retrieves the status and result of a creative job.
     """
-    # --- START OF FIX ---
-    # Pass the app instance to AsyncResult so it knows the backend config
     task_result = AsyncResult(job_id, app=celery_app)
-    # --- END OF FIX ---
 
     if task_result.failed():
         return JSONResponse(

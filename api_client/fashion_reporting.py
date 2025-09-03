@@ -22,8 +22,8 @@ from typing import Tuple, List, Dict, Any, Optional
 
 # Import the client and its specific exceptions from the 'api_client' library,
 # which should be placed within the main application's codebase.
-from ..libs.api_client.client import CreativeCatalystClient # type: ignore
-from ..libs.api_client.exceptions import ( # type: ignore
+from ..libs.api_client.client import CreativeCatalystClient  # type: ignore
+from ..libs.api_client.exceptions import (  # type: ignore
     APIClientError,
     JobFailedError,
     PollingTimeoutError,
@@ -44,13 +44,7 @@ DEFAULT_ASSET_DOWNLOAD_DIR = Path("./creative_catalyst_assets")
 def _download_and_save_images(image_urls: List[str], download_dir: Path) -> List[Path]:
     """
     A helper function to download images and save them locally.
-
-    Args:
-        image_urls: A list of public URLs for the images to download.
-        download_dir: The local directory where images will be saved.
-
-    Returns:
-        A list of Path objects pointing to the newly downloaded local files.
+    This function does not need to change.
     """
     if not image_urls:
         print("INFO: No image URLs were provided in the API response.")
@@ -75,7 +69,6 @@ def _download_and_save_images(image_urls: List[str], download_dir: Path) -> List
             print(f"  - Success: Saved {filename}")
 
         except requests.exceptions.RequestException as e:
-            # In a real app, you would log this to a proper logging service.
             print(f"  - ERROR: Failed to download image {url}. Reason: {e}")
 
     return local_image_paths
@@ -109,21 +102,42 @@ def generate_trend_report(
         client = CreativeCatalystClient(base_url=CREATIVE_CATALYST_API_URL)
 
         # 2. Call the client to handle the entire asynchronous process.
-        #    This will block until the job is complete, fails, or times out.
         api_response = client.get_creative_report(
             creative_brief, timeout=600
         )  # 10 min timeout
 
         # 3. Process the successful response.
         report_data = api_response.get("final_report", {})
-        image_urls = api_response.get("image_urls", [])
-
         if not report_data:
             print("ERROR: API call was successful but returned no report data.")
             return None
 
-        # 4. Download the images and get their local paths.
-        local_image_paths = _download_and_save_images(image_urls, output_directory)
+        # --- START OF MODIFICATION: NEW URL EXTRACTION LOGIC ---
+        # Instead of looking for a top-level 'image_urls' key, we now iterate
+        # through the report's key pieces and extract the embedded URLs.
+
+        all_image_urls_to_download = []
+        key_pieces = report_data.get("detailed_key_pieces", [])
+
+        print(
+            f"INFO: Found {len(key_pieces)} key pieces in the report. Extracting image URLs..."
+        )
+
+        for piece in key_pieces:
+            # Safely get the URLs using .get() to avoid errors if a key is missing
+            garment_url = piece.get("final_garment_image_url")
+            moodboard_url = piece.get("mood_board_image_url")
+
+            if garment_url:
+                all_image_urls_to_download.append(garment_url)
+            if moodboard_url:
+                all_image_urls_to_download.append(moodboard_url)
+        # --- END OF MODIFICATION ---
+
+        # 4. Download the collected images and get their local paths.
+        local_image_paths = _download_and_save_images(
+            all_image_urls_to_download, output_directory
+        )
 
         print("--- ✅ Creative Catalyst Service finished successfully. ---")
         return report_data, local_image_paths
@@ -135,19 +149,16 @@ def generate_trend_report(
         )
         print(f"    Server Error: {e.error_message}")
         return None
-
     except PollingTimeoutError as e:
         print(
             f"--- ❌ ERROR: Timed out after {e.timeout}s waiting for job '{e.job_id}'. ---"
         )
         print("    The job may still be running on the server, but we stopped waiting.")
         return None
-
     except APIClientError as e:
         print(f"--- ❌ ERROR: An API communication error occurred. ---")
         print(f"    Details: {e}")
         return None
-
     except Exception as e:
         print(
             f"--- ❌ ERROR: An unexpected error occurred in the reporting service. ---"
@@ -164,26 +175,33 @@ if __name__ == "__main__":
     print("  RUNNING FASHION REPORTING SERVICE DEMO")
     print("=" * 50 + "\n")
 
-    # The main application just needs to provide a brief.
     example_brief = "A collection inspired by the fusion of traditional Japanese minimalism and Scandinavian functional design, focusing on outerwear."
 
-    # Call the main service function.
     result = generate_trend_report(example_brief)
 
-    # The application then checks if the result is valid before using it.
     if result:
-        # Unpack the successful result tuple
         report, image_paths = result
 
         print("\n--- DEMO: Successfully Processed Report ---")
         print(f"Overarching Theme: {report.get('overarching_theme')}")
-        print(f"Generated {len(report.get('detailed_key_pieces', []))} Key Pieces.")
+
+        # --- START OF MODIFICATION: UPDATED EXAMPLE USAGE ---
+        key_pieces = report.get("detailed_key_pieces", [])
+        print(f"Generated {len(key_pieces)} Key Pieces.")
+
+        # Demonstrate accessing the new, embedded URLs
+        if key_pieces:
+            first_piece = key_pieces[0]
+            print(f"  - First Key Piece: '{first_piece.get('key_piece_name')}'")
+            print(
+                f"    - Garment Image URL: {first_piece.get('final_garment_image_url')}"
+            )
+            print(f"    - Mood Board URL: {first_piece.get('mood_board_image_url')}")
+
         print(
             f"Downloaded {len(image_paths)} images to '{DEFAULT_ASSET_DOWNLOAD_DIR.resolve()}'"
         )
-
-        # Now the application can use the 'report' dictionary and 'image_paths' list
-        # to save to a database, display on a UI, etc.
+        # --- END OF MODIFICATION ---
 
     else:
         print("\n--- DEMO: Report Generation Failed ---")

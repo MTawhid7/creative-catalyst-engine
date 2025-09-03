@@ -1,3 +1,5 @@
+# catalyst/pipeline/processors/briefing.py
+
 """
 This module contains the processors for the briefing stage.
 The deconstruction processor is an "intelligent" step that infers
@@ -27,44 +29,75 @@ class BriefDeconstructionProcessor(BaseProcessor):
         if not text:
             return "untitled"
         text = text.lower()
-        # Remove special characters, allowing only letters, numbers, spaces, and hyphens
         text = re.sub(r"[^a-z0-9\s-]", "", text)
-        # Replace spaces and consecutive hyphens with a single hyphen
         text = re.sub(r"[\s-]+", "-", text).strip("-")
-        # Truncate to a reasonable length
         slug = text[:15]
         return slug.strip("-")
 
+    def _extract_and_parse_json(self, response_text: str) -> Optional[Dict]:
+        """
+        A robust function to extract a JSON object from a string that may
+        contain other text (like reasoning blocks or markdown fences).
+        """
+        try:
+            reasoning_match = re.search(
+                r"<reasoning>(.*?)</reasoning>", response_text, re.DOTALL
+            )
+            if reasoning_match:
+                reasoning = reasoning_match.group(1).strip()
+                self.logger.info(f"🧠 AI Creative Director Reasoning: {reasoning}")
+
+            json_match = re.search(
+                r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL
+            )
+            if json_match:
+                json_str = json_match.group(1)
+                return json.loads(json_str)
+
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}")
+            if json_start != -1 and json_end != -1 and json_end > json_start:
+                json_str = response_text[json_start : json_end + 1]
+                return json.loads(json_str)
+
+            self.logger.error(
+                "🛑 No valid JSON object found in the AI response.",
+                extra={"raw_text": response_text},
+            )
+            return None
+        except json.JSONDecodeError:
+            self.logger.error(
+                "🛑 Failed to parse extracted JSON string.",
+                exc_info=True,
+                extra={"raw_text": response_text},
+            )
+            return None
+
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info("⚙️ Performing intelligent deconstruction of user passage...")
-
         extracted_data = await self._deconstruct_and_infer_async(context.user_passage)
         initial_brief = self._validate_and_apply_operational_defaults(extracted_data)
 
         if not initial_brief:
             self.logger.critical(
-                "❌ Intelligent deconstruction failed to produce a valid initial brief. Halting pipeline."
+                "❌ Intelligent deconstruction failed. Halting pipeline."
             )
             raise ValueError("Brief deconstruction failed. Check logs for details.")
 
         context.enriched_brief = initial_brief
-
-        # Generate and store the theme slug in the context object
         theme_hint = initial_brief.get("theme_hint")
         context.theme_slug = self._create_slug(theme_hint)
         self.logger.info(f"✅ Generated theme slug: '{context.theme_slug}'")
-
         self.logger.info(
             "✅ Success: Deconstructed and inferred a complete initial brief."
         )
         return context
 
     async def _deconstruct_and_infer_async(self, user_passage: str) -> Optional[Dict]:
-        """Uses the intelligent prompt to extract and infer a complete brief."""
+        """Uses the intelligent prompt and robustly parses the response."""
         prompt = prompt_library.INTELLIGENT_DECONSTRUCTION_PROMPT.format(
             user_passage=user_passage
         )
-
         response_data = await gemini_client.generate_content_async(
             prompt_parts=[prompt]
         )
@@ -75,56 +108,20 @@ class BriefDeconstructionProcessor(BaseProcessor):
                 extra={"response": response_data},
             )
             return None
-
-        # --- START OF FIX ---
-        # The new prompt returns a <reasoning> block before the JSON.
-        # We must find the start of the JSON object and parse only that part.
-        try:
-            raw_text = response_data["text"]
-
-            # Find the first occurrence of '{' which marks the beginning of the JSON object.
-            json_start_index = raw_text.find("{")
-
-            if json_start_index == -1:
-                self.logger.error(
-                    "🛑 AI response did not contain a valid JSON object.",
-                    extra={"raw_text": raw_text},
-                )
-                return None
-
-            # For debugging, log the reasoning part provided by the AI.
-            reasoning_text = raw_text[:json_start_index].strip()
-            self.logger.info(f"🧠 AI Creative Director Reasoning: {reasoning_text}")
-
-            # Extract the JSON part of the string.
-            json_text = raw_text[json_start_index:]
-
-            # Now, safely parse the cleaned JSON text.
-            return json.loads(json_text)
-
-        except (json.JSONDecodeError, KeyError):
-            self.logger.error(
-                "🛑 Failed to parse JSON from deconstruction response.",
-                exc_info=True,
-                extra={"raw_text": response_data.get("text")},
-            )
-            return None
-        # --- END OF FIX ---
+        return self._extract_and_parse_json(response_data["text"])
 
     def _validate_and_apply_operational_defaults(
         self, extracted_data: Optional[Dict]
     ) -> Optional[Dict]:
-        """Applies essential, non-creative defaults (like date/time) and validates the structure."""
+        """Applies essential, non-creative defaults and validates the structure."""
         if not isinstance(extracted_data, dict):
             self.logger.error("❌ Deconstruction did not return a dictionary.")
             return None
-
         if extracted_data.get("season") == "auto":
             current_month = datetime.now().month
             extracted_data["season"] = (
                 "Spring/Summer" if 4 <= current_month <= 9 else "Fall/Winter"
             )
-
         year_value = extracted_data.get("year")
         if year_value == "auto" or not year_value:
             extracted_data["year"] = datetime.now().year
@@ -136,43 +133,39 @@ class BriefDeconstructionProcessor(BaseProcessor):
                     f"⚠️ Could not parse '{year_value}' as a year. Defaulting to current year."
                 )
                 extracted_data["year"] = datetime.now().year
-
         if not extracted_data.get("theme_hint"):
             self.logger.critical(
                 "❌ Missing required variable 'theme_hint' after deconstruction."
             )
             return None
-
         return extracted_data
 
 
 class EthosClarificationProcessor(BaseProcessor):
     """
-    Pipeline Step 2: Analyzes the user's passage for an underlying
-    design philosophy or brand ethos.
+    Pipeline Step 2: Analyzes the user's passage for an underlying brand ethos.
     """
 
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info("🔬 Analyzing user passage for deeper brand ethos...")
-
         prompt = prompt_library.ETHOS_ANALYSIS_PROMPT.format(
             user_passage=context.user_passage
         )
-
-        response_text = await gemini_client.generate_content_async(
+        response_data = await gemini_client.generate_content_async(
             prompt_parts=[prompt]
         )
 
-        if response_text and response_text.get("text"):
+        if response_data and response_data.get("text"):
             try:
-                # Clean up potential markdown and parse the JSON
-                json_text = response_text["text"].strip()
-                if json_text.startswith("```json"):
-                    json_text = json_text[7:-3].strip()
-
+                json_text = (
+                    response_data["text"]
+                    .strip()
+                    .removeprefix("```json")
+                    .removesuffix("```")
+                    .strip()
+                )
                 data = json.loads(json_text)
-                ethos = data.get("ethos")  # Safely get the 'ethos' value
-
+                ethos = data.get("ethos")
                 if ethos:
                     context.brand_ethos = ethos
                     self.logger.info("✅ Success: Distilled brand ethos.")
@@ -187,21 +180,18 @@ class EthosClarificationProcessor(BaseProcessor):
                 )
         else:
             self.logger.warning("⚠️ Ethos analysis returned no content. Skipping.")
-
         return context
 
 
 class BriefEnrichmentProcessor(BaseProcessor):
     """
-    Pipeline Step 3: Expands the initial brief with AI-driven creative
-    concepts, a strategic antagonist, and searchable keywords for research.
+    Pipeline Step 3: Expands the initial brief with AI-driven creative concepts.
     """
 
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info(
             "⚙️ Enriching brief with AI-driven creative concepts and keywords..."
         )
-        # Pass the newly found brand_ethos to the enrichment process
         enriched_brief = await self._enrich_brief_async(
             context.enriched_brief, context.brand_ethos
         )
@@ -215,66 +205,94 @@ class BriefEnrichmentProcessor(BaseProcessor):
         )
         return context
 
+    # --- START OF FIX: ROBUST JSON PARSING IN HELPER FUNCTION ---
     async def _get_enrichment_data_async(
         self,
         initial_prompt: str,
         correction_prompt_template: str,
         prompt_args: Dict,
         task_name: str,
-    ) -> Dict | None:
+    ) -> Optional[Dict]:
         """
-        A resilient helper function that attempts to get enrichment data, with a
-        self-correction retry. Now returns a parsed JSON dictionary.
+        A resilient helper function that attempts to get enrichment data,
+        with a self-correction retry and robust JSON parsing.
         """
         self.logger.debug(f"⏳ Attempting to generate {task_name} (Attempt 1)...")
 
-        initial_response = await gemini_client.generate_content_async(
+        # First attempt
+        response_data = await gemini_client.generate_content_async(
             prompt_parts=[initial_prompt]
         )
 
-        if initial_response and isinstance(initial_response, dict):
-            self.logger.debug(
-                f"✅ Successfully generated and parsed {task_name} on the first attempt."
+        if response_data and response_data.get("text"):
+            try:
+                # Attempt to parse the JSON from the text response
+                json_text = (
+                    response_data["text"]
+                    .strip()
+                    .removeprefix("```json")
+                    .removesuffix("```")
+                    .strip()
+                )
+                parsed_json = json.loads(json_text)
+                self.logger.debug(
+                    f"✅ Successfully parsed {task_name} on the first attempt."
+                )
+                return parsed_json
+            except json.JSONDecodeError:
+                self.logger.warning(
+                    f"⚠️ First attempt for {task_name} returned invalid JSON. Triggering self-correction."
+                )
+                failed_output = response_data["text"]
+        else:
+            self.logger.warning(
+                f"⚠️ First attempt for {task_name} returned no text. Triggering self-correction."
             )
-            return initial_response
+            failed_output = str(response_data)
 
-        self.logger.warning(
-            f"⚠️ First attempt to generate {task_name} failed or returned invalid format. Triggering self-correction."
-        )
-
-        failed_output = str(initial_response)
+        # Second attempt (self-correction)
         correction_prompt = correction_prompt_template.format(
             failed_output=failed_output, **prompt_args
         )
-
         self.logger.debug(
             f"⏳ Attempting to generate {task_name} (Attempt 2 - Correction)..."
         )
-        correction_response = await gemini_client.generate_content_async(
+        correction_response_data = await gemini_client.generate_content_async(
             prompt_parts=[correction_prompt]
         )
 
-        if correction_response and isinstance(correction_response, dict):
-            self.logger.info(
-                f"✅ Successfully generated and parsed {task_name} on the second (correction) attempt."
-            )
-            return correction_response
+        if correction_response_data and correction_response_data.get("text"):
+            try:
+                json_text = (
+                    correction_response_data["text"]
+                    .strip()
+                    .removeprefix("```json")
+                    .removesuffix("```")
+                    .strip()
+                )
+                parsed_json = json.loads(json_text)
+                self.logger.info(
+                    f"✅ Successfully parsed {task_name} on the second (correction) attempt."
+                )
+                return parsed_json
+            except json.JSONDecodeError:
+                self.logger.critical(
+                    f"❌ Self-correction for {task_name} also returned invalid JSON."
+                )
 
-        self.logger.critical(
-            f"❌ Self-correction also failed for {task_name}. The model could not produce a valid JSON output."
-        )
+        self.logger.critical(f"❌ All attempts to generate {task_name} failed.")
         return None
 
-    async def _enrich_brief_async(self, brief: Dict, brand_ethos: str) -> Dict:
-        """The main enrichment logic, now updated to handle structured JSON responses."""
+    # --- END OF FIX ---
 
+    async def _enrich_brief_async(self, brief: Dict, brand_ethos: str) -> Dict:
+        """The main enrichment logic, now using the robust helper."""
         concept_prompt_args = {
             "theme_hint": brief.get("theme_hint", "general fashion"),
             "garment_type": brief.get("garment_type", "clothing"),
             "key_attributes": ", ".join(brief.get("key_attributes", [])),
             "brand_ethos": brand_ethos or "No specific ethos provided.",
         }
-
         antagonist_prompt_args = {
             "theme_hint": brief.get("theme_hint", "general fashion")
         }
@@ -306,7 +324,6 @@ class BriefEnrichmentProcessor(BaseProcessor):
         search_keywords = set()
         if brief.get("theme_hint"):
             search_keywords.add(brief["theme_hint"])
-
         if brief.get("expanded_concepts"):
             extraction_prompt = prompt_library.KEYWORD_EXTRACTION_PROMPT.format(
                 concepts_list=json.dumps(brief["expanded_concepts"])

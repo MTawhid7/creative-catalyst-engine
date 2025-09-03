@@ -65,12 +65,18 @@ async def run_pipeline(user_passage: str) -> RunContext:
     orchestrator = PipelineOrchestrator()
     is_from_cache = await orchestrator.run(context)
 
-    final_folder_name = ""
     try:
         timestamp_str = datetime.now().strftime("%Y%m%d-%H%M%S")
         slug = context.theme_slug or "untitled"
         final_folder_name = f"{timestamp_str}_{slug}"
         final_path = settings.RESULTS_DIR / final_folder_name
+
+        # Ensure the source directory still exists before trying to rename
+        if not context.results_dir.exists():
+            logger.warning(
+                f"⚠️ Source results directory {context.results_dir} not found. Skipping finalization."
+            )
+            return context
 
         os.rename(context.results_dir, final_path)
         context.results_dir = final_path
@@ -83,39 +89,41 @@ async def run_pipeline(user_passage: str) -> RunContext:
             f"✅ User-facing results folder finalized as: '{final_folder_name}'"
         )
 
+        # --- START OF FIX: MOVED CACHING LOGIC INSIDE THE 'TRY' BLOCK ---
+        # This logic should only execute if the folder finalization above is successful.
+        # This resolves the "final_path is possibly unbound" error and makes the
+        # process more robust and transactional.
+        if not is_from_cache and context.final_report:
+            logger.info("⚙️ Caching: Storing new artifacts in permanent L1 cache...")
+
+            semantic_key = cache_manager._create_semantic_key(context.enriched_brief)
+            doc_id_str = str(hash(semantic_key))
+            artifact_dest_path = settings.ARTIFACT_CACHE_DIR / doc_id_str
+
+            try:
+                shutil.copytree(final_path, artifact_dest_path, dirs_exist_ok=True)
+
+                payload_to_cache = {
+                    "final_report": context.final_report,
+                    "cached_results_path": doc_id_str,
+                }
+                await cache_manager.add_to_report_cache_async(
+                    context.enriched_brief, payload_to_cache
+                )
+                logger.info(
+                    f"✅ Successfully stored artifacts in L1 cache at '{artifact_dest_path}'"
+                )
+            except Exception as e:
+                logger.error(
+                    f"❌ Failed to copy artifacts to permanent cache: {e}",
+                    exc_info=True,
+                )
+        # --- END OF FIX ---
+
     except Exception as e:
-        logger.warning(f"⚠️ Could not perform final rename or symlink: {e}")
-
-    # --- START OF CACHE FIX ---
-    # If the run was new, copy the final artifacts to the permanent cache location.
-    if not is_from_cache and context.final_report and final_path.exists():
-        logger.info("⚙️ Caching: Storing new artifacts in permanent cache...")
-
-        # Use the deterministic hash as the permanent folder name.
-        brief_key = cache_manager._create_composite_key(context.enriched_brief)
-        doc_id_str = str(hash(brief_key))
-        artifact_dest_path = settings.ARTIFACT_CACHE_DIR / doc_id_str
-
-        try:
-            # Copy the entire finalized results folder to the permanent cache.
-            shutil.copytree(final_path, artifact_dest_path, dirs_exist_ok=True)
-
-            # The payload now points to the stable, permanent folder name (the hash).
-            payload_to_cache = {
-                "final_report": context.final_report,
-                "cached_results_path": doc_id_str,
-            }
-            await cache_manager.add_to_report_cache_async(
-                context.enriched_brief, payload_to_cache
-            )
-            logger.info(
-                f"✅ Successfully stored artifacts in cache at '{artifact_dest_path}'"
-            )
-        except Exception as e:
-            logger.error(
-                f"❌ Failed to copy artifacts to permanent cache: {e}", exc_info=True
-            )
-    # --- END OF CACHE FIX ---
+        logger.warning(
+            f"⚠️ Could not perform final rename or symlink: {e}", exc_info=True
+        )
 
     logger.info("      CREATIVE PROCESS FINISHED for Run ID: %s", context.run_id)
     logger.info("=========================================================")
@@ -124,7 +132,12 @@ async def run_pipeline(user_passage: str) -> RunContext:
 
 
 async def main():
-    """The main asynchronous function for local, command-line testing."""
+    """
+    The main asynchronous function for local, command-line testing.
+    NOTE: This runs the core pipeline directly and bypasses the service-level
+    L0 cache located in the API worker. To test the full caching system,
+    run the service and use the API client.
+    """
     start_time = time.time()
     await run_pipeline(USER_PASSAGE)
     duration = time.time() - start_time
