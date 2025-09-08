@@ -710,7 +710,7 @@ A full-body editorial fashion photograph for a high-end magazine lookbook, featu
 
 **Subject & Styling:**
 - **Model Demographics:** The subject is a professional fashion model who is {target_gender} and of {target_model_ethnicity} ethnicity.
-- **Model Persona:** {model_persona}. The subject embodies the core spirit of the collection.
+- **Model Persona:** {model_persona}
 - **Garment Details:** The model is wearing the '{key_piece_name}', a garment defined by its modern '{silhouette}' silhouette. It is crafted from {main_fabric}, and its material properties are rendered with photorealistic detail: a texture that feels '{main_fabric_texture}', a weight of {main_fabric_weight_gsm} gsm that creates a '{main_fabric_drape}' drape, and a '{main_fabric_finish}' finish.
 - **Pattern & Construction:** {pattern_description} {lining_description}
 - **Styling:** The look is completed with {styling_description}, styled to feel authentic and personally curated, not like a mannequin.

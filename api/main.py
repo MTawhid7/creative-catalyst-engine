@@ -6,11 +6,12 @@ from pydantic import BaseModel
 from celery.result import AsyncResult
 from fastapi.staticfiles import StaticFiles
 
-# --- START OF FIX ---
-# We no longer need to import the function itself, only the celery_app instance.
-from .worker import celery_app
+# --- START OF FIX: Import Path to construct absolute paths ---
+from pathlib import Path
 
 # --- END OF FIX ---
+
+from .worker import celery_app
 
 app = FastAPI(
     title="Creative Catalyst Engine API",
@@ -28,14 +29,14 @@ class JobResponse(BaseModel):
     status: str
 
 
-class ResultResponse(BaseModel):
-    job_id: str
-    status: str
-    result: dict | None = None
-
+# --- START OF FIX: Use an absolute path for the StaticFiles mount ---
+# This makes the server independent of the directory it's run from.
+# It builds the path to the 'results' directory from the location of this file.
+RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 
 # This allows the API to serve the generated images directly.
-app.mount("/results", StaticFiles(directory="results"), name="results")
+app.mount("/results", StaticFiles(directory=RESULTS_DIR), name="results")
+# --- END OF FIX ---
 
 
 @app.post(
@@ -47,13 +48,7 @@ def submit_job(request: JobRequest):
     """
     Accepts a creative brief, queues it for processing, and returns a job ID.
     """
-    # --- START OF FIX ---
-    # Call the task by its registered name string using `send_task`.
-    # This is the most robust and type-safe method.
-    # The first argument is the task name, and the `args` argument is a
-    # list of positional arguments for the task function.
     task = celery_app.send_task("create_creative_report", args=[request.user_passage])
-    # --- END OF FIX ---
     return {"job_id": task.id, "status": "queued"}
 
 
@@ -70,7 +65,7 @@ def get_job_status(job_id: str):
             content={
                 "job_id": job_id,
                 "status": "failed",
-                "error": str(task_result.result),  # Get the exception message
+                "error": str(task_result.result),
             },
         )
 

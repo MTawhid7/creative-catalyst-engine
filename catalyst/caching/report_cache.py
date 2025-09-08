@@ -11,12 +11,15 @@ synthesis and image generation steps are skipped.
 """
 
 import json
+import hashlib  # <-- ADD THIS IMPORT
 from typing import Optional, Dict
 
 import chromadb
+from chromadb.config import Settings as ChromaSettings
+
 
 from .. import settings
-from ..clients import gemini_client
+from ..clients import gemini
 from ..utilities.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,14 +28,17 @@ logger = get_logger(__name__)
 _collection_name = settings.CHROMA_COLLECTION_NAME
 _report_collection = None
 try:
-    chroma_client = chromadb.PersistentClient(path=str(settings.CHROMA_PERSIST_DIR))
+    chroma_client = chromadb.PersistentClient(
+        path=str(settings.CHROMA_PERSIST_DIR),
+        settings=ChromaSettings(anonymized_telemetry=False),
+    )
     _report_collection = chroma_client.get_or_create_collection(name=_collection_name)
     logger.info(
         f"✅ L1 Semantic Cache initialized. Collection '{_collection_name}' loaded/created."
     )
 except Exception as e:
     logger.critical(
-        "⚠ CRITICAL: Failed to initialize ChromaDB. L1 Caching will be disabled.",
+        "CRITICAL: Failed to initialize ChromaDB. L1 Caching will be disabled.",
         exc_info=True,
     )
 
@@ -52,29 +58,19 @@ async def check(brief_key: str) -> Optional[str]:
         logger.warning("⚠️ L1 collection not available. Skipping semantic cache check.")
         return None
 
-    # --- This is now ONLY an L1 Semantic Cache Check ---
     logger.info("⚙️ Checking L1 Semantic Cache...")
-    embedding = await gemini_client.generate_embedding_async(brief_key)
+    embedding = await gemini.generate_embedding_async(brief_key)
     if not embedding:
-        logger.error("⚠ Could not generate embedding for L1 cache check. Skipping.")
+        logger.error("Could not generate embedding for L1 cache check. Skipping.")
         return None
 
     try:
         results = _report_collection.query(query_embeddings=[embedding], n_results=1)
 
-        # Check if results exist and have the expected structure
         documents = results.get("documents")
         distances = results.get("distances")
 
-        if (
-            not results
-            or not documents
-            or not distances
-            or len(documents) == 0
-            or len(distances) == 0
-            or len(documents[0]) == 0
-            or len(distances[0]) == 0
-        ):
+        if not documents or not distances or not documents[0] or not distances[0]:
             logger.info("💨 L1 CACHE MISS: No similar documents found.")
             return None
 
@@ -94,7 +90,7 @@ async def check(brief_key: str) -> Optional[str]:
 
     except Exception as e:
         logger.error(
-            "⚠ An error occurred during L1 ChromaDB query. Assuming cache miss.",
+            "An error occurred during L1 ChromaDB query. Assuming cache miss.",
             exc_info=True,
         )
         return None
@@ -110,14 +106,16 @@ async def add(brief_key: str, payload: Dict):
 
     logger.info("🔥 Adding new payload to L1 Semantic Cache...")
 
-    embedding = await gemini_client.generate_embedding_async(brief_key)
+    embedding = await gemini.generate_embedding_async(brief_key)
     if not embedding:
-        logger.error("⚠ Could not generate embedding for new cache entry. Skipping.")
+        logger.error("Could not generate embedding for new cache entry. Skipping.")
         return
 
     payload_json = json.dumps(payload)
-    # The doc_id is still a hash of the key, which is a robust way to manage upserts.
-    doc_id = str(hash(brief_key))
+
+    # --- START OF FIX: Use SHA-256 for a robust, collision-resistant document ID ---
+    doc_id = hashlib.sha256(brief_key.encode("utf-8")).hexdigest()
+    # --- END OF FIX ---
 
     try:
         _report_collection.upsert(
@@ -130,4 +128,4 @@ async def add(brief_key: str, payload: Dict):
             f"✅ Successfully added/updated payload in L1 cache with ID: {doc_id}"
         )
     except Exception as e:
-        logger.error("⚠ Failed to add document to ChromaDB collection.", exc_info=True)
+        logger.error("Failed to add document to ChromaDB collection.", exc_info=True)

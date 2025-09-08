@@ -125,11 +125,22 @@ class KeyPieceDetail(BaseModel):
     # These are populated after the core report and images have been generated.
     final_garment_image_url: Optional[str] = Field(
         default=None,
-        description="The public URL for the final generated garment image.",
+        description="The public URL for the final generated garment image, populated by the image generation pipeline.",
     )
     mood_board_image_url: Optional[str] = Field(
         default=None,
-        description="The public URL for the final generated mood board image.",
+        description="The public URL for the final generated mood board image, populated by the image generation pipeline.",
+    )
+    # NEW: These fields will be populated by the core engine's image generator.
+    # They provide a stable, internal reference to the generated artifact.
+    final_garment_relative_path: Optional[str] = Field(
+        default=None,
+        description="The relative path to the generated garment image, used internally.",
+    )
+
+    mood_board_relative_path: Optional[str] = Field(
+        default=None,
+        description="The relative path to the generated mood board image, used internally.",
     )
     # --- END OF MODIFICATION ---
 
@@ -151,8 +162,8 @@ class FashionTrendReport(BaseModel):
         ...,
         description="The target gender for the model (e.g., 'Male', 'Female', 'Unisex').",
     )
-    target_age_group: str = Field(
-        ...,
+    target_age_group: Optional[str] = Field(
+        None,
         description="The target age group for the model (e.g., 'Young Adult (20-30)', 'Child (8-12)', 'Senior (65+)').",
     )
     target_model_ethnicity: str = Field(

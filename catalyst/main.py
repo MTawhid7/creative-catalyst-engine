@@ -13,6 +13,7 @@ import os
 import shutil
 from pathlib import Path
 from datetime import datetime
+import hashlib
 
 from . import settings
 from .context import RunContext
@@ -23,7 +24,7 @@ from .caching import cache_manager
 logger = get_logger(__name__)
 
 USER_PASSAGE = """
-How has Brunello Cucinelli elevated the basic T-shirt and polo shirt through the use of noble fibers and a philosophy of 'quiet luxury'?
+How did Moncler successfully merge high-performance technology with high-fashion aesthetics in its iconic puffer jackets, influencing the rise of luxury streetwear?
 """
 
 
@@ -71,10 +72,9 @@ async def run_pipeline(user_passage: str) -> RunContext:
         final_folder_name = f"{timestamp_str}_{slug}"
         final_path = settings.RESULTS_DIR / final_folder_name
 
-        # Ensure the source directory still exists before trying to rename
         if not context.results_dir.exists():
             logger.warning(
-                f"⚠️ Source results directory {context.results_dir} not found. Skipping finalization."
+                f"Source results directory {context.results_dir} not found. Skipping finalization."
             )
             return context
 
@@ -89,23 +89,22 @@ async def run_pipeline(user_passage: str) -> RunContext:
             f"✅ User-facing results folder finalized as: '{final_folder_name}'"
         )
 
-        # --- START OF FIX: MOVED CACHING LOGIC INSIDE THE 'TRY' BLOCK ---
-        # This logic should only execute if the folder finalization above is successful.
-        # This resolves the "final_path is possibly unbound" error and makes the
-        # process more robust and transactional.
         if not is_from_cache and context.final_report:
             logger.info("⚙️ Caching: Storing new artifacts in permanent L1 cache...")
 
+            # --- START OF FIX: Implement transactional safety for L1 cache population ---
             semantic_key = cache_manager._create_semantic_key(context.enriched_brief)
-            doc_id_str = str(hash(semantic_key))
-            artifact_dest_path = settings.ARTIFACT_CACHE_DIR / doc_id_str
+            doc_id = hashlib.sha256(semantic_key.encode("utf-8")).hexdigest()
+            artifact_dest_path = settings.ARTIFACT_CACHE_DIR / doc_id
 
             try:
+                # Step 1: Copy files to their permanent destination.
                 shutil.copytree(final_path, artifact_dest_path, dirs_exist_ok=True)
 
+                # Step 2: Attempt to add the entry to the database.
                 payload_to_cache = {
                     "final_report": context.final_report,
-                    "cached_results_path": doc_id_str,
+                    "cached_results_path": doc_id,
                 }
                 await cache_manager.add_to_report_cache_async(
                     context.enriched_brief, payload_to_cache
@@ -113,12 +112,19 @@ async def run_pipeline(user_passage: str) -> RunContext:
                 logger.info(
                     f"✅ Successfully stored artifacts in L1 cache at '{artifact_dest_path}'"
                 )
+
             except Exception as e:
+                # Step 3 (Rollback): If the DB write fails, delete the copied files.
                 logger.error(
-                    f"❌ Failed to copy artifacts to permanent cache: {e}",
+                    f"❌ Failed to add entry to L1 vector cache: {e}. Rolling back file copy.",
                     exc_info=True,
                 )
-        # --- END OF FIX ---
+                if artifact_dest_path.exists():
+                    logger.warning(
+                        f"🗑️ Rolling back: Deleting orphaned artifacts from {artifact_dest_path}"
+                    )
+                    shutil.rmtree(artifact_dest_path)
+            # --- END OF FIX ---
 
     except Exception as e:
         logger.warning(
@@ -134,9 +140,6 @@ async def run_pipeline(user_passage: str) -> RunContext:
 async def main():
     """
     The main asynchronous function for local, command-line testing.
-    NOTE: This runs the core pipeline directly and bypasses the service-level
-    L0 cache located in the API worker. To test the full caching system,
-    run the service and use the API client.
     """
     start_time = time.time()
     await run_pipeline(USER_PASSAGE)
@@ -152,5 +155,5 @@ if __name__ == "__main__":
         logger.info("⛔ Process interrupted by user.")
     except Exception as e:
         logger.critical(
-            "❌ A top-level, unhandled exception occurred: %s", e, exc_info=True
+            "A top-level, unhandled exception occurred: %s", e, exc_info=True
         )

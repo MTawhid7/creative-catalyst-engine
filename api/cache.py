@@ -9,7 +9,6 @@ exact-match cache for the user's *intent*, even when the raw input
 string varies due to upstream generation.
 """
 
-import asyncio
 import hashlib
 import json
 from typing import Dict, Any, Optional
@@ -17,7 +16,7 @@ from typing import Dict, Any, Optional
 from celery.utils.log import get_task_logger
 from redis import Redis
 
-from catalyst.clients import gemini_client as l0_gemini_client
+from catalyst.clients import gemini as l0_gemini_client
 
 logger = get_task_logger(__name__)
 
@@ -71,15 +70,14 @@ JSON OUTPUT:
 def _generate_deterministic_key(user_passage: str) -> Optional[str]:
     """
     Makes a fast AI call to extract core entities and builds a stable,
-    deterministic key string from them. This function is synchronous but
-    calls an async function internally.
+    deterministic key string from them. This function is now fully synchronous.
     """
     try:
         prompt = L0_KEY_GENERATION_PROMPT.format(user_passage=user_passage)
 
-        response = asyncio.run(
-            l0_gemini_client.generate_content_async(prompt_parts=[prompt])
-        )
+        # --- START OF FIX: Replace blocking asyncio.run with a direct synchronous call ---
+        response = l0_gemini_client.generate_content_sync(prompt_parts=[prompt])
+        # --- END OF FIX ---
 
         if not response or not isinstance(response, dict):
             logger.warning(
