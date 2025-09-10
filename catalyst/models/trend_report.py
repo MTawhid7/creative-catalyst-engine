@@ -120,9 +120,6 @@ class KeyPieceDetail(BaseModel):
     suggested_pairings: List[str] = Field(
         ..., description="Other items to style with this piece."
     )
-    # --- START OF MODIFICATION ---
-    # Add optional fields to hold the final, public-facing URLs for the generated images.
-    # These are populated after the core report and images have been generated.
     final_garment_image_url: Optional[str] = Field(
         default=None,
         description="The public URL for the final generated garment image, populated by the image generation pipeline.",
@@ -131,8 +128,6 @@ class KeyPieceDetail(BaseModel):
         default=None,
         description="The public URL for the final generated mood board image, populated by the image generation pipeline.",
     )
-    # NEW: These fields will be populated by the core engine's image generator.
-    # They provide a stable, internal reference to the generated artifact.
     final_garment_relative_path: Optional[str] = Field(
         default=None,
         description="The relative path to the generated garment image, used internally.",
@@ -142,7 +137,15 @@ class KeyPieceDetail(BaseModel):
         default=None,
         description="The relative path to the generated mood board image, used internally.",
     )
-    # --- END OF MODIFICATION ---
+
+    mood_board_prompt: Optional[str] = Field(
+        default=None,
+        description="The full, final prompt used to generate the mood board image.",
+    )
+    final_garment_prompt: Optional[str] = Field(
+        default=None,
+        description="The full, final prompt used to generate the final garment image.",
+    )
 
 
 # --- ENHANCED: Root model with new metadata and demographic fields ---
@@ -170,12 +173,27 @@ class FashionTrendReport(BaseModel):
         ...,
         description="The appropriate model ethnicity for the target region or theme (e.g., 'Bengali', 'Scottish', 'Diverse').",
     )
+    desired_mood: Optional[List[str]] = Field(
+        default=[],
+        description="A list of 3-5 evocative adjectives that act as a 'creative compass'.",
+    )
     narrative_setting_description: str = Field(
         ...,
         description="A detailed, atmospheric description of the ideal setting or environment that tells the story of the collection.",
     )
     overarching_theme: str = Field(
         ..., description="The high-level, evocative theme of the collection."
+    )
+    antagonist_synthesis: Optional[str] = Field(
+        None,
+        description="The unique creative synthesis or point of contrast that defines the collection's innovative edge.",
+    )
+    color_palette_strategy: Optional[str] = Field(
+        None,
+        description="The 'Tonal Story' or high-level strategy behind the color choices.",
+    )
+    accessory_strategy: Optional[str] = Field(
+        None, description="The defined strategic role of accessories in the collection."
     )
     cultural_drivers: List[str] = Field(
         ..., description="The socio-cultural influences driving the theme."

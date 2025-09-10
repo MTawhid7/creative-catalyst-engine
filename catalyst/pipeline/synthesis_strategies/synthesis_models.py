@@ -9,19 +9,44 @@ from typing import List, Dict
 from pydantic import BaseModel, Field
 
 
-class TopLevelModel(BaseModel):
-    """
-    A model to structure the high-level, thematic outputs of the initial
-    synthesis step.
-    """
-
-    overarching_theme: str = Field(...)
-    cultural_drivers: List[str] = Field(...)
-    influential_models: List[str] = Field(...)
+# --- START OF DEFINITIVE FIX ---
+# Move the NarrativeSettingModel here to its correct, centralized location.
+class NarrativeSettingModel(BaseModel):
+    narrative_setting: str = Field(
+        ..., description="A single, atmospheric paragraph under 50 words."
+    )
 
 
-# --- START OF FIX: Simplify the model to be more direct ---
-# This schema is simpler for the LLM to follow reliably.
+# --- END OF DEFINITIVE FIX ---
+
+
+class OverarchingThemeModel(BaseModel):
+    """A model to structure the overarching theme of the report."""
+
+    overarching_theme: str = Field(
+        ...,
+        description="A single, concise string summarizing the core theme of the collection.",
+    )
+
+
+class CulturalDriversModel(BaseModel):
+    """A model to structure the list of cultural drivers."""
+
+    cultural_drivers: List[str] = Field(
+        ...,
+        description="A list of strings, where each string is a cultural driver and its impact explanation.",
+    )
+
+
+class InfluentialModelsModel(BaseModel):
+    """A model to structure the list of influential models or archetypes."""
+
+    influential_models: List[str] = Field(
+        ...,
+        description="A list of timeless archetypes or subcultures that embody the trend.",
+    )
+
+
 class AccessoriesModel(BaseModel):
     """A model for the inner dictionary of accessories."""
 
@@ -29,9 +54,6 @@ class AccessoriesModel(BaseModel):
     Footwear: List[str] = Field(default=[], description="List of footwear accessories.")
     Jewelry: List[str] = Field(default=[], description="List of jewelry accessories.")
     Other: List[str] = Field(default=[], description="List of other accessories.")
-
-
-# --- END OF FIX ---
 
 
 class KeyPieceNamesModel(BaseModel):

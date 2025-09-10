@@ -51,59 +51,54 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
             raise ValueError("Cannot generate outputs without a final report.")
 
         try:
-            final_dir = Path(context.results_dir)
-            final_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            self.logger.critical(
-                f"❌ Could not create output directory {context.results_dir}: {e}",
+            # 1. Validate the report data FIRST.
+            validated_report = FashionTrendReport.model_validate(context.final_report)
+            self.logger.info(
+                "🎨 Report data validated. Initializing prompt generation strategy..."
+            )
+
+            # 2. Generate the prompts.
+            prompt_generator = PromptGenerator(report=validated_report)
+            prompts_data = await prompt_generator.generate_prompts()
+
+            # 3. (NEW) Inject the generated prompts back into the main report dictionary.
+            self.logger.info("💉 Injecting image prompts into the final report...")
+            for piece in context.final_report.get("detailed_key_pieces", []):
+                piece_name = piece.get("key_piece_name")
+                if piece_name and piece_name in prompts_data:
+                    piece_prompts = prompts_data[piece_name]
+                    piece["mood_board_prompt"] = piece_prompts.get("mood_board")
+                    piece["final_garment_prompt"] = piece_prompts.get("final_garment")
+            self.logger.info("✅ Successfully injected prompts.")
+
+            # 4. Save the generated prompts as a separate artifact (still useful for debugging).
+            self._save_json_file(
+                data=prompts_data,
+                filename=settings.PROMPTS_FILENAME,
+                context=context,
+            )
+
+        except ValidationError:
+            self.logger.error(
+                "❌ Could not generate or inject prompts due to a validation error in the final report data.",
                 exc_info=True,
             )
-            raise
+            # We will still save the main report, but it will be missing the prompts.
+        except Exception:
+            self.logger.error(
+                "❌ An unexpected error occurred during prompt generation or injection.",
+                exc_info=True,
+            )
 
-        # 1. Save the primary trend report artifact.
+        # 5. (MOVED) Save the primary trend report artifact LAST.
+        # This ensures it now contains the newly injected prompt fields.
         self._save_json_file(
             data=context.final_report,
             filename=settings.TREND_REPORT_FILENAME,
             context=context,
         )
 
-        # 2. Delegate prompt generation to the specialized PromptGenerator.
-        try:
-            # First, validate the raw report dictionary into a Pydantic model.
-            # This ensures the PromptGenerator receives clean, structured data.
-            validated_report = FashionTrendReport.model_validate(context.final_report)
-            self.logger.info(
-                "🎨 Report data validated. Initializing prompt generation strategy..."
-            )
-
-            prompt_generator = PromptGenerator(
-                report=validated_report,
-                brand_ethos=context.brand_ethos,
-                enriched_brief=context.enriched_brief,
-            )
-            prompts_data = await prompt_generator.generate_prompts()
-
-            # Record the prompts for debugging and potential reuse.
-            context.record_artifact(self.__class__.__name__, {"prompts": prompts_data})
-
-            # 3. Save the generated prompts artifact.
-            self._save_json_file(
-                data=prompts_data,
-                filename=settings.PROMPTS_FILENAME,
-                context=context,
-            )
-            self.logger.info("✅ Success: Image prompt generation and saving complete.")
-
-        except ValidationError:
-            self.logger.error(
-                "❌ Could not generate prompts due to a validation error in the final report data.",
-                exc_info=True,
-            )
-        except Exception:
-            self.logger.error(
-                "❌ An unexpected error occurred during prompt generation.",
-                exc_info=True,
-            )
+        # --- END: LOGIC RE-ORDERING AND INJECTION ---
 
         self.logger.info("✅ Success: All reporting outputs have been generated.")
         return context

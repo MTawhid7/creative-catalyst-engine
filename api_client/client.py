@@ -11,12 +11,7 @@ from .exceptions import (
 
 
 class CreativeCatalystClient:
-    """
-    A client for interacting with the Creative Catalyst Engine API.
-
-    This client abstracts the asynchronous, polling-based nature of the API
-    into a single, synchronous method call.
-    """
+    """A client for interacting with the Creative Catalyst Engine API."""
 
     def __init__(self, base_url: str = "http://127.0.0.1:9500"):
         self.base_url = base_url.rstrip("/")
@@ -28,28 +23,13 @@ class CreativeCatalystClient:
     def get_creative_report(
         self, passage: str, poll_interval: int = 5, timeout: int = 300
     ) -> dict:
-        """
-        Submits a creative brief and waits for the final report.
-
-        Args:
-            passage: The creative brief to submit.
-            poll_interval: Seconds to wait between status checks.
-            timeout: Maximum seconds to wait for the job to complete.
-
-        Returns:
-            A dictionary containing the final fashion trend report.
-
-        Raises:
-            ConnectionError: If unable to connect to the API server.
-            JobSubmissionError: If the API rejects the job submission.
-            JobFailedError: If the background job fails during execution.
-            PollingTimeoutError: If the job does not complete in time.
-        """
+        """Submits a creative brief and waits for the final report."""
         try:
             # 1. Submit the Job
+            print(f"Submitting job to {self.submit_url}...")
             payload = {"user_passage": passage}
-            response = requests.post(self.submit_url, json=payload)
-            response.raise_for_status()  # Raises HTTPError for 4xx/5xx responses
+            response = requests.post(self.submit_url, json=payload, timeout=10)
+            response.raise_for_status()
 
             job_data = response.json()
             job_id = job_data.get("job_id")
@@ -62,7 +42,7 @@ class CreativeCatalystClient:
             start_time = time.time()
             while time.time() - start_time < timeout:
                 print(f"Polling status for job {job_id}...")
-                status_response = requests.get(self._get_status_url(job_id))
+                status_response = requests.get(self._get_status_url(job_id), timeout=10)
                 status_response.raise_for_status()
 
                 status_data = status_response.json()
@@ -76,17 +56,18 @@ class CreativeCatalystClient:
                     error_msg = status_data.get("error", "Unknown error")
                     raise JobFailedError(job_id, error_msg)
 
-                # Wait before the next poll
                 time.sleep(poll_interval)
 
-            # 3. Handle Timeout
             raise PollingTimeoutError(job_id, timeout)
 
+        # --- START OF FIX: Better exception handling ---
         except requests.exceptions.ConnectionError as e:
             raise ConnectionError(
                 f"Could not connect to the API at {self.base_url}. Is the server running?"
             ) from e
         except requests.exceptions.HTTPError as e:
+            # Re-raise as our custom, more informative exception
             raise JobSubmissionError(
                 f"API returned an error: {e.response.status_code} {e.response.text}"
             ) from e
+        # --- END OF FIX ---

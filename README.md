@@ -1,11 +1,11 @@
 # 🚀 Creative Catalyst Engine
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/Technyx/creative-catalyst-engine)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/your-repo/creative-catalyst-engine)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-The **Creative Catalyst Engine** is an AI-powered, idea-to-image pipeline delivered as a scalable and resilient web service. It transforms a simple creative brief into a multi-format fashion intelligence package: a structured trend report (JSON), an art-directed style guide, and a suite of editorial-quality images.
+The **Creative Catalyst Engine** is an AI-powered, idea-to-image pipeline delivered as a scalable and resilient web service. It transforms a simple creative brief into a multi-format fashion intelligence package: a structured trend report (JSON), an art-directed style guide with a defined mood and photographic style, and a suite of editorial-quality images.
 
-Built on a robust stack of FastAPI, Celery, and Redis, the engine is architected for high performance, true asynchronicity, and long-term maintainability. It features an intelligent, multi-level caching system and a modular, strategy-based design for its core logic, making it a reliable foundation for creative AI workflows.
+Built on a robust stack of FastAPI, Celery, and Redis, the engine is architected for high performance and long-term maintainability. It features an intelligent, multi-level caching system and a modular, strategy-based design for its core logic. The system uses sophisticated AI-driven techniques like **Conceptual Blending** for innovation, a **Creative Compass** for mood-based guidance, and a "divide and conquer" synthesis process to achieve a level of creative coherence that mimics a world-class design studio.
 
 ---
 
@@ -26,9 +26,6 @@ Built on a robust stack of FastAPI, Celery, and Redis, the engine is architected
     - [Terminal 2: Start Celery Worker](#terminal-2-start-celery-worker)
     - [Terminal 3: Start the API Server](#terminal-3-start-the-api-server)
   - [Interacting with the Engine](#interacting-with-the-engine)
-    - [Recommended: Use the API Client](#recommended-use-the-api-client)
-    - [Direct API (curl)](#direct-api-curl)
-    - [Local testing (debugging pipeline)](#local-testing-debugging-pipeline)
   - [API Output Structure](#api-output-structure)
   - [Troubleshooting](#troubleshooting)
 
@@ -39,28 +36,29 @@ Built on a robust stack of FastAPI, Celery, and Redis, the engine is architected
 This engine is built with a few core architectural principles in mind:
 
 *   **Separation of Concerns:** The **Service Layer** (`api/`) is strictly decoupled from the **Core Engine** (`catalyst/`). The API handles web requests and jobs, while the engine focuses purely on generating fashion intelligence. This modularity makes the system easier to maintain and test.
-*   **Resilience by Design:** The pipeline features granular, stage-aware exception handling, and the external API clients have built-in retry and backoff logic. The system is designed to salvage partial results from non-critical failures, maximizing value on every run.
-*   **Strategy-Based Logic:** Complex, multi-step operations (like report synthesis and prompt generation) are encapsulated in dedicated "strategy" classes. This eliminates code duplication and makes the core pipeline processors lean, readable controllers.
+*   **Strategy-Based Logic:** Complex, multi-step operations (like report synthesis) are encapsulated in dedicated "builder" classes. This eliminates monolithic functions, promotes SOLID principles, and makes the core pipeline processors lean, readable controllers.
+*   **Resilience by Design:** The pipeline features granular, stage-aware exception handling, and external API clients have built-in retry logic for transient errors. The system is designed to gracefully handle minor creative failures from the AI and proceed to a successful conclusion.
 *   **Configuration over Code:** Key behaviors, such as API keys, URLs, and the choice of image generation model, are controlled via environment variables (`.env`), not hardcoded values.
 
 ---
 
 ## Key Features
 
-*   **True Asynchronous Processing**: A FastAPI front-end accepts jobs and queues them to Celery. The tasks themselves are fully `async`, ensuring non-blocking I/O throughout the pipeline for maximum throughput.
-*   **Modular, Strategy-Based Architecture**: Core logic is delegated to specialized, reusable components (`ReportAssembler`, `PromptGenerator`), adhering to SOLID principles and making the system highly maintainable.
+*   **True Asynchronous Processing**: A FastAPI front-end accepts jobs and queues them to Celery, ensuring the API is always responsive. The core pipeline logic is fully `async` for maximum I/O throughput.
 *   **Intelligent Multi-Level Caching**:
     *   **L0 Intent Cache (High-Speed):** A pre-inference Redis cache that provides instant results for semantically identical requests, even with different wording.
     *   **L1 Consistency Cache (Semantic):** A vector-based ChromaDB cache that ensures different phrasings of the same core idea produce identical, high-quality results without redundant work.
-*   **Resilient, Native Async API Client**: A custom, modular client for the Gemini API with built-in exponential backoff and retry logic, using the latest native `async` methods for optimal performance.
-*   **AI Creative Direction**: Translates trend data into a professional photography style guide, which is then used to generate highly specific, art-directed image prompts.
+*   **AI-Powered Creative Direction**:
+    *   **Conceptual Blending:** Uses a "Creative Antagonist" not for simple opposition, but to find an opposite world, isolate one tangible principle, and synthesize it into the core theme to create a single, surprising, and innovative design detail.
+    *   **Creative Compass (`desired_mood`):** The system first infers a set of evocative "mood words" from the user's request. This "compass" then guides all downstream creative choices, from the selection of inspirational designers to the final art direction of the photography.
+*   **Modular "Divide and Conquer" Synthesis**: Instead of a single, unreliable prompt, the system uses a sequence of smaller, hyper-focused, and schema-driven AI calls to assemble the final report. This "builder" pattern dramatically increases the reliability and quality of the structured output.
 *   **Robust Artifact Handling**: A transaction-like caching mechanism with automatic rollback prevents data corruption and orphaned files, ensuring data integrity between the file system and the vector database.
 
 ---
 
 ## Architecture Overview
 
-The engine is architected as a modern, decoupled web service. The diagram below illustrates the full request lifecycle, including the two-level caching strategy.
+The engine is architected as a modern, decoupled web service. The diagram below illustrates the full request lifecycle.
 
 <details>
 <summary>Click to view the Mermaid diagram source code</summary>
@@ -103,12 +101,12 @@ graph TD
 
     subgraph L0_Decision; L0_Redis -- 7a. L0 HIT --> D_L0_Hit; L0_Redis -- 7b. L0 MISS --> E; end
 
-    E -- 8. Run Briefing --> F
+    E -- 8. Run Briefing (incl. Mood & Synthesis) --> F
     F -- 9. Check L1 Cache --> L1_Chroma
 
     subgraph L1_Decision; L1_Chroma -- 10a. L1 HIT --> G; L1_Chroma -- 10b. L1 MISS --> F_Run; end
 
-    F_Run[Run Full Synthesis] -- 11. --> G
+    F_Run[Run Full Synthesis via Builders] -- 11. --> G
     G -- 12. Finalize & Store in L1 --> D_L1_Done
 
     D_L0_Hit -- 13a. Job Complete --> C
@@ -126,50 +124,88 @@ graph TD
 
 ## Repository Structure
 
-The project is organized into distinct layers and features, promoting high cohesion and low coupling.
-
 ```
 creative-catalyst-engine/
-├── .env                  # Local environment variables (API keys, URLs).
-├── README.md
-├── requirements.txt
+├── .env                  # Environment variables (API keys, URLs). NOT committed to Git.
+├── .gitignore            # Specifies files for Git to ignore.
+├── README.md             # The high-level project documentation you are reading.
+├── requirements.txt      # Python package dependencies.
+├── clear_cache.py        # A utility script to wipe all caches (Redis, Chroma, files).
 │
-├── api/                  # SERVICE LAYER: Handles web requests and background jobs.
-│   ├── main.py           # FastAPI application, defines API endpoints.
-│   └── worker.py         # Celery worker with the main async task orchestrator.
+├── api/                  # The Service Layer: Handles web requests, jobs, and L0 caching.
+│   ├── __init__.py
+│   ├── main.py           # FastAPI application: Defines API endpoints (e.g., /v1/creative-jobs).
+│   ├── worker.py         # Main Celery worker entry point (for Linux/WSL).
+│   ├── eventlet_worker.py# Special Celery entry point for macOS compatibility.
+│   ├── cache.py          # Logic for the L0 (high-speed intent) Redis cache.
+│   ├── config.py         # API-layer specific configurations (e.g., Redis cache prefix).
+│   └── prompts.py        # Prompts used exclusively by the API layer (e.g., for L0 key generation).
 │
 ├── api_client/           # A standalone Python client for interacting with the API.
+│   ├── __init__.py
+│   ├── client.py         # The `CreativeCatalystClient` class for submitting and polling jobs.
+│   ├── exceptions.py     # Custom exceptions for the client (e.g., JobFailedError).
+│   └── example.py        # A simple script demonstrating how to use the client.
 │
-├── catalyst/             # CORE ENGINE (DOMAIN LAYER): The main application logic.
-│   ├── main.py           # Entry point for local testing and the core `run_pipeline` function.
-│   ├── settings.py       # Central configuration for the application.
-│   ├── context.py        # Defines the `RunContext` data object.
-│   │
-│   ├── caching/          # L1 Semantic Cache logic (ChromaDB).
-│   │
-│   ├── clients/          # Clients for communicating with external services.
-│   │   └── gemini/       # --> Modular, native async client for the Gemini API.
-│   │
-│   ├── models/           # Pydantic data models for the final report structure.
-│   │
-│   └── pipeline/         # The core multi-stage processing pipeline.
-│       ├── orchestrator.py   # Manages the pipeline execution flow and granular error handling.
-│       │
-│       ├── processors/     # --> Lean processors that act as pipeline step controllers.
-│       │   ├── briefing.py
-│       │   ├── synthesis.py
-│       │   ├── reporting.py
-│       │   └── generation/
-│       │
-│       ├── synthesis_strategies/ # --> NEW: Encapsulated logic for building reports.
-│       │   └── report_assembler.py
-│       │
-│       └── prompt_engineering/   # --> NEW: Encapsulated logic for generating prompts.
-│           └── prompt_generator.py
+└── catalyst/             # The Core Engine: All business logic for the creative pipeline.
+    ├── __init__.py
+    ├── main.py           # Core `run_pipeline` function; the main entry point for the engine.
+    ├── settings.py       # Central configuration for the engine (file paths, model names).
+    ├── context.py        # Defines the `RunContext` class, the data object passed through the pipeline.
+    │
+    ├── caching/          # L1 Semantic Cache logic.
+    │   ├── __init__.py
+    │   ├── cache_manager.py # High-level interface for the L1 cache.
+    │   └── report_cache.py  # ChromaDB implementation for vector-based semantic caching.
+    │
+    ├── clients/          # Clients for external services.
+    │   └── gemini/
+    │       ├── __init__.py         # Public interface for the Gemini client.
+    │       ├── client_instance.py  # Initializes the singleton Gemini client object.
+    │       ├── core.py             # Core logic for making sync/async API calls.
+    │       ├── resilience.py       # Retry logic and backoff delays.
+    │       └── schema.py           # Pydantic schema processing for Gemini's structured output.
+    │
+    ├── models/
+    │   └── trend_report.py   # Pydantic models for the final, structured `FashionTrendReport`.
+    │
+    ├── pipeline/         # The core multi-stage processing pipeline.
+    │   ├── __init__.py
+    │   ├── orchestrator.py   # The `PipelineOrchestrator` that manages the execution flow.
+    │   ├── base_processor.py # The abstract base class that all pipeline steps inherit from.
+    │   │
+    │   ├── processors/       # The main controllers for each stage of the pipeline.
+    │   │   ├── __init__.py
+    │   │   ├── briefing.py     # Processors for Stage 1: Deconstruction, Ethos, Enrichment.
+    │   │   ├── synthesis.py    # Processors for Stage 3: Web Research, Structuring, Fallback.
+    │   │   ├── reporting.py    # Processor for Stage 4: Saving files, triggering prompt generation.
+    │   │   │
+    │   │   └── generation/     # Image generation strategies.
+    │   │       ├── __init__.py             # Factory function `get_image_generator`.
+    │   │       ├── base_generator.py       # Abstract base class for image generators.
+    │   │       └── nanobanana_generator.py # Specific implementation for the Nano Banana model.
+    │   │
+    │   ├── prompt_engineering/
+    │   │   └── prompt_generator.py # The class that builds the final image prompts from the report.
+    │   │
+    │   └── synthesis_strategies/ # The modular, "divide and conquer" logic for report assembly.
+    │       ├── __init__.py
+    │       ├── report_assembler.py   # The orchestrator that manages the specialized builders.
+    │       ├── section_builders.py   # NEW: The specialized builder classes for each report section.
+    │       └── synthesis_models.py   # Intermediate Pydantic models for the builder outputs.
+    │
+    ├── prompts/
+    │   └── prompt_library.py # The master library of all creative and synthesis prompts.
+    │
+    └── utilities/            # Shared helper functions.
+        ├── __init__.py
+        ├── config_loader.py  # Loads and formats `sources.yaml`.
+        ├── json_parser.py    # Robustly parses JSON from LLM outputs.
+        └── logger.py         # Configures the centralized application logger.
 │
-├── artifact_cache/       # Permanent, persistent storage for L1 cached artifacts.
+├── artifact_cache/       # Permanent storage for L1 cached artifacts (images, reports).
 ├── chroma_cache/         # Directory for the ChromaDB vector store (L1 cache).
-├── logs/
+├── logs/                 # Contains the rotating log files (e.g., catalyst_engine.log).
 └── results/              # Rotating storage for the N most recent user-facing runs.
 ```
 
@@ -203,7 +239,6 @@ Create a `.env` file in the project root. This file is ignored by Git.
 
 # --- API Keys & Secrets ---
 GEMINI_API_KEY="your_gemini_api_key_here"
-OPENAI_API_KEY="your_openai_api_key_here" # For DALL-E (optional)
 
 # --- Feature Flags & Model Selection ---
 ENABLE_IMAGE_GENERATION=True
@@ -227,11 +262,7 @@ You will run three processes in separate terminals.
 ### Terminal 1: Start Redis
 
 ```bash
-# Run this once to create and name the container
 docker run -d -p 6379:6379 --name creative-catalyst-redis redis
-
-# Use this to start/stop it in the future
-docker start creative-catalyst-redis
 ```
 
 ### Terminal 2: Start Celery Worker
@@ -251,7 +282,6 @@ celery -A api.eventlet_worker.celery_app worker --loglevel=info -P eventlet
 
 ```bash
 source venv/bin/activate
-# The --host 0.0.0.0 flag is crucial for allowing other machines to connect.
 uvicorn api.main:app --reload --port 9500 --host 0.0.0.0
 ```
 
@@ -259,36 +289,9 @@ uvicorn api.main:app --reload --port 9500 --host 0.0.0.0
 
 ## Interacting with the Engine
 
-### Recommended: Use the API Client
-
-For a full end-to-end test, run the example client from the project root:
-```bash
-python -m api_client.example
-```
-
-### Direct API (curl)
-
-**1. Submit a job:**
-```bash
-curl -X POST "http://127.0.0.1:9500/v1/creative-jobs" \
-  -H "Content-Type: application/json" \
-  -d '{"user_passage": "A report on the New Look silhouette, modernized for today''s Dior."}'
-```
-
-**2. Poll for the result:**
-The command will return a `job_id`. Use it to poll the status endpoint.
-```bash
-curl "http://127.0.0.1:9500/v1/creative-jobs/{your_job_id_here}"
-```
-
----
-
-### Local testing (debugging pipeline)
-
-Edit `catalyst/main.py` and change `USER_PASSAGE`, then:
-```bash
-python -m catalyst.main
-```
+*   **Recommended:** Use the API Client via `python -m api_client.example`.
+*   **Direct API (curl):** First, `POST` to `/v1/creative-jobs`, then `GET` the `/v1/creative-jobs/{job_id}` endpoint.
+*   **Local Debugging:** Edit `catalyst/main.py` and run `python -m catalyst.main`.
 
 ---
 
@@ -303,17 +306,18 @@ A completed job response contains the final report with image URLs embedded dire
   "status": "complete",
   "result": {
     "final_report": {
-      "overarching_theme": "The Gorpcore Aesthetic...",
+      "overarching_theme": "The concept of 'Bio-Luminescent Leisure'...",
+      "desired_mood": ["Sophisticated", "Effortless", "Radiant"],
       "detailed_key_pieces": [
         {
-          "key_piece_name": "The Urban Tech Shell",
-          "description": "A versatile shell jacket...",
-          "final_garment_image_url": "http://127.0.0.1:9500/results/20250908-143000_gorpcore/the-urban-tech-shell.png",
-          "mood_board_image_url": "http://127.0.0.1:9500/results/20250908-143000_gorpcore/the-urban-tech-shell-moodboard.png"
+          "key_piece_name": "The 'Hydro-Lumina Sculpted Maillot'",
+          "description": "This one-piece swimsuit serves as the primary canvas...",
+          "final_garment_image_url": "http://127.0.0.1:9500/results/run-folder/garment.png",
+          "mood_board_image_url": "http://127.0.0.1:9500/results/run-folder/moodboard.png"
         }
       ]
     },
-    "artifacts_path": "/path/to/project/results/20250908-143000_gorpcore"
+    "artifacts_path": "/path/to/project/results/run-folder"
   }
 }
 ```
@@ -322,7 +326,10 @@ A completed job response contains the final report with image URLs embedded dire
 
 ## Troubleshooting
 
-*   **500 Internal Server Error:** Check the logs in your **Celery worker terminal**. This indicates an error during the background job execution, and the full traceback will be printed there.
-*   **Images not downloading / URLs are incorrect:** The `ASSET_BASE_URL` in your `.env` file is almost certainly incorrect. It must be the public-facing address of your server that the client machine can reach (e.g., `http://<your_server_lan_ip>:9500` if testing on a local network).
-*   **Could not connect / 502 Bad Gateway:** Ensure the API server (`uvicorn`) is running and that you started it with `--host 0.0.0.0` if connecting from another machine.
-*   **Celery worker on macOS fails to start:** Ensure you are using the `eventlet_worker.py` entry point as described in the run commands, which is required for Celery on macOS.
+| Symptom                                | Probable Cause & Solution                                                                                                                                                                                                                                                       |
+| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **500 Internal Server Error**          | A background job failed. **Check the logs in your Celery worker terminal.** The full Python traceback, which shows the exact error, will be printed there. This is the most important step for debugging any pipeline failure.                                                  |
+| **Images not loading (404 Not Found)** | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing address of your server that the client machine can reach (e.g., `http://<your_server_lan_ip>:9500` if testing on a local network). Also ensure the `uvicorn` server is running.             |
+| **Empty `accessories` field**          | This is not a bug, but a known variance. The system is designed to gracefully handle cases where the AI's creative enrichment for a secondary field (like accessories) fails. The pipeline will complete successfully with a rich report, but this specific field may be empty. |
+| **`asyncio` or `eventlet` errors**     | A conflict between `asyncio` and `eventlet` is occurring. The worker is designed to handle this by running the `async` pipeline in a dedicated, isolated event loop. Ensure your `api/worker.py` uses the `asyncio.new_event_loop()` pattern.                                   |
+| **Getting old/cached results**         | The L0 (Redis) or L1 (Chroma) caches are still active. Run the master cache clearing utility: `python clear_cache.py`. This script now clears all file-based caches, results folders, and the Redis database for a completely fresh start.                                      |

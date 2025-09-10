@@ -9,6 +9,7 @@ the report is encapsulated in the `ReportAssembler` strategy, ensuring this modu
 remains clean, readable, and focused on its role within the pipeline orchestration.
 """
 
+import asyncio
 from catalyst.pipeline.base_processor import BaseProcessor
 from catalyst.context import RunContext
 from ...clients import gemini
@@ -20,7 +21,8 @@ from ..synthesis_strategies.report_assembler import ReportAssembler
 class WebResearchProcessor(BaseProcessor):
     """
     Pipeline Step 4: Instructs the LLM to perform a web search and return a
-    single, unstructured block of text summarizing its findings.
+    single, unstructured block of text summarizing its findings. Implements
+    a retry mechanism for transient errors or empty responses.
     """
 
     async def process(self, context: RunContext) -> RunContext:
@@ -28,6 +30,7 @@ class WebResearchProcessor(BaseProcessor):
             "🌐 Starting web research using Gemini's native search capabilities..."
         )
         brief = context.enriched_brief
+
         prompt = prompt_library.WEB_RESEARCH_PROMPT.format(
             brand_ethos=context.brand_ethos or "No specific ethos provided.",
             curated_sources=FORMATTED_SOURCES,
@@ -36,10 +39,36 @@ class WebResearchProcessor(BaseProcessor):
             target_audience=brief.get("target_audience") or "a general audience",
             region=brief.get("region") or "Global",
             key_attributes=", ".join(brief.get("key_attributes") or ["general"]),
-            creative_antagonist=brief.get("creative_antagonist") or "mainstream trends",
+            antagonist_synthesis=context.antagonist_synthesis
+            or "No specific synthesis provided.",
             search_keywords=", ".join(brief.get("search_keywords", [])),
         )
-        response = await gemini.generate_content_async(prompt_parts=[prompt])
+
+        # --- START OF DEFINITIVE FIX ---
+        # Implement a retry loop to handle transient API errors or empty responses
+        # before resorting to the full fallback path.
+        response = None
+        MAX_RETRIES = 3
+        RETRY_DELAY_SECONDS = 2
+
+        for attempt in range(MAX_RETRIES):
+            self.logger.info(
+                f"Attempt {attempt + 1}/{MAX_RETRIES} to conduct web research..."
+            )
+            api_response = await gemini.generate_content_async(prompt_parts=[prompt])
+            if api_response and api_response.get("text"):
+                self.logger.info(
+                    f"✅ Successfully received web research content on attempt {attempt + 1}."
+                )
+                response = api_response
+                break  # Exit the loop on success
+            else:
+                self.logger.warning(
+                    f"⚠️ Web research attempt {attempt + 1} returned no content. Retrying in {RETRY_DELAY_SECONDS}s..."
+                )
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_DELAY_SECONDS)
+        # --- END OF DEFINITIVE FIX ---
 
         if response and response.get("text"):
             self.logger.info(
@@ -47,8 +76,8 @@ class WebResearchProcessor(BaseProcessor):
             )
             context.raw_research_context = response["text"]
         else:
-            self.logger.warning(
-                "⚠️ Web research returned no content. The fallback path will now be triggered."
+            self.logger.error(
+                "❌ Web research returned no content after all retry attempts. The fallback path will now be triggered."
             )
             context.raw_research_context = ""
         return context
@@ -56,7 +85,6 @@ class WebResearchProcessor(BaseProcessor):
 
 class ContextStructuringProcessor(BaseProcessor):
     """
-
     Pipeline Step 5: Organizes the raw research context into a clean,
     bulleted list to prepare for final JSON generation.
     """
@@ -72,7 +100,7 @@ class ContextStructuringProcessor(BaseProcessor):
 
         brief = context.enriched_brief
         instruction = (
-            f"Focus exclusively on the specified garment type: **{brief['garment_type']}**. Generate 2-3 distinct variations or interpretations of this single garment."
+            f"Focus exclusively on the specified garment type: **{brief.get('garment_type', 'clothing')}**. Generate 2-3 distinct variations or interpretations of this single garment."
             if brief.get("garment_type")
             else "Identify 2-3 distinct and compelling key garment pieces from the research. They should be different types (e.g., one coat, one cape)."
         )
@@ -139,8 +167,6 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
     async def process(self, context: RunContext) -> RunContext:
         self.logger.warning("⚙️ Activating direct knowledge fallback synthesis path.")
 
-        # The assembler will automatically detect this is a fallback run because
-        # context.structured_research_context is empty.
         assembler = ReportAssembler(context)
         final_report_data = await assembler.assemble_report()
 
@@ -153,7 +179,5 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
             self.logger.critical(
                 "❌ Direct knowledge synthesis also failed. The model could not generate a report."
             )
-            # This is a critical failure, but we don't raise an exception to allow the orchestrator
-            # to complete its cleanup and artifact saving.
 
         return context

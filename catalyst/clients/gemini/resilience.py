@@ -8,8 +8,16 @@ import random
 
 
 def should_retry(e: Exception) -> bool:
-    """Determines if an API error is transient and worth retrying."""
+    """
+    Determines if an API error is transient and worth retrying. This now
+    includes handling empty responses as a retryable condition.
+    """
     error_str = str(e).lower()
+
+    # --- START OF DEFINITIVE FIX ---
+    # Add "empty response object" to the list of retryable transient errors.
+    # This makes the entire client more robust against API flakiness or
+    # safety-filter-induced empty returns.
     retryable_messages = [
         "deadline exceeded",
         "service unavailable",
@@ -17,7 +25,10 @@ def should_retry(e: Exception) -> bool:
         "503",
         "504",
         "429",  # Rate limiting
+        "api call returned an empty response object",  # The critical addition
     ]
+    # --- END OF DEFINITIVE FIX ---
+
     return any(msg in error_str for msg in retryable_messages)
 
 

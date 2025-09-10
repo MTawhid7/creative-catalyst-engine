@@ -31,10 +31,12 @@ class RunContext:
 
         # --- Pipeline Data Fields ---
         self.enriched_brief: Dict = {}
-        # --- START OF FIX ---
-        # Add a new field to hold the deeper understanding of the user's philosophy.
         self.brand_ethos: str = ""
-        # --- END OF FIX ---
+        # --- START OF DEFINITIVE FIX ---
+        # Add a new field to hold the specific, synthesized design idea that
+        # will be used to inject innovation into the core theme.
+        self.antagonist_synthesis: str = ""
+        # --- END OF DEFINITIVE FIX ---
         self.raw_research_context: str = ""
         self.structured_research_context: str = ""
         self.final_report: Dict = {}
@@ -62,7 +64,11 @@ class RunContext:
             "run_id": self.run_id,
             "user_passage": self.user_passage,
             "enriched_brief": self.enriched_brief,
-            "brand_ethos": self.brand_ethos,  # Add to logging
+            "brand_ethos": self.brand_ethos,
+            # --- START OF DEFINITIVE FIX ---
+            # Add the new field to the logging output.
+            "antagonist_synthesis": self.antagonist_synthesis,
+            # --- END OF DEFINITIVE FIX ---
             "raw_research_context_length": len(self.raw_research_context),
             "structured_research_context_length": len(self.structured_research_context),
             "final_report_keys": (

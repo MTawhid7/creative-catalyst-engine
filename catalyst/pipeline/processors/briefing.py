@@ -11,10 +11,7 @@ import asyncio
 from typing import Optional, Dict, Any, List
 import re
 
-# --- START OF FIX: Add all required imports and class definitions ---
 from pydantic import BaseModel, Field
-
-# --- END OF FIX ---
 
 from catalyst.pipeline.base_processor import BaseProcessor
 from catalyst.context import RunContext
@@ -23,24 +20,29 @@ from ...prompts import prompt_library
 from ...utilities.json_parser import parse_json_from_llm_output
 
 
-# --- START OF FIX: Define Pydantic models for structured output ---
+# --- Pydantic models for structured output ---
 class ConceptsModel(BaseModel):
     concepts: List[str] = Field(
         ..., description="A list of 3-5 high-level creative concepts."
     )
 
 
-class AntagonistModel(BaseModel):
-    antagonist: str = Field(
-        ..., description="A short, powerful phrase for the creative antagonist."
+# --- START OF DEFINITIVE FIX ---
+# Update the Pydantic model to match the new prompt's output schema.
+class AntagonistSynthesisModel(BaseModel):
+    """A model for the output of the creative synthesis prompt."""
+
+    antagonist_synthesis: str = Field(
+        ...,
+        description="A single, innovative design synthesis that elevates the core theme.",
     )
+
+
+# --- END OF DEFINITIVE FIX ---
 
 
 class KeywordsModel(BaseModel):
     keywords: List[str] = Field(..., description="A list of relevant search keywords.")
-
-
-# --- END OF FIX ---
 
 
 class BriefDeconstructionProcessor(BaseProcessor):
@@ -65,6 +67,8 @@ class BriefDeconstructionProcessor(BaseProcessor):
         prompt = prompt_library.INTELLIGENT_DECONSTRUCTION_PROMPT.format(
             user_passage=context.user_passage
         )
+        # Note: This specific call does not use a response_schema because it has a <reasoning> block
+        # that would interfere with strict JSON-only parsing by the Gemini client.
         response_data = await gemini.generate_content_async(prompt_parts=[prompt])
 
         if not response_data or "text" not in response_data:
@@ -139,6 +143,8 @@ class EthosClarificationProcessor(BaseProcessor):
         prompt = prompt_library.ETHOS_ANALYSIS_PROMPT.format(
             user_passage=context.user_passage
         )
+        # No response_schema is defined here as it's a simple, single-key JSON that is
+        # robustly parsed by our utility function.
         response_data = await gemini.generate_content_async(prompt_parts=[prompt])
 
         if response_data and response_data.get("text"):
@@ -207,24 +213,36 @@ class BriefEnrichmentProcessor(BaseProcessor):
             response_schema=ConceptsModel,
             task_name="concepts",
         )
-        antagonist_task = self._get_enrichment_data_async(
+
+        # --- START OF DEFINITIVE FIX ---
+        # Update the antagonist task to use the new prompt, the new response schema,
+        # and handle the new output correctly.
+        synthesis_task = self._get_enrichment_data_async(
             prompt=prompt_library.CREATIVE_ANTAGONIST_PROMPT.format(
                 **antagonist_prompt_args
             ),
-            response_schema=AntagonistModel,
-            task_name="antagonist",
+            response_schema=AntagonistSynthesisModel,
+            task_name="antagonist_synthesis",
         )
 
-        concepts_result, antagonist_result = await asyncio.gather(
-            expansion_task, antagonist_task
+        concepts_result, synthesis_result = await asyncio.gather(
+            expansion_task, synthesis_task
         )
 
         context.enriched_brief["expanded_concepts"] = (
             concepts_result.get("concepts", []) if concepts_result else []
         )
-        context.enriched_brief["creative_antagonist"] = (
-            antagonist_result.get("antagonist") if antagonist_result else None
-        )
+
+        # Store the new synthesis result in its dedicated field in the RunContext.
+        if synthesis_result and synthesis_result.get("antagonist_synthesis"):
+            context.antagonist_synthesis = synthesis_result["antagonist_synthesis"]
+            self.logger.info("✅ Generated innovative antagonist synthesis.")
+            self.logger.debug(f"Synthesis: {context.antagonist_synthesis}")
+        else:
+            self.logger.warning(
+                "⚠️ Failed to generate antagonist synthesis. Proceeding without it."
+            )
+        # --- END OF DEFINITIVE FIX ---
 
         search_keywords = set(context.enriched_brief.get("search_keywords", []))
         if context.enriched_brief.get("theme_hint"):
