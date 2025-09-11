@@ -354,15 +354,15 @@ JSON RESPONSE:
 # --- Stage 2 & 3: Synthesis Prompts ---
 # Prompts for the core synthesis steps: research, structuring, top-level synthesis, accessories, and key pieces.
 WEB_RESEARCH_PROMPT = """
-You are a Lead Creative Strategist and Cultural Research Analyst. Your primary directive is to conduct deep, targeted research to support and enrich a specific, innovative design concept, synthesizing your findings into a professional creative dossier.
+You are a Lead Creative Strategist and Cultural Research Analyst. Your primary directive is to conduct deep, targeted research to support and enrich a specific design concept, synthesizing your findings into a professional creative dossier.
 
-**CORE PRINCIPLES:**
+**CORE PRINCIPIPLES:**
 1.  **Philosophical Governance:** The **Brand Ethos** is your primary filter. All synthesized information must align with this guiding philosophy.
 2.  **Creative Mandate: The Core Theme is the Sole Focus:** Your research must be 95 percent focused on the **Core Theme**. Use the **Subtle Point of Contrast** only as a minor source of inspiration for a single, unique fabric texture or construction detail.
 3.  **Adopt a Strategic Research Stance:** Based on the brief, you must consciously prioritize your research focus. State your primary stance at the beginning of your output (e.g., "Stance: Market Pulse focus," "Stance: Cultural Deep Dive focus").
-4.  **Synthesize, Don't Just List:** Connect ideas and explain the "why" behind trends, showing how they support the `antagonist_synthesis`.
+4.  **Synthesize, Don't Just List:** Connect ideas and explain the "why" behind trends, showing how they support the **Core Theme**.
 5.  **Garment-Specific Focus:** If a `garment_type` is specified, your "KEY GARMENTS" research must focus exclusively on variations of that garment.
-6.  **Strict Markdown Structure:** Your output MUST be a well-organized Markdown document using the exact headings specified below.
+6.  **Strict Adherence to Structure:** Your output MUST be a well-organized document using the exact headings specified below. You MUST adhere to all formatting requirements for both Markdown and JSON sections.
 
 ---
 **GUIDING PHILOSOPHY & SOURCES:**
@@ -378,7 +378,7 @@ You are a Lead Creative Strategist and Cultural Research Analyst. Your primary d
 - **A Subtle Point of Contrast to Incorporate:** {antagonist_synthesis}
 - **Key Search Concepts:** {search_keywords}
 ---
-**REQUIRED OUTPUT STRUCTURE (Use these exact Markdown headings):**
+**REQUIRED OUTPUT STRUCTURE (Use these exact Markdown headings in this exact order):**
 
 **Stance:** [Your chosen research stance: Market Pulse, Cultural Deep Dive, or Commercial Intelligence]
 
@@ -386,22 +386,31 @@ You are a Lead Creative Strategist and Cultural Research Analyst. Your primary d
 A synthesis of the core theme, explaining its main ideas and cultural significance.
 
 ## CULTURAL DRIVERS
-Bulleted list of socio-cultural movements driving this theme. For each, provide a brief explanation of its **impact** on the theme's aesthetics or philosophy.
+A bulleted list of socio-cultural movements driving this theme. For each, provide a brief explanation of its **impact**.
 
 ## INFLUENTIAL MODELS & MUSES
-Bulleted list of archetypes, subcultures, or individuals who embody the trend's spirit.
+A bulleted list of archetypes, subcultures, or individuals who embody the trend's spirit.
 
 ## KEY GARMENTS
-Provide a high-level creative brief for 2-3 key garments. For each, describe the garment's **name and its conceptual role** in the collection, explaining how it serves as the primary canvas for the innovative idea in the `antagonist_synthesis`. **Do not describe specific technical details like trims or lining here.**
+A high-level creative brief for 2-3 key garments. For each, describe the garment's **name and its conceptual role** in the collection. You may also note how a detail inspired by the 'Subtle Point of Contrast' is applied to it. **Do not describe other technical details like trims or lining here.**
 
 ## FABRICS & MATERIALS
-Analysis of the materials, textures, and finishes required to achieve both the core theme AND the specific `antagonist_synthesis`.
+An analysis of the materials, textures, and finishes required to achieve the core theme. This is the primary section where you may incorporate a specific material or texture inspired by the 'Subtle Point of Contrast'.
 
 ## COLOR PALETTE
-**Tonal Story:** A short, evocative paragraph describing the overall mood and psychology of the color direction.
+**CRITICAL: This section must ONLY contain the Markdown bulleted list of colors.** Do not include the Tonal Story paragraph here.
 -   **Core Palette (60%):** 2-3 primary, foundational colors.
--   **Secondary Palette (30%):** 2-3 supporting colors used for layering and depth.
--   **Accent Palette (10%):** 1-2 highlight colors, often drawn from the `antagonist_synthesis`, used for trims, details, or a single statement piece.
+-   **Secondary Palette (30%):** 2-3 supporting colors for layering and depth.
+-   **Accent Palette (10%):** 1-2 highlight colors, used for trims or details.
+
+## STRATEGIC_NARRATIVES_JSON
+**CRITICAL: This final section must ONLY contain a single, valid JSON object inside a Markdown code fence.** Do not add any other text or explanation.
+```json
+{{
+  "tonal_story": "A short, evocative paragraph describing the overall mood and psychology of the color direction.",
+  "accessory_strategy": "A short, declarative sentence defining the strategic role of accessories in the collection."
+}}
+```
 
 ---
 **SYNTHESIZED RESEARCH DOSSIER:**
@@ -832,6 +841,7 @@ An editorial fashion photograph for a high-end magazine. Full-body portrait. The
 -   **Model:** A professional {target_gender} fashion model of {target_model_ethnicity} ethnicity, posed in a dynamic, candid way that suggests natural movement.
 
 **--- FINAL EXECUTION NOTES ---**
--   **Positive Keywords:** high-detail, authentic, shallow depth of field.
--   **Negative Keywords:** Avoid {negative_style_keywords}, nsfw, deformed, extra limbs, poor quality, watermark, logo, text.
+-   **Positive Keywords:** high-detail, authentic, shallow depth of field, clean finish, uniform color.
+-   **Stylistic Negative Keywords:** Avoid {negative_style_keywords}.
+-   **Quality Control Negative Keywords:** Avoid nsfw, deformed, extra limbs, poor quality, logo, text, mismatched, asymmetrical, inconsistent, blotchy, uneven, unfinished, frayed.
 """

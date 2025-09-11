@@ -9,6 +9,16 @@ from typing import List, Dict
 from pydantic import BaseModel, Field
 
 
+# --- START: ADD NEW MODEL ---
+class ColorPaletteStrategyModel(BaseModel):
+    tonal_story: str = Field(
+        ...,
+        description="A short, evocative paragraph describing the overall mood and psychology of the color direction.",
+    )
+
+
+# --- END: ADD NEW MODEL ---
+
 # --- START OF DEFINITIVE FIX ---
 # Move the NarrativeSettingModel here to its correct, centralized location.
 class NarrativeSettingModel(BaseModel):

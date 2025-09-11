@@ -16,6 +16,7 @@ from ...context import RunContext
 from ...models.trend_report import KeyPieceDetail
 from ...prompts import prompt_library
 from ...utilities.logger import get_logger
+from ...utilities.json_parser import parse_json_from_llm_output
 
 # --- START OF DEFINITIVE FIX 1 ---
 # Import the newly relocated NarrativeSettingModel
@@ -154,23 +155,43 @@ class NarrativeSettingBuilder(BaseSectionBuilder):
 
 
 class StrategiesBuilder(BaseSectionBuilder):
-    """Extracts the color and accessory strategies."""
+    """
+    Extracts the color and accessory strategies from the research context.
+    This version uses robust JSON parsing to extract both strategies from a
+    single, structured object, eliminating all fragile string matching.
+    """
 
     async def build(self, research_context: str, is_fallback: bool) -> Dict[str, Any]:
+        """Builds the strategies section of the report."""
         if is_fallback:
+            # In the fallback path, there is no research context to parse.
             return {
                 "color_palette_strategy": "No specific color strategy was defined.",
                 "accessory_strategy": "Accessories play a supportive role to complete the look.",
             }
 
-        self.logger.info("✨ Extracting creative strategies...")
-        tonal_story = self._extract_section(
-            research_context, "Tonal Story:", ["Core:", "Secondary:", "Accent:"]
-        )
-        accessory_role = self._extract_section(
-            research_context, "Strategic Role:", ["Key Pieces:"]
-        )
+        self.logger.info("✨ Extracting creative strategies from research context...")
 
+        # New, robust method for extracting both strategies via a single JSON parse.
+        # The parse_json_from_llm_output utility will find the final JSON block
+        # in the text, even inside markdown fences.
+        strategies_json = parse_json_from_llm_output(research_context)
+
+        tonal_story = ""
+        accessory_role = ""
+
+        if strategies_json and isinstance(strategies_json, dict):
+            tonal_story = strategies_json.get("tonal_story", "")
+            accessory_role = strategies_json.get("accessory_strategy", "")
+            self.logger.info(
+                "✅ Successfully extracted 'tonal_story' and 'accessory_strategy' via JSON parsing."
+            )
+        else:
+            self.logger.warning(
+                "⚠️ Could not find or parse the STRATEGIC_NARRATIVES_JSON object in the research context."
+            )
+
+        # Return the final dictionary, applying fallbacks if any part failed.
         return {
             "color_palette_strategy": tonal_story
             or "No specific color strategy was defined.",

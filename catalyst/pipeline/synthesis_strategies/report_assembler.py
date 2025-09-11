@@ -4,8 +4,13 @@
 This module defines the ReportAssembler, a strategy class that orchestrates
 the multi-step, schema-driven process of constructing the final fashion trend report
 by delegating tasks to specialized builder classes.
+
+This version has been optimized to run independent builder tasks concurrently and
+routes the correct version of the research context (raw vs. structured) to the
+appropriate builder.
 """
 
+import asyncio
 from typing import Dict, Optional, Any
 
 from pydantic import ValidationError
@@ -27,7 +32,7 @@ logger = get_logger(__name__)
 class ReportAssembler:
     """
     Orchestrates the step-by-step assembly of the final report by managing
-    a sequence of specialized builder strategies.
+    a sequence of specialized builder strategies with optimized, concurrent execution.
     """
 
     def __init__(self, context: RunContext):
@@ -38,43 +43,48 @@ class ReportAssembler:
     async def assemble_report(self) -> Optional[Dict[str, Any]]:
         """
         Executes the full, multi-step report assembly process by invoking
-        each builder in sequence and validating the final result.
+        each builder in concurrent batches based on their data dependencies.
         """
         is_fallback = not self.context.structured_research_context
         structured_research_context = self.context.structured_research_context or ""
         raw_research_context = self.context.raw_research_context or ""
 
-        # --- Instantiate builders with no immediate data dependencies ---
+        # --- Batch 1: Execute all builders with no inter-dependencies ---
+        logger.info("🚀 Launching first concurrent batch of synthesis tasks...")
+
         top_level_builder = TopLevelFieldsBuilder(self.context)
         strategies_builder = StrategiesBuilder(self.context)
         key_pieces_builder = KeyPiecesBuilder(self.context)
 
-        # --- Execute builder sequence, respecting all data dependencies ---
+        tasks_batch_1 = [
+            top_level_builder.build(structured_research_context, is_fallback),
+            # --- THE KEY CHANGE IS HERE ---
+            # StrategiesBuilder needs the RAW context to find the JSON block.
+            strategies_builder.build(raw_research_context, is_fallback),
+            # --- END OF KEY CHANGE ---
+            key_pieces_builder.build(structured_research_context, is_fallback),
+        ]
 
-        # Step 1: Generate the high-level themes, which are dependencies for other steps.
-        top_level_data = await top_level_builder.build(
-            structured_research_context, is_fallback
-        )
+        results_batch_1 = await asyncio.gather(*tasks_batch_1)
+
+        top_level_data, strategies_data, key_pieces_data = results_batch_1
+
         self.final_report_data.update(top_level_data)
+        self.final_report_data.update(strategies_data)
+        self.final_report_data.update(key_pieces_data)
+        logger.info("✅ First batch of synthesis tasks complete.")
 
-        # Step 2: Now that theme and drivers exist, instantiate and call the NarrativeSettingBuilder.
+        # --- Batch 2: Execute builders that depend on the results of Batch 1 ---
+        logger.info(
+            "🚀 Launching second concurrent batch of dependent synthesis tasks..."
+        )
+
         narrative_builder = NarrativeSettingBuilder(
             self.context,
             theme=self.final_report_data.get("overarching_theme", ""),
             drivers=self.final_report_data.get("cultural_drivers", []),
         )
-        narrative_data = await narrative_builder.build(
-            structured_research_context, is_fallback
-        )
-        self.final_report_data.update(narrative_data)
 
-        # Step 3: Extract the strategic text from the research.
-        strategies_data = await strategies_builder.build(
-            structured_research_context, is_fallback
-        )
-        self.final_report_data.update(strategies_data)
-
-        # Step 4: Now that ALL high-level context is synthesized, instantiate and call the AccessoriesBuilder.
         accessories_builder = AccessoriesBuilder(
             self.context,
             theme=self.final_report_data.get("overarching_theme", ""),
@@ -85,17 +95,21 @@ class ReportAssembler:
                 "accessory_strategy", "Accessories should complete the look."
             ),
         )
-        accessories_data = await accessories_builder.build(
-            raw_research_context, is_fallback
-        )
+
+        tasks_batch_2 = [
+            narrative_builder.build(structured_research_context, is_fallback),
+            accessories_builder.build(raw_research_context, is_fallback),
+        ]
+
+        results_batch_2 = await asyncio.gather(*tasks_batch_2)
+
+        narrative_data, accessories_data = results_batch_2
+
+        self.final_report_data.update(narrative_data)
         self.final_report_data.update(accessories_data)
+        logger.info("✅ Second batch of synthesis tasks complete.")
 
-        # Step 5: Generate the detailed product descriptions.
-        key_pieces_data = await key_pieces_builder.build(
-            structured_research_context, is_fallback
-        )
-        self.final_report_data.update(key_pieces_data)
-
+        # --- Final Assembly and Validation ---
         logger.info("✨ Assembling and validating final report...")
         return self._finalize_and_validate_report()
 
@@ -108,11 +122,7 @@ class ReportAssembler:
         self.final_report_data["antagonist_synthesis"] = (
             self.context.antagonist_synthesis
         )
-
-        # --- START OF DEFINITIVE FIX ---
-        # Add the "Creative Compass" to the final report data before validation.
         self.final_report_data["desired_mood"] = self.brief.get("desired_mood", [])
-        # --- END OF DEFINITIVE FIX ---
 
         demographic_keys = [
             "season",

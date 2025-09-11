@@ -17,7 +17,7 @@ from .caching import cache_manager
 logger = get_logger(__name__)
 
 USER_PASSAGE = """
-Explore swimwear that celebrates the body as sculpture — extreme high-leg cuts exposing hip bones, underboob-friendly bandeaus, asymmetric straps that defy gravity.
+Detail the bespoke suiting process at Kiton or Brioni, focusing on the pinnacle of artisanal craftsmanship from fabric selection to the final fitting.
 """
 
 
