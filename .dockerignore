@@ -1,0 +1,29 @@
+# .dockerignore
+
+# Ignore Python virtual environment
+venv
+.venv
+
+# Ignore Git directory
+.git
+.gitignore
+
+# Ignore IDE and OS-specific files
+.vscode/
+.idea/
+.DS_Store
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore runtime-generated cache and result directories
+/artifact_cache/
+/chroma_cache/
+/logs/
+/results/
+
+# Ignore local environment file (this is handled by docker-compose)
+.env

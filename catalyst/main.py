@@ -17,7 +17,7 @@ from .caching import cache_manager
 logger = get_logger(__name__)
 
 USER_PASSAGE = """
-Detail the bespoke suiting process at Kiton or Brioni, focusing on the pinnacle of artisanal craftsmanship from fabric selection to the final fitting.
+Indian girl with saree but futuristic cyberpunk style, neon lights, high detail, artstation, concept art, digital art, smooth, sharp focus, illustration, art by artgerm and greg rutkowski and alphonse mucha.
 """
 
 

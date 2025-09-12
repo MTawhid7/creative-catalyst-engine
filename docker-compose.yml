@@ -1,0 +1,37 @@
+# docker-compose.yml
+
+services:
+  # The Redis service, using the official Docker image.
+  redis:
+    image: redis:alpine
+    container_name: creative-catalyst-redis
+    ports:
+      - "6379:6379"
+
+  # The FastAPI API service.
+  api:
+    build: .
+    container_name: creative-catalyst-api
+    ports:
+      - "9500:9500"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
+  # The ARQ worker service.
+  worker:
+    build: .
+    container_name: creative-catalyst-worker
+    # --- START: DEFINITIVE COMMAND FIX ---
+    # Override the default CMD with the absolute path to the arq executable.
+    command: /usr/local/bin/arq api.worker_settings.WorkerSettings
+    # --- END: DEFINITIVE COMMAND FIX ---
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis

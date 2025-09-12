@@ -1,36 +1,40 @@
 # api/cache.py
 
 """
-Service-Level L0 Cache Management.
+Service-Level L0 Cache Management. This version is async-native to work
+seamlessly with the ARQ worker.
 """
 
 import hashlib
 import json
 from typing import Dict, Any, Optional
 
-from celery.utils.log import get_task_logger
-from redis import Redis
+from arq.connections import ArqRedis
+
+# --- START: DEFINITIVE LOGGER FIX ---
+# Replace the old Celery logger with our application's standard logger
+# for consistent logging across the entire application.
+from catalyst.utilities.logger import get_logger
+
+# --- END: DEFINITIVE LOGGER FIX ---
 
 from catalyst.clients import gemini as l0_gemini_client
 from catalyst.utilities.json_parser import parse_json_from_llm_output
-# --- START OF FIX: Import from new modular files ---
 from . import config as api_config
 from . import prompts as api_prompts
-# --- END OF FIX ---
 
-logger = get_task_logger(__name__)
+# Instantiate the logger using the application's standard utility.
+logger = get_logger(__name__)
 
 
-def _generate_deterministic_key(user_passage: str) -> Optional[str]:
+async def _generate_deterministic_key(user_passage: str) -> Optional[str]:
     """
-    Makes a fast AI call to extract core entities and builds a stable,
-    deterministic key string from them.
+    Makes a fast ASYNCHRONOUS AI call to extract core entities and builds a
+    stable, deterministic key string from them.
     """
     try:
-        # --- START OF FIX: Use imported prompt ---
         prompt = api_prompts.L0_KEY_GENERATION_PROMPT.format(user_passage=user_passage)
-        # --- END OF FIX ---
-        response = l0_gemini_client.generate_content_sync(prompt_parts=[prompt])
+        response = await l0_gemini_client.generate_content_async(prompt_parts=[prompt])
 
         if not response or "text" not in response:
             logger.warning("L0 key generation AI call returned no text content.")
@@ -59,20 +63,19 @@ def _generate_deterministic_key(user_passage: str) -> Optional[str]:
         return None
 
 
-def get_from_l0_cache(
-    user_passage: str, redis_client: Redis
+async def get_from_l0_cache(
+    user_passage: str, redis_client: ArqRedis
 ) -> Optional[Dict[str, Any]]:
-    """Checks the L0 cache for a result."""
-    stable_key = _generate_deterministic_key(user_passage)
+    """Asynchronously checks the L0 cache for a result."""
+    stable_key = await _generate_deterministic_key(user_passage)
     if not stable_key:
         return None
 
     try:
         key_hash = hashlib.sha256(stable_key.encode("utf-8")).hexdigest()
-        # --- START OF FIX: Use imported config value ---
         cache_key = f"{api_config.L0_CACHE_PREFIX}:{key_hash}"
-        # --- END OF FIX ---
-        cached_result = redis_client.get(cache_key)
+
+        cached_result = await redis_client.get(cache_key)
 
         if isinstance(cached_result, bytes):
             logger.warning(f"🎯 TRUE L0 CACHE HIT! for key: {cache_key}")
@@ -86,19 +89,21 @@ def get_from_l0_cache(
         return None
 
 
-def set_in_l0_cache(user_passage: str, result: Dict[str, Any], redis_client: Redis):
-    """Stores a result in the L0 cache."""
-    stable_key = _generate_deterministic_key(user_passage)
+async def set_in_l0_cache(
+    user_passage: str, result: Dict[str, Any], redis_client: ArqRedis
+):
+    """Asynchronously stores a result in the L0 cache."""
+    stable_key = await _generate_deterministic_key(user_passage)
     if not stable_key:
         logger.warning("Cannot set L0 cache because key generation failed.")
         return
 
     try:
         key_hash = hashlib.sha256(stable_key.encode("utf-8")).hexdigest()
-        # --- START OF FIX: Use imported config values ---
         cache_key = f"{api_config.L0_CACHE_PREFIX}:{key_hash}"
-        redis_client.set(cache_key, json.dumps(result), ex=api_config.L0_CACHE_TTL_SECONDS)
-        # --- END OF FIX ---
+        await redis_client.set(
+            cache_key, json.dumps(result), ex=api_config.L0_CACHE_TTL_SECONDS
+        )
         logger.info(f"✅ Stored new result in True L0 Cache with key: {cache_key}")
     except Exception as e:
         logger.error(f"⚠️ Failed to store result in L0 cache: {e}", exc_info=True)

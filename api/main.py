@@ -1,25 +1,50 @@
 # api/main.py
 
-from fastapi import FastAPI, status
+import os
+from dotenv import load_dotenv
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+from fastapi import FastAPI, status as fastapi_status, Request, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from celery.result import AsyncResult
 from fastapi.staticfiles import StaticFiles
-
-# --- START OF FIX: Import Path to construct absolute paths ---
 from pathlib import Path
+from contextlib import asynccontextmanager
+from typing import Dict, Any, Optional
 
-# --- END OF FIX ---
+import arq
+from arq.connections import ArqRedis, create_pool
+from arq.jobs import Job, JobStatus, JobDef
 
-from .worker import celery_app
+from .worker_settings import WorkerSettings
+from catalyst.utilities.logger import get_logger
 
-app = FastAPI(
-    title="Creative Catalyst Engine API",
-    description="An API for generating fashion trend reports and images.",
-    version="1.0.0",
-)
+# --- START: Sentry Initialization for FastAPI ---
+# Load environment variables to ensure SENTRY_DSN is available.
+load_dotenv()
+
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        # Enable performance monitoring to capture transaction data.
+        traces_sample_rate=1.0,
+        # Enable profiling to capture code-level performance details.
+        profiles_sample_rate=1.0,
+        # The FastAPIIntegration automatically hooks into the FastAPI app
+        # to capture errors and performance data from web requests.
+        integrations=[
+            FastApiIntegration(),
+        ],
+    )
+    print("✅ Sentry configured for FastAPI.")
+# --- END: Sentry Initialization ---
+
+logger = get_logger(__name__)
 
 
+# --- Pydantic Models for Clear API Contracts ---
 class JobRequest(BaseModel):
     user_passage: str
 
@@ -29,47 +54,89 @@ class JobResponse(BaseModel):
     status: str
 
 
-# --- START OF FIX: Use an absolute path for the StaticFiles mount ---
-# This makes the server independent of the directory it's run from.
-# It builds the path to the 'results' directory from the location of this file.
-RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
-# This allows the API to serve the generated images directly.
+
+# --- Modern Lifespan Manager for Robust Connection Pooling ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manages the ARQ Redis connection pool during the application's lifespan.
+    """
+    app.state.redis = await create_pool(WorkerSettings.redis_settings)
+    logger.info("ARQ Redis connection pool created.")
+    yield
+    await app.state.redis.close()
+    logger.info("ARQ Redis connection pool closed.")
+
+
+app = FastAPI(
+    title="Creative Catalyst Engine API",
+    description="An API for generating fashion trend reports and images.",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 app.mount("/results", StaticFiles(directory=RESULTS_DIR), name="results")
-# --- END OF FIX ---
 
 
 @app.post(
     "/v1/creative-jobs",
     response_model=JobResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=fastapi_status.HTTP_202_ACCEPTED,
 )
-def submit_job(request: JobRequest):
+async def submit_job(request: JobRequest, http_request: Request) -> JobResponse:
     """
-    Accepts a creative brief, queues it for processing, and returns a job ID.
+    Accepts a creative brief and queues it for processing with ARQ.
     """
-    task = celery_app.send_task("create_creative_report", args=[request.user_passage])
-    return {"job_id": task.id, "status": "queued"}
+    redis: ArqRedis = http_request.app.state.redis
+    job = await redis.enqueue_job("create_creative_report", request.user_passage)
 
-
-@app.get("/v1/creative-jobs/{job_id}")
-def get_job_status(job_id: str):
-    """
-    Retrieves the status and result of a creative job.
-    """
-    task_result = AsyncResult(job_id, app=celery_app)
-
-    if task_result.failed():
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "job_id": job_id,
-                "status": "failed",
-                "error": str(task_result.result),
-            },
+    if not job:
+        logger.error("Failed to enqueue job - redis.enqueue_job returned None.")
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to enqueue the job.",
         )
 
-    if task_result.ready():
-        return {"job_id": job_id, "status": "complete", "result": task_result.get()}
-    else:
-        return {"job_id": job_id, "status": "processing", "result": None}
+    return JobResponse(job_id=job.job_id, status="queued")
+
+
+@app.get(
+    "/v1/creative-jobs/{job_id}",
+    response_model=JobStatusResponse,
+)
+async def get_job_status(job_id: str, http_request: Request) -> JobStatusResponse:
+    """
+    Retrieves the status and result of a creative job from ARQ.
+    """
+    redis: ArqRedis = http_request.app.state.redis
+    job = Job(job_id, redis)
+
+    job_info: Optional[JobDef] = await job.info()
+
+    if not job_info:
+        logger.warning(f"Job not found: {job_id}")
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_404_NOT_FOUND,
+            detail=f"Job with ID '{job_id}' not found.",
+        )
+
+    current_status = job_info.status  # type: ignore
+
+    if current_status == JobStatus.complete:
+        return JobStatusResponse(
+            job_id=job_id, status="complete", result=job_info.result  # type: ignore
+        )
+
+    if current_status == JobStatus.failed: # type: ignore
+        return JobStatusResponse(
+            job_id=job_id, status="failed", error=str(job_info.result)  # type: ignore
+        )
+
+    return JobStatusResponse(job_id=job_id, status=current_status.value)

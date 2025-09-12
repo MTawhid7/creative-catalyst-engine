@@ -1,6 +1,10 @@
+# catalyst/utilities/logger.py
+
 """
 Configures a centralized, structured logger for the application.
-This logger is designed for deep observability and improved readability.
+This version provides a dual-format logging setup:
+1.  Human-Readable, Color-Coded Console Logs.
+2.  Machine-Readable JSON File Logs.
 """
 
 import logging
@@ -17,13 +21,11 @@ class ContextFilter(logging.Filter):
     """A filter to add a unique run_id from the thread-local context."""
 
     def filter(self, record):
-        record.run_id = getattr(
-            log_context, "run_id", "init"
-        )  # Use 'init' for pre-run logs
+        record.run_id = getattr(log_context, "run_id", "init")
         return True
 
 
-# --- START OF LOGGING REFACTOR ---
+# --- START: DEFINITIVE LOGGING REFACTOR ---
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -35,8 +37,10 @@ LOGGING_CONFIG = {
             "class": "pythonjsonlogger.jsonlogger.JsonFormatter",
             "format": "%(asctime)s %(levelname)s %(name)s %(funcName)s %(lineno)d %(run_id)s %(message)s",
         },
-        # New, cleaner console formatter
+        # The console formatter now points to the class in its new, separate file.
+        # This breaks the circular import.
         "console_formatter": {
+            "()": "catalyst.utilities.log_formatter.ColoredFormatter",
             "format": "%(asctime)s | %(levelname)-8s | [%(run_id)s] %(name)s:%(lineno)d - %(message)s",
             "datefmt": "%H:%M:%S",
         },
@@ -62,12 +66,17 @@ LOGGING_CONFIG = {
         "handlers": ["console", "file_json"],
     },
 }
-# --- END OF LOGGING REFACTOR ---
+# --- END: DEFINITIVE LOGGING REFACTOR ---
 
 
 def setup_logging_run_id(run_id: str):
     """Sets the unique run_id for the current application run."""
     log_context.run_id = run_id
+
+
+def get_run_id() -> str:
+    """Safely retrieves the current run_id from the thread-local context."""
+    return getattr(log_context, "run_id", "no-id-set")
 
 
 # Apply the configuration
@@ -77,15 +86,3 @@ logging.config.dictConfig(LOGGING_CONFIG)
 def get_logger(name: str) -> logging.Logger:
     """Returns a configured logger instance."""
     return logging.getLogger(name)
-
-
-# --- START OF FIX ---
-def get_run_id() -> str:
-    """Safely retrieves the current run_id from the thread-local context."""
-    return getattr(log_context, "run_id", "no-id-set")
-
-
-# --- END OF FIX ---
-
-# (The module-level logger for main.py remains)
-logger = get_logger(__name__)

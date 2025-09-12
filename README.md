@@ -3,9 +3,9 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/your-repo/creative-catalyst-engine)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-The **Creative Catalyst Engine** is an AI-powered, idea-to-image pipeline delivered as a scalable and resilient web service. It transforms a simple creative brief into a multi-format fashion intelligence package: a structured trend report (JSON), an art-directed style guide with a defined mood and photographic style, and a suite of editorial-quality images.
+The **Creative Catalyst Engine** is an AI-powered, idea-to-image pipeline delivered as a scalable and resilient web service. It transforms a simple creative brief into a multi-format fashion intelligence package: a structured trend report (JSON), an art-directed style guide, and a suite of editorial-quality images.
 
-Built on a robust stack of FastAPI, Celery, and Redis, the engine is architected for high performance and long-term maintainability. It features an intelligent, multi-level caching system and a modular, strategy-based design for its core logic. The system uses sophisticated AI-driven techniques like **Conceptual Blending** for innovation, a **Creative Compass** for mood-based guidance, and a "divide and conquer" synthesis process to achieve a level of creative coherence that mimics a world-class design studio.
+Built on a robust, modern stack of **FastAPI, ARQ, and Redis**, the engine is fully containerized with Docker for perfect reproducibility and ease of use. It features an intelligent, multi-level caching system, integrated error monitoring with Sentry, and a modular, "divide and conquer" synthesis process to achieve a level of creative coherence that mimics a world-class design studio.
 
 ---
 
@@ -22,11 +22,8 @@ Built on a robust stack of FastAPI, Celery, and Redis, the engine is architected
     - [Installation](#installation)
     - [Environment Variables](#environment-variables)
   - [Running the Engine](#running-the-engine)
-    - [Terminal 1: Start Redis](#terminal-1-start-redis)
-    - [Terminal 2: Start Celery Worker](#terminal-2-start-celery-worker)
-    - [Terminal 3: Start the API Server](#terminal-3-start-the-api-server)
   - [Interacting with the Engine](#interacting-with-the-engine)
-  - [API Output Structure](#api-output-structure)
+  - [Dependency Management](#dependency-management)
   - [Troubleshooting](#troubleshooting)
 
 ---
@@ -35,24 +32,25 @@ Built on a robust stack of FastAPI, Celery, and Redis, the engine is architected
 
 This engine is built with a few core architectural principles in mind:
 
-*   **Separation of Concerns:** The **Service Layer** (`api/`) is strictly decoupled from the **Core Engine** (`catalyst/`). The API handles web requests and jobs, while the engine focuses purely on generating fashion intelligence. This modularity makes the system easier to maintain and test.
-*   **Strategy-Based Logic:** Complex, multi-step operations (like report synthesis) are encapsulated in dedicated "builder" classes. This eliminates monolithic functions, promotes SOLID principles, and makes the core pipeline processors lean, readable controllers.
-*   **Resilience by Design:** The pipeline features granular, stage-aware exception handling, and external API clients have built-in retry logic for transient errors. The system is designed to gracefully handle minor creative failures from the AI and proceed to a successful conclusion.
-*   **Configuration over Code:** Key behaviors, such as API keys, URLs, and the choice of image generation model, are controlled via environment variables (`.env`), not hardcoded values.
+*   **Separation of Concerns:** The **Service Layer** (`api/`) is strictly decoupled from the **Core Engine** (`catalyst/`). The API handles web requests and jobs, while the engine focuses purely on generating fashion intelligence.
+*   **Strategy-Based Logic:** Complex, multi-step operations are encapsulated in dedicated "builder" classes, promoting SOLID principles and making the core pipeline readable and maintainable.
+*   **Resilience by Design:** The pipeline features granular, stage-aware exception handling, a fallback synthesis path, and integrated error tracking with Sentry to ensure high availability.
+*   **Production-Ready by Design:** The entire application is containerized, ensuring a consistent and reproducible environment from local development to production. Key behaviors are controlled via environment variables, not hardcoded values.
 
 ---
 
 ## Key Features
 
-*   **True Asynchronous Processing**: A FastAPI front-end accepts jobs and queues them to Celery, ensuring the API is always responsive. The core pipeline logic is fully `async` for maximum I/O throughput.
+*   **True Asynchronous Processing**: A FastAPI front-end accepts jobs and queues them to **ARQ (Async-Redis-Queue)**, a modern, high-performance `asyncio`-native task queue, ensuring the API is always responsive.
+*   **Containerized & Reproducible**: The entire application stack (API, worker, Redis) is defined in Docker and orchestrated with a single `docker-compose` command for a seamless, one-step setup.
 *   **Intelligent Multi-Level Caching**:
-    *   **L0 Intent Cache (High-Speed):** A pre-inference Redis cache that provides instant results for semantically identical requests, even with different wording.
-    *   **L1 Consistency Cache (Semantic):** A vector-based ChromaDB cache that ensures different phrasings of the same core idea produce identical, high-quality results without redundant work.
+    *   **L0 Intent Cache (High-Speed):** A pre-inference Redis cache that provides instant results for semantically identical requests.
+    *   **L1 Consistency Cache (Semantic):** A vector-based ChromaDB cache that ensures different phrasings of the same core idea produce identical results without redundant work.
+*   **Integrated Error Monitoring**: The API and worker are instrumented with **Sentry** to automatically capture, diagnose, and report any errors in real-time.
+*   **Human-Readable & Machine-Parsable Logging**: Features a dual-format logging system that outputs beautiful, color-coded logs to the console for developers and structured JSON logs to a file for machine analysis.
 *   **AI-Powered Creative Direction**:
-    *   **Conceptual Blending:** Uses a "Creative Antagonist" not for simple opposition, but to find an opposite world, isolate one tangible principle, and synthesize it into the core theme to create a single, surprising, and innovative design detail.
-    *   **Creative Compass (`desired_mood`):** The system first infers a set of evocative "mood words" from the user's request. This "compass" then guides all downstream creative choices, from the selection of inspirational designers to the final art direction of the photography.
-*   **Modular "Divide and Conquer" Synthesis**: Instead of a single, unreliable prompt, the system uses a sequence of smaller, hyper-focused, and schema-driven AI calls to assemble the final report. This "builder" pattern dramatically increases the reliability and quality of the structured output.
-*   **Robust Artifact Handling**: A transaction-like caching mechanism with automatic rollback prevents data corruption and orphaned files, ensuring data integrity between the file system and the vector database.
+    *   **Conceptual Blending:** Uses a "Creative Antagonist" to synthesize a single, surprising, and innovative design detail.
+    *   **Creative Compass (`desired_mood`):** Infers a set of "mood words" that guide all downstream creative choices for a coherent final package.
 
 ---
 
@@ -69,9 +67,9 @@ graph TD
         A[API Client]
     end
 
-    subgraph Service Layer
+    subgraph "Service Layer (Docker Network)"
         B(FastAPI Server)
-        D{Celery Worker}
+        D{ARQ Worker}
         C[(Redis Broker & Backend)]
     end
 
@@ -126,87 +124,93 @@ graph TD
 
 ```
 creative-catalyst-engine/
-├── .env                  # Environment variables (API keys, URLs). NOT committed to Git.
-├── .gitignore            # Specifies files for Git to ignore.
-├── README.md             # The high-level project documentation you are reading.
-├── requirements.txt      # Python package dependencies.
-├── clear_cache.py        # A utility script to wipe all caches (Redis, Chroma, files).
+├── .env                    # Local environment variables (API keys, DSN). Ignored by Git.
+├── .gitignore              # Specifies files for Git to ignore.
+├── .dockerignore           # Specifies files for Docker to ignore during image builds.
+├── Dockerfile              # The multi-stage blueprint for building our secure, production-ready container image.
+├── docker-compose.yml      # The master orchestrator for running the entire application stack (api, worker, redis).
+├── requirements.in         # The high-level, human-managed list of Python dependencies.
+├── requirements.txt        # The full, frozen "lock file" of all dependencies, generated by pip-tools.
+├── clear_cache.py          # A utility script to wipe all caches (Redis, Chroma, files) for a fresh start.
+├── LICENSE                 # The project's software license.
+├── README.md               # The high-level project documentation.
+└── WORKFLOW_GUIDE.md       # The definitive guide to the team's Git workflow.
 │
-├── api/                  # The Service Layer: Handles web requests, jobs, and L0 caching.
+├── api/                    # The Service Layer: Handles web requests, jobs, and observability.
 │   ├── __init__.py
-│   ├── main.py           # FastAPI application: Defines API endpoints (e.g., /v1/creative-jobs).
-│   ├── worker.py         # Main Celery worker entry point (for Linux/WSL).
-│   ├── eventlet_worker.py# Special Celery entry point for macOS compatibility.
-│   ├── cache.py          # Logic for the L0 (high-speed intent) Redis cache.
-│   ├── config.py         # API-layer specific configurations (e.g., Redis cache prefix).
-│   └── prompts.py        # Prompts used exclusively by the API layer (e.g., for L0 key generation).
+│   ├── main.py             # The FastAPI application, including Sentry initialization and ARQ job submission logic.
+│   ├── worker.py           # Contains the main ARQ task function (`create_creative_report`).
+│   ├── worker_settings.py  # The configuration file for the ARQ worker, including Sentry initialization.
+│   ├── cache.py            # Async-native logic for the L0 (high-speed intent) Redis cache.
+│   ├── config.py           # API-layer specific configurations (e.g., Redis cache prefix).
+│   └── prompts.py          # Prompts used exclusively by the API layer (e.g., for L0 key generation).
 │
-├── api_client/           # A standalone Python client for interacting with the API.
+├── api_client/             # A standalone Python client for interacting with the API.
 │   ├── __init__.py
-│   ├── client.py         # The `CreativeCatalystClient` class for submitting and polling jobs.
-│   ├── exceptions.py     # Custom exceptions for the client (e.g., JobFailedError).
-│   └── example.py        # A simple script demonstrating how to use the client.
+│   ├── client.py           # The `CreativeCatalystClient` class for submitting and polling jobs.
+│   ├── exceptions.py       # Custom exceptions for the client.
+│   └── example.py          # A simple script demonstrating how to use the client.
 │
-└── catalyst/             # The Core Engine: All business logic for the creative pipeline.
+└── catalyst/               # The Core Engine: All business logic for the creative pipeline.
     ├── __init__.py
-    ├── main.py           # Core `run_pipeline` function; the main entry point for the engine.
-    ├── settings.py       # Central configuration for the engine (file paths, model names).
-    ├── context.py        # Defines the `RunContext` class, the data object passed through the pipeline.
+    ├── main.py             # Core `run_pipeline` function; the main entry point for the engine.
+    ├── settings.py         # Central configuration for the engine (file paths, model names).
+    ├── context.py          # Defines the `RunContext` class, the data object passed through the pipeline.
     │
-    ├── caching/          # L1 Semantic Cache logic.
+    ├── caching/            # L1 Semantic Cache logic.
     │   ├── __init__.py
     │   ├── cache_manager.py # High-level interface for the L1 cache.
     │   └── report_cache.py  # ChromaDB implementation for vector-based semantic caching.
     │
-    ├── clients/          # Clients for external services.
+    ├── clients/            # Clients for external services.
     │   └── gemini/
-    │       ├── __init__.py         # Public interface for the Gemini client.
-    │       ├── client_instance.py  # Initializes the singleton Gemini client object.
-    │       ├── core.py             # Core logic for making sync/async API calls.
-    │       ├── resilience.py       # Retry logic and backoff delays.
-    │       └── schema.py           # Pydantic schema processing for Gemini's structured output.
+    │       ├── __init__.py
+    │       ├── client_instance.py
+    │       ├── core.py
+    │       ├── resilience.py
+    │       └── schema.py
     │
     ├── models/
     │   └── trend_report.py   # Pydantic models for the final, structured `FashionTrendReport`.
     │
-    ├── pipeline/         # The core multi-stage processing pipeline.
+    ├── pipeline/           # The core multi-stage processing pipeline.
     │   ├── __init__.py
     │   ├── orchestrator.py   # The `PipelineOrchestrator` that manages the execution flow.
-    │   ├── base_processor.py # The abstract base class that all pipeline steps inherit from.
+    │   ├── base_processor.py
     │   │
     │   ├── processors/       # The main controllers for each stage of the pipeline.
     │   │   ├── __init__.py
-    │   │   ├── briefing.py     # Processors for Stage 1: Deconstruction, Ethos, Enrichment.
-    │   │   ├── synthesis.py    # Processors for Stage 3: Web Research, Structuring, Fallback.
-    │   │   ├── reporting.py    # Processor for Stage 4: Saving files, triggering prompt generation.
-    │   │   │
-    │   │   └── generation/     # Image generation strategies.
-    │   │       ├── __init__.py             # Factory function `get_image_generator`.
-    │   │       ├── base_generator.py       # Abstract base class for image generators.
-    │   │       └── nanobanana_generator.py # Specific implementation for the Nano Banana model.
+    │   │   ├── briefing.py
+    │   │   ├── synthesis.py
+    │   │   ├── reporting.py
+    │   │   └── generation/
+    │   │       ├── __init__.py
+    │   │       ├── base_generator.py
+    │   │       └── nanobanana_generator.py
     │   │
     │   ├── prompt_engineering/
-    │   │   └── prompt_generator.py # The class that builds the final image prompts from the report.
+    │   │   └── prompt_generator.py
     │   │
     │   └── synthesis_strategies/ # The modular, "divide and conquer" logic for report assembly.
     │       ├── __init__.py
-    │       ├── report_assembler.py   # The orchestrator that manages the specialized builders.
-    │       ├── section_builders.py   # NEW: The specialized builder classes for each report section.
-    │       └── synthesis_models.py   # Intermediate Pydantic models for the builder outputs.
+    │       ├── report_assembler.py
+    │       ├── section_builders.py
+    │       └── synthesis_models.py
     │
     ├── prompts/
     │   └── prompt_library.py # The master library of all creative and synthesis prompts.
     │
     └── utilities/            # Shared helper functions.
         ├── __init__.py
-        ├── config_loader.py  # Loads and formats `sources.yaml`.
-        ├── json_parser.py    # Robustly parses JSON from LLM outputs.
-        └── logger.py         # Configures the centralized application logger.
+        ├── config_loader.py
+        ├── json_parser.py
+        ├── logger.py         # Configures the dual-format (console + JSON) application logger.
+        └── log_formatter.py  # The custom class for color-coded console log formatting.
 │
-├── artifact_cache/       # Permanent storage for L1 cached artifacts (images, reports).
-├── chroma_cache/         # Directory for the ChromaDB vector store (L1 cache).
-├── logs/                 # Contains the rotating log files (e.g., catalyst_engine.log).
-└── results/              # Rotating storage for the N most recent user-facing runs.
+├── artifact_cache/         # Permanent storage for L1 cached artifacts (images, reports). Ignored by Git.
+├── chroma_cache/           # Directory for the ChromaDB vector store (L1 cache). Ignored by Git.
+├── logs/                   # Contains the rotating log files (e.g., catalyst_engine.log). Ignored by Git.
+└── results/                # Rotating storage for the N most recent user-facing runs. Ignored by Git.
 ```
 
 ---
@@ -215,121 +219,92 @@ creative-catalyst-engine/
 
 ### Prerequisites
 
-*   Python 3.11+
-*   Docker Desktop (for Redis)
+*   **Docker Desktop:** The primary requirement for running the application.
+*   **Python 3.11+:** Required only for managing dependencies with `pip-tools`.
 
 ### Installation
 
-```bash
-git clone https://github.com/MTawhid7/creative-catalyst-engine.git
-cd creative-catalyst-engine
-
-python3 -m venv venv
-source venv/bin/activate
-
-pip install -r requirements.txt
-```
+1.  **Clone the Repository:**
+    ```bash
+    git clone https://github.com/MTawhid7/creative-catalyst-engine.git
+    cd creative-catalyst-engine
+    ```
+2.  **Create the Environment File:**
+    Copy the provided `.env.example` file to `.env` and fill in your secret keys (at a minimum, `GEMINI_API_KEY` and `SENTRY_DSN`).
 
 ### Environment Variables
 
-Create a `.env` file in the project root. This file is ignored by Git.
+Your `.env` file controls the application's configuration.
 
 ```ini
 # .env
 
 # --- API Keys & Secrets ---
 GEMINI_API_KEY="your_gemini_api_key_here"
+SENTRY_DSN="your_sentry_dsn_here"
 
 # --- Feature Flags & Model Selection ---
 ENABLE_IMAGE_GENERATION=True
-IMAGE_GENERATION_MODEL="nano-banana"  # Options: "dall-e-3", "nano-banana"
+IMAGE_GENERATION_MODEL="nano-banana"
 
 # --- Infrastructure & Networking ---
-REDIS_URL="redis://localhost:6379/0"
+# CRITICAL: This MUST be 'redis' to connect to the Docker service.
+REDIS_URL="redis://redis:6379/0"
 
-# CRITICAL: This MUST be the public-facing base URL of your server.
-# It is used to construct the absolute URLs for images in the final report.
-# For local testing, http://127.0.0.1:9500 is correct.
-ASSET_BASE_URL="http://127.0.0.1:9500"
+# The public-facing base URL for the server.
+# Replace with your computer's IP address on your local network.
+ASSET_BASE_URL="http://192.168.10.189:9500"
 ```
 
 ---
 
 ## Running the Engine
 
-You will run three processes in separate terminals.
+The entire application stack is orchestrated with a single command.
 
-### Terminal 1: Start Redis
+1.  **Ensure Docker Desktop is running.**
+2.  **Open a terminal** in the project's root directory.
+3.  **Run the master command:**
+    ```bash
+    docker-compose up --build
+    ```
+    *   The `--build` flag is only necessary the first time you run the application or after you've changed dependencies or the `Dockerfile`.
+    *   For daily use, you can simply run `docker-compose up`.
 
-```bash
-docker run -d -p 6379:6379 --name creative-catalyst-redis redis
-```
+You will see the logs from the API server, the ARQ worker, and Redis streaming in your terminal. The application is ready when you see the lines:
+`Uvicorn running on http://0.0.0.0:9500` and `ARQ worker started. Ready to process creative jobs.`
 
-### Terminal 2: Start Celery Worker
-
-**For Linux / WSL:**
-```bash
-source venv/bin/activate
-celery -A api.worker.celery_app worker --loglevel=info
-```
-**For macOS (requires `eventlet`):**
-```bash
-source venv/bin/activate
-celery -A api.eventlet_worker.celery_app worker --loglevel=info -P eventlet
-```
-
-### Terminal 3: Start the API Server
-
-```bash
-source venv/bin/activate
-uvicorn api.main:app --reload --port 9500 --host 0.0.0.0
-```
+To stop the entire application, press `Ctrl+C` in the terminal, then run `docker-compose down`.
 
 ---
 
 ## Interacting with the Engine
 
+*   **Local:** Run in terminal `python -m catalyst.main`.
 *   **Recommended:** Use the API Client via `python -m api_client.example`.
 *   **Direct API (curl):** First, `POST` to `/v1/creative-jobs`, then `GET` the `/v1/creative-jobs/{job_id}` endpoint.
-*   **Local Debugging:** Edit `catalyst/main.py` and run `python -m catalyst.main`.
 
 ---
 
-## API Output Structure
+## Dependency Management
 
-A completed job response contains the final report with image URLs embedded directly within each key piece.
+This project uses `pip-tools` for robust, deterministic dependency management.
 
-**Example `GET /v1/creative-jobs/{id}` Response:**
-```json
-{
-  "job_id": "your-job-id",
-  "status": "complete",
-  "result": {
-    "final_report": {
-      "overarching_theme": "The concept of 'Bio-Luminescent Leisure'...",
-      "desired_mood": ["Sophisticated", "Effortless", "Radiant"],
-      "detailed_key_pieces": [
-        {
-          "key_piece_name": "The 'Hydro-Lumina Sculpted Maillot'",
-          "description": "This one-piece swimsuit serves as the primary canvas...",
-          "final_garment_image_url": "http://127.0.0.1:9500/results/run-folder/garment.png",
-          "mood_board_image_url": "http://127.0.0.1:9500/results/run-folder/moodboard.png"
-        }
-      ]
-    },
-    "artifacts_path": "/path/to/project/results/run-folder"
-  }
-}
-```
+*   **To add or change a dependency:** Edit the high-level `requirements.in` file.
+*   **To update the lock file:** Activate your local virtual environment (`source venv/bin/activate`) and run:
+    ```bash
+    pip-compile --strip-extras requirements.in
+    ```
+    Then, commit both the updated `requirements.in` and `requirements.txt` files.
 
 ---
 
 ## Troubleshooting
 
-| Symptom                                | Probable Cause & Solution                                                                                                                                                                                                                                                       |
-| :------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **500 Internal Server Error**          | A background job failed. **Check the logs in your Celery worker terminal.** The full Python traceback, which shows the exact error, will be printed there. This is the most important step for debugging any pipeline failure.                                                  |
-| **Images not loading (404 Not Found)** | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing address of your server that the client machine can reach (e.g., `http://<your_server_lan_ip>:9500` if testing on a local network). Also ensure the `uvicorn` server is running.             |
-| **Empty `accessories` field**          | This is not a bug, but a known variance. The system is designed to gracefully handle cases where the AI's creative enrichment for a secondary field (like accessories) fails. The pipeline will complete successfully with a rich report, but this specific field may be empty. |
-| **`asyncio` or `eventlet` errors**     | A conflict between `asyncio` and `eventlet` is occurring. The worker is designed to handle this by running the `async` pipeline in a dedicated, isolated event loop. Ensure your `api/worker.py` uses the `asyncio.new_event_loop()` pattern.                                   |
-| **Getting old/cached results**         | The L0 (Redis) or L1 (Chroma) caches are still active. Run the master cache clearing utility: `python clear_cache.py`. This script now clears all file-based caches, results folders, and the Redis database for a completely fresh start.                                      |
+| Symptom                                                      | Probable Cause & Solution                                                                                                                                                                                                                                                 |
+| :----------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`docker-compose up` fails with a container name conflict** | A container from a previous run was not properly shut down. **Solution:** Run `docker-compose down` to remove the old containers, then run `docker-compose up` again.                                                                                                     |
+| **Build fails with `No matching distribution found`**        | A Python dependency is incompatible with the `glibc`-based builder image. This is rare but possible. **Solution:** Research the problematic package for a compatible version or alternative.                                                                              |
+| **500 Internal Server Error**                                | A background job in the ARQ worker failed. **Solution:** Check your **Sentry dashboard**. The full Python traceback, request data, and context will be there, allowing for instant debugging. You can also check the container logs with `docker-compose logs -f worker`. |
+| **Images not loading (404 Not Found)**                       | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing address of your server that the client machine can reach (e.g., `http://<your_macbook_lan_ip>:9500`).                                                                                 |
+| **Getting old/cached results**                               | The L0 (Redis) or L1 (Chroma) caches are still active. **Solution:** Run the master cache clearing utility: `python clear_cache.py`. This script now clears all file-based caches, results folders, and the Redis database for a completely fresh start.                  | ``` |

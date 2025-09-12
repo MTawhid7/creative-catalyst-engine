@@ -78,7 +78,7 @@ This is the end-to-end process for taking a task from idea to completion.
 **Goal:** Write code and safely back it up to your personal "Workshop" repo.
 
 1.  **Write and Test Your Code** on your feature branch.
-2.  **Commit Your Changes** in small, logical units, following the [Commit Message Conventions](#2-commit-message-convention).
+2.  **Commit Your Changes** in small, logical units, following the [Commit Message Conventions](#commit-message-conventions).
     ```bash
     git add .
     git commit -m "feat: Implement the core watermarking function"
@@ -116,7 +116,7 @@ This is the end-to-end process for taking a task from idea to completion.
     git push company feat/add-image-watermarking
     ```
 2.  **Open a Pull Request (PR) on the Company's GitHub Repo.** A banner for your recently pushed branch will automatically appear. Click **"Compare & pull request"**.
-3.  **Write a clear title and a detailed description.** Follow the [Pull Request Conventions](#3-pull-request-pr-convention).
+3.  **Write a clear title and a detailed description.** Follow the [Pull Request Conventions](#pull-request-conventions).
 4.  **Assign teammates as Reviewers.**
 
 ### Step 5: Handling the Code Review Conversation
@@ -128,11 +128,10 @@ This is the end-to-end process for taking a task from idea to completion.
 
 ### Step 6: Finalizing the Merge (Best Practice: Squash and Merge)
 
-**Goal:** Officially add your feature to the project with a clean, single commit on the `main` branch.
-
 1.  **Merge the PR using "Squash and Merge":** Once the Pull Request is approved, click the **dropdown arrow** on the green merge button. Select **"Squash and merge"**.
-2.  **Edit the Commit Message:** Condense the automatically generated list of commits into a single, clear message that follows our [Commit Message Conventions](#2-commit-message-convention).
+2.  **Edit the Commit Message:** Condense the automatically generated list of commits into a single, clear message that follows our [Commit Message Conventions](#commit-message-conventions).
 3.  **Confirm the merge.**
+
 
 ### Step 7: The "Sync Back" and Final Cleanup
 
@@ -159,41 +158,28 @@ This is the end-to-end process for taking a task from idea to completion.
 
 ---
 
-## Phase 3: Managing a Release
+<a name="2-commit-message-convention"></a>
+## 2. Commit Message Conventions
 
-**Goal:** To create an official, versioned release of the project. This is typically done by the project administrator.
+**Purpose:** Ensure commit messages are consistent, discoverable, and helpful in changelogs.
 
-1.  **Ensure `main` is Synced:**
-    ```bash
-    git switch main
-    git pull --rebase company main
-    ```
-2.  **Update the `release` Branch:**
-    ```bash
-    git switch release
-    git pull --rebase company release
-    git merge main
-    git push company release
-    ```
-3.  **Create and Push the Signed Tag:**
-    ```bash
-    # The -s flag creates a GPG-signed tag. The -m is the annotation message.
-    git tag -s v1.1.0 -m "Release v1.1.0: Adds caching and workflow guide"
+**Format (Conventional Commits style):**
 
-    # Push the tag to both remotes
-    git push company v1.1.0
-    git push origin v1.1.0
-    ```
-4.  **Return to Development:**
-    ```bash
-    git switch main
-    ```
 
 ---
 
-## Development Best Practices & Naming Conventions
+## Phase 3: Development Best Practices (The "Why")
 
-### 1. Branch Naming Convention
+This workflow is designed to optimize for clarity, safety, and a clean history. Adhering to these principles will make you a more efficient and effective developer.
+
+### Best Practices (The "Why")
+
+*   **Commit Early, Commit Often, Push to `origin` Constantly:** Treat `git push origin <your-branch>` as your "save" button.
+*   **Keep `main` Pristine:** Your local `main` branch should always be a perfect, clean mirror of the official `company/main`.
+*   **Prefer Rebase Over Merge:** Always use `git pull --rebase` and `git rebase company/main` on your feature branches to create a clean, linear history.
+*   **Keep Pull Requests Small and Focused:** A PR should do one thing and do it well. Small PRs get reviewed faster and are safer to integrate.
+
+### Branch Naming Conventions
 
 **Format:** `type/short-description` (e.g., `feat/add-image-watermarking`)
 -   `feat`: A new feature.
@@ -204,35 +190,129 @@ This is the end-to-end process for taking a task from idea to completion.
 -   `test`: Adding or correcting tests.
 -   `chore`: Changes to the build process or auxiliary tools.
 
-### 2. Commit Message Convention
+### Commit Message Conventions
 
 We follow the **[Conventional Commits](https://www.conventionalcommits.org/)** standard.
 **Format:** `<type>(<scope>): <subject>`
 -   **Example:** `fix(gemini-client): Add guard clause to prevent auth crash`
 
-### 3. Pull Request (PR) Convention
+### Pull Request Conventions
 
 -   **Title:** Should be a clean, descriptive summary following the commit message convention.
 -   **Description:** Briefly explain the "what" and "why" of the change. Include steps for how to test it.
 
+
 ---
 
-## Git Command Cheat Sheet
+## Phase 4: Scenarios & Recovery (The "Oh No!" Guide)
 
-| Task                               | Modern Command                                  |
-| :--------------------------------- | :---------------------------------------------- |
-| **Branching**                      |                                                 |
-| See all local branches             | `git branch`                                    |
-| Switch to an existing branch       | `git switch <branch-name>`                      |
-| Create and switch to a new branch  | `git switch -c <branch-name>`                   |
-| Delete a local branch (force)      | `git branch -D <branch-name>`                   |
-| Delete a remote branch             | `git push <remote-name> --delete <branch-name>` |
-| **Syncing**                        |                                                 |
-| See your remotes                   | `git remote -v`                                 |
-| Fetch latest from a remote         | `git fetch <remote-name>`                       |
-| Pull (fetch + rebase) from remote  | `git pull --rebase <remote> <branch>`           |
-| Rebase current branch onto another | `git rebase <branch-name>`                      |
-| **Stashing**                       |                                                 |
-| Save uncommitted work              | `git stash`                                     |
-| See your list of stashes           | `git stash list`                                |
-| Apply the most recent stash        | `git stash pop`                                 |
+Mistakes happen. The true measure of a developer is not avoiding mistakes, but knowing how to recover from them cleanly. This section covers the most common scenarios.
+
+### Scenario 1: "I made a typo in my last commit message" or "I forgot to add a file."
+
+This is the most common issue and the easiest to fix. As long as you have not pushed the commit to the `company` remote, you can use `amend`.
+
+1.  **Stage the forgotten file (if any):**
+    ```bash
+    git add path/to/forgotten-file.py
+    ```
+2.  **Amend the previous commit:**
+    ```bash
+    # The --no-edit flag will keep the same commit message
+    git commit --amend --no-edit
+
+    # Or, to edit the message at the same time:
+    git commit --amend
+    ```
+3.  **Force-push to your personal remote** to update your backup:
+    ```bash
+    git push --force-with-lease origin feat/my-branch
+    ```
+
+### Scenario 2: "My branch has messy 'wip' and 'fixup' commits that I want to clean up before my PR."
+
+This is the perfect use case for an **interactive rebase**. It is your most powerful tool for creating a clean, professional history.
+
+1.  **Start the interactive rebase:**
+    ```bash
+    # This will open an editor with a list of all the commits on your branch
+    # that are not yet in the official company/main.
+    git rebase -i company/main
+    ```
+2.  **Edit the commit list:** Your editor will show a list of your commits, each prefixed with the word `pick`. To clean up your history, change `pick` to one of the following commands (the most common are `s` and `f`):
+    *   `reword` or `r`: Keep the commit, but change its message.
+    *   `squash` or `s`: Combine this commit's changes *and* its message into the commit above it.
+    *   `fixup` or `f`: Combine this commit's changes into the commit above it, but **discard** this commit's message entirely. This is perfect for "fixup" commits.
+
+    **Example:**
+    ```
+    # Before
+    pick a1b2c3d feat: Implement the core function
+    pick d4e5f6g fixup: Add forgotten comment
+    pick h7i8j9k wip: Trying something out
+
+    # After (to combine the 'fixup' and 'wip' into the first commit)
+    pick a1b2c3d feat: Implement the core function
+    f d4e5f6g fixup: Add forgotten comment
+    s h7i8j9k wip: Trying something out
+    ```
+3.  **Save and close the editor.** Git will now apply your changes. If you used `squash` or `reword`, another editor will open to let you combine the commit messages.
+
+### Scenario 3: "I started a rebase, and now I have a huge, terrifying merge conflict."
+
+This can be stressful, but Git gives you a powerful escape hatch.
+
+*   **The Escape Hatch (Safest Option):** If you are overwhelmed, you can always abort the rebase and return your branch to the state it was in before you started.
+    ```bash
+    git rebase --abort
+    ```
+*   **The Professional Way (Resolving the Conflict):**
+    1.  Run `git status`. It will tell you which files have conflicts.
+    2.  Open each conflicted file. Your editor (like VS Code) will have excellent built-in tools to show you the "incoming" change and your "current" change.
+    3.  Edit the file to resolve the conflict, removing the `<<<<<<<`, `=======`, and `>>>>>>>` markers.
+    4.  Once you have fixed a file, stage it: `git add path/to/resolved-file.py`.
+    5.  When all conflicts are resolved and staged, continue the rebase:
+        ```bash
+        git rebase --continue
+        ```
+
+### Scenario 4: "I accidentally committed directly to my `main` branch."
+
+1.  **First, get your work onto a new branch.** This ensures your changes are safe.
+    ```bash
+    # Make sure you are on the main branch
+    git switch main
+
+    # Create a new branch from the current (bad) state of main
+    git switch -c feat/my-saved-work
+    ```
+2.  **Now, reset your `main` branch back to the official version.**
+    ```bash
+    git switch main
+
+    # This will discard all local changes on 'main' and make it a perfect
+    # mirror of the company's main branch.
+    # WARNING: This is a destructive command. Only run it on 'main'.
+    git reset --hard company/main
+    ```
+3.  You are now safe. Your `main` branch is clean, and your work is safe on the `feat/my-saved-work` branch.
+
+---
+
+## Strategic Command Reference
+
+| Command                          | Use Case / When to Use It                                                                                       |
+| :------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| **Daily Workflow**               |                                                                                                                 |
+| `git switch -c <branch>`         | At the start of a new task, to create a clean branch based on the latest `main`.                                |
+| `git commit -m "..."`            | After completing a small, logical unit of work.                                                                 |
+| `git push origin <branch>`       | Frequently throughout the day. Treat it like saving your work.                                                  |
+| `git pull --rebase company main` | On your `main` branch to sync it. On your feature branch to update it.                                          |
+| **History Management**           |                                                                                                                 |
+| `git commit --amend`             | When you need to fix a typo or add a file to your *most recent* commit.                                         |
+| `git rebase -i company/main`     | Before opening a Pull Request, to clean up your messy commit history into a few clear, logical commits.         |
+| `git push --force-with-lease`    | After amending or rebasing a branch that has already been pushed to your personal remote (`origin`).            |
+| **Recovery & Safety**            |                                                                                                                 |
+| `git stash`                      | When you need to quickly switch branches but have uncommitted work you don't want to lose.                      |
+| `git rebase --abort`             | Your escape hatch. Use it to safely exit a rebase that has gone wrong (e.g., a major conflict).                 |
+| `git reset --hard <commit>`      | A powerful but destructive tool. Primarily used to reset your local `main` branch to match the official remote. |

@@ -1,0 +1,41 @@
+# ===================================================================
+#  Creative Catalyst Engine - Python Dependencies
+# ===================================================================
+#
+# To install all dependencies, run the following command in your
+# activated virtual environment:
+# pip install -r requirements.txt
+#
+
+# --- Core AI & API Communication ---
+google-genai      # The official Python SDK for the Google Gemini API.
+pydantic          # For robust data modeling, validation, and settings management.
+
+
+# --- API & Web Server ---
+fastapi
+uvicorn[standard]  # High-performance ASGI server
+
+openai            # For interacting with OpenAI's API.
+
+# --- Background Task Queue ---
+arq               # For managing background tasks.
+# Specify that we need the 'redis' library with its 'hiredis' (for performance)
+async-timeout   # Explicitly add this required dependency for redis.asyncio
+redis[hiredis]
+# --- API Client ---
+requests          # For making HTTP requests in the api_client.
+
+# --- Vector Database Caching ---
+chromadb
+
+# --- Configuration & Utilities ---
+python-dotenv     # For loading environment variables from the .env file.
+PyYAML            # For parsing the sources.yaml configuration file.
+python-json-logger # For creating structured, machine-readable JSON logs.
+
+pillow             # For image processing tasks.
+
+anyio            # For asynchronous programming support.
+
+sentry-sdk[fastapi,arq]
