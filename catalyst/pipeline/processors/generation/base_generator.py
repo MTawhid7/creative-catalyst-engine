@@ -1,21 +1,28 @@
-from abc import ABC, abstractmethod
+# catalyst/pipeline/processors/generation/base_generator.py
+
+from abc import abstractmethod
 from catalyst.context import RunContext
-from catalyst.utilities.logger import get_logger
+
+# --- START: DEFINITIVE TYPE HIERARCHY FIX ---
+# Import the BaseProcessor to establish the correct inheritance.
+from catalyst.pipeline.base_processor import BaseProcessor
+
+# --- END: DEFINITIVE TYPE HIERARCHY FIX ---
 
 
-class BaseImageGenerator(ABC):
+class BaseImageGenerator(BaseProcessor):  # <-- THE CRITICAL CHANGE
     """
     Abstract Base Class for an image generation strategy.
-    This defines the 'contract' that all image generators must follow.
+    This now inherits from BaseProcessor to unify the pipeline interface.
     """
 
-    def __init__(self):
-        self.logger = get_logger(self.__class__.__name__)
+    # The __init__ is now inherited from BaseProcessor, so we don't need to repeat it.
 
     @abstractmethod
-    async def generate_images(self, context: RunContext) -> RunContext:
+    async def process(self, context: RunContext) -> RunContext:  # <-- RENAME THE METHOD
         """
         The main method to generate and save images based on the context.
-        It must take a RunContext and return a (potentially modified) RunContext.
+        The method is renamed from 'generate_images' to 'process' to conform
+        to the BaseProcessor contract.
         """
         pass

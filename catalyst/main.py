@@ -1,10 +1,7 @@
 # catalyst/main.py
 
-import asyncio
-import time
 import os
 import shutil
-from pathlib import Path
 from datetime import datetime
 import hashlib
 
@@ -16,38 +13,19 @@ from .caching import cache_manager
 
 logger = get_logger(__name__)
 
-USER_PASSAGE = """
-Indian girl with saree but futuristic cyberpunk style, neon lights, high detail, artstation, concept art, digital art, smooth, sharp focus, illustration, art by artgerm and greg rutkowski and alphonse mucha.
-"""
-
-
-def cleanup_old_results():
-    """Keeps the most recent N result folders and deletes the rest."""
-    # This function is now only used for local testing. The worker has its own copy.
-    try:
-        all_dirs = [d for d in settings.RESULTS_DIR.iterdir() if d.is_dir()]
-        sorted_dirs = sorted(all_dirs, key=lambda p: p.name, reverse=True)
-        if len(sorted_dirs) > settings.KEEP_N_RESULTS:
-            dirs_to_delete = sorted_dirs[settings.KEEP_N_RESULTS :]
-            for old_dir in dirs_to_delete:
-                shutil.rmtree(old_dir)
-    except Exception as e:
-        logger.warning(f"⚠️ Could not perform local results cleanup: {e}")
-
 
 async def run_pipeline(user_passage: str) -> RunContext:
     """
-    The core, reusable function that executes the entire pipeline.
+    The core, reusable function that executes the entire creative pipeline.
     """
     context = RunContext(user_passage=user_passage, results_dir=settings.RESULTS_DIR)
-    context.results_dir.mkdir(parents=True, exist_ok=True)
+    # The run_id is now set by the worker, so we use it to set up logging.
     setup_logging_run_id(context.run_id)
     logger.info("================== RUN ID: %s ==================", context.run_id)
     logger.info("      CREATIVE CATALYST ENGINE - PROCESS STARTED         ")
 
     orchestrator = PipelineOrchestrator()
 
-    # --- START OF FIX: Restructure for transactional safety ---
     try:
         is_from_cache = await orchestrator.run(context)
 
@@ -66,7 +44,6 @@ async def run_pipeline(user_passage: str) -> RunContext:
         os.rename(context.results_dir, final_path)
         context.results_dir = final_path
 
-        # This logic is safe to run here.
         latest_link_path = settings.RESULTS_DIR / "latest"
         if os.path.lexists(latest_link_path):
             os.remove(latest_link_path)
@@ -101,25 +78,7 @@ async def run_pipeline(user_passage: str) -> RunContext:
         logger.critical(
             "❌ PIPELINE FAILED with an unrecoverable error.", exc_info=True
         )
-        # We still want to return the context to save debug artifacts.
-    # --- END OF FIX ---
 
     logger.info("      CREATIVE PROCESS FINISHED for Run ID: %s", context.run_id)
     logger.info("=========================================================")
     return context
-
-
-async def main():
-    """Main function for local, command-line testing."""
-    start_time = time.time()
-    await run_pipeline(USER_PASSAGE)
-    duration = time.time() - start_time
-    logger.info("Local run finished in %.2f seconds", duration)
-    cleanup_old_results()
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("⛔ Process interrupted by user.")

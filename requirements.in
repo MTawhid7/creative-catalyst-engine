@@ -1,41 +1,40 @@
 # ===================================================================
-#  Creative Catalyst Engine - Python Dependencies
+#  Creative Catalyst Engine - Production Dependencies
 # ===================================================================
-#
-# To install all dependencies, run the following command in your
-# activated virtual environment:
-# pip install -r requirements.txt
-#
-
-# --- Core AI & API Communication ---
-google-genai      # The official Python SDK for the Google Gemini API.
-pydantic          # For robust data modeling, validation, and settings management.
-
 
 # --- API & Web Server ---
 fastapi
-uvicorn[standard]  # High-performance ASGI server
+uvicorn[standard]
+sse-starlette # For real-time server-sent events
+sseclient-py      # For handling Server-Sent Events (SSE) streams.
 
-openai            # For interacting with OpenAI's API.
 
-# --- Background Task Queue ---
-arq               # For managing background tasks.
-# Specify that we need the 'redis' library with its 'hiredis' (for performance)
-async-timeout   # Explicitly add this required dependency for redis.asyncio
+
+# --- Background Task Queue & Caching ---
+arq
+# redis[hiredis] is used for performance and async support is built-in.
 redis[hiredis]
-# --- API Client ---
-requests          # For making HTTP requests in the api_client.
+async-timeout   # Explicit dependency for older redis versions, safe to keep for now.
+
+# --- Core AI & API Communication ---
+google-genai
+google-api-core
+pydantic
 
 # --- Vector Database Caching ---
 chromadb
 
-# --- Configuration & Utilities ---
-python-dotenv     # For loading environment variables from the .env file.
-PyYAML            # For parsing the sources.yaml configuration file.
-python-json-logger # For creating structured, machine-readable JSON logs.
+# Dall-E image generation
+openai
 
-pillow             # For image processing tasks.
-
-anyio            # For asynchronous programming support.
-
+# --- Observability ---
 sentry-sdk[fastapi,arq]
+
+# --- Utilities ---
+python-dotenv
+PyYAML
+python-json-logger
+pillow
+anyio
+requests
+        # For the standalone api_client

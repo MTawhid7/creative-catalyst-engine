@@ -1,14 +1,25 @@
 # docker-compose.yml
 
 services:
-  # The Redis service, using the official Docker image.
   redis:
     image: redis:alpine
     container_name: creative-catalyst-redis
     ports:
       - "6379:6379"
 
-  # The FastAPI API service.
+  # --- START: DEFINITIVE CHROMA SERVICE REFACTOR ---
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: creative-catalyst-chroma
+    ports:
+      # This maps the EXTERNAL port on your Mac to the INTERNAL port 8000.
+      # It will use the value of CHROMA_EXTERNAL_PORT from your .env file,
+      # or default to 8000 if it's not set.
+      - "${CHROMA_EXTERNAL_PORT:-8000}:8000"
+    volumes:
+      - ./chroma_cache:/chroma/.chroma/server/
+  # --- END: DEFINITIVE CHROMA SERVICE REFACTOR ---
+
   api:
     build: .
     container_name: creative-catalyst-api
@@ -20,15 +31,23 @@ services:
       - .env
     depends_on:
       - redis
+      - chroma
 
-  # The ARQ worker service.
   worker:
     build: .
     container_name: creative-catalyst-worker
-    # --- START: DEFINITIVE COMMAND FIX ---
-    # Override the default CMD with the absolute path to the arq executable.
     command: /usr/local/bin/arq api.worker_settings.WorkerSettings
-    # --- END: DEFINITIVE COMMAND FIX ---
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - chroma
+
+  clear-cache:
+    build: .
+    command: ["clear_cache.py", "-y"]
     volumes:
       - .:/app
     env_file:

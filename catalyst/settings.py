@@ -46,12 +46,20 @@ if not DALLE_API_KEY:
 # --- 3. LLM Configuration ---
 # Tunable parameters for the AI.
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
+GEMINI_MAX_RETRIES = 3
+GEMINI_DEFAULT_TIMEOUT_SECONDS = 60
 
 
 # --- 4. Caching Configuration ---
 EMBEDDING_MODEL_NAME = "embedding-001"
 CHROMA_COLLECTION_NAME = "creative_catalyst_reports"
 CACHE_DISTANCE_THRESHOLD = 0.10
+
+# Load the ChromaDB server configuration from environment variables.
+# The port MUST be cast to an integer here to ensure it is correctly typed
+# for the entire application. This is the single source of truth.
+CHROMA_SERVER_HOST = os.getenv("CHROMA_SERVER_HOST", "localhost")
+CHROMA_SERVER_PORT = int(os.getenv("CHROMA_SERVER_PORT", "8000"))
 
 
 # --- 5. File & Logging Configuration ---
@@ -67,4 +75,4 @@ KEEP_N_RESULTS = 3  # Keep the 3 most recent result folders
 # A master switch to enable or disable costly features like image generation.
 # Reads from the .env file, defaulting to True if not specified.
 ENABLE_IMAGE_GENERATION = os.getenv("ENABLE_IMAGE_GENERATION", "True").lower() == "true"
-IMAGE_GENERATION_MODEL = os.getenv("IMAGE_GENERATION_MODEL", "dall-e-3")
+IMAGE_GENERATION_MODEL = os.getenv("IMAGE_GENERATION_MODEL", "nano-banana")

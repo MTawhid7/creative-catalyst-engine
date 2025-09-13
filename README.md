@@ -5,7 +5,7 @@
 
 The **Creative Catalyst Engine** is an AI-powered, idea-to-image pipeline delivered as a scalable and resilient web service. It transforms a simple creative brief into a multi-format fashion intelligence package: a structured trend report (JSON), an art-directed style guide, and a suite of editorial-quality images.
 
-Built on a robust, modern stack of **FastAPI, ARQ, and Redis**, the engine is fully containerized with Docker for perfect reproducibility and ease of use. It features an intelligent, multi-level caching system, integrated error monitoring with Sentry, and a modular, "divide and conquer" synthesis process to achieve a level of creative coherence that mimics a world-class design studio.
+Built on a robust, modern stack of **FastAPI, ARQ, Redis, and ChromaDB**, the engine is fully containerized with Docker for perfect reproducibility and ease of use. It features an intelligent, multi-level caching system, integrated error monitoring with Sentry, and a modular, "divide and conquer" synthesis process to achieve a level of creative coherence that mimics a world-class design studio.
 
 ---
 
@@ -13,23 +13,168 @@ Built on a robust, modern stack of **FastAPI, ARQ, and Redis**, the engine is fu
 
 - [🚀 Creative Catalyst Engine](#-creative-catalyst-engine)
   - [Table of Contents](#table-of-contents)
-  - [Guiding Principles](#guiding-principles)
-  - [Key Features](#key-features)
-  - [Architecture Overview](#architecture-overview)
-  - [Repository Structure](#repository-structure)
-  - [Setup and Configuration](#setup-and-configuration)
+  - [1. Getting Started](#1-getting-started)
     - [Prerequisites](#prerequisites)
-    - [Installation](#installation)
-    - [Environment Variables](#environment-variables)
-  - [Running the Engine](#running-the-engine)
-  - [Interacting with the Engine](#interacting-with-the-engine)
-  - [Dependency Management](#dependency-management)
-  - [Troubleshooting](#troubleshooting)
+    - [First-Time Setup](#first-time-setup)
+    - [Running the Application](#running-the-application)
+  - [2. Day-to-Day Workflow](#2-day-to-day-workflow)
+    - [Interacting with the Engine](#interacting-with-the-engine)
+    - [Modifying Code](#modifying-code)
+    - [Managing Dependencies](#managing-dependencies)
+    - [Running Scripts \& Tests](#running-scripts--tests)
+  - [3. Debugging](#3-debugging)
+    - [Method 1: Real-Time Log Tailing](#method-1-real-time-log-tailing)
+    - [Method 2: Interactive Debugging with VS Code](#method-2-interactive-debugging-with-vs-code)
+  - [4. Architecture Deep Dive](#4-architecture-deep-dive)
+    - [Guiding Principles](#guiding-principles)
+    - [Key Features](#key-features)
+    - [Architecture Diagram](#architecture-diagram)
+    - [Repository Structure](#repository-structure)
+  - [5. Troubleshooting](#5-troubleshooting)
 
 ---
 
-## Guiding Principles
+## 1. Getting Started
 
+This project is fully containerized. The primary workflow uses `docker-compose` to orchestrate all services.
+
+### Prerequisites
+
+*   **Docker Desktop:** The primary requirement for running the application.
+*   **Python 3.11+:** Required *only* for managing dependencies (`pip-tools`) and running the `api_client` locally.
+
+### First-Time Setup
+
+1.  **Clone the Repository:**
+    ```bash
+    git clone https://github.com/MTawhid7/creative-catalyst-engine.git
+    cd creative-catalyst-engine
+    ```
+2.  **Create Your Local Environment:**
+    Set up a local virtual environment. This is used for IDE integration and dependency management tools, not for running the application itself.
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install pip-tools
+    ```
+3.  **Create the `.env` File:**
+    Copy the provided `.env.example` file to `.env`. This file is ignored by Git and will hold your secret keys.
+    ```bash
+    cp .env.example .env
+    ```
+4.  **Configure Your Secrets:**
+    Open the newly created `.env` file and fill in your secret keys, at a minimum:
+    *   `GEMINI_API_KEY`: Your API key for Google Gemini.
+    *   `SENTRY_DSN`: Your DSN key from your Sentry project.
+    *   `ASSET_BASE_URL`: The public-facing IP address of your computer (e.g., `http://192.168.1.100:9500`) so that clients on your network can access the generated images.
+
+### Running the Application
+
+The entire application stack—API server, background worker, Redis, and ChromaDB—is orchestrated with a single command.
+
+1.  **Ensure Docker Desktop is running.**
+2.  **Open a terminal** in the project's root directory (no `venv` needed).
+3.  **Build and Run the Services:**
+    ```bash
+    docker-compose up --build
+    ```
+    *   The first time you run this command, it will be slow as it builds the Docker image.
+    *   For daily use after the first build, you can simply run `docker-compose up`.
+
+The application is ready when you see logs from all services, including:
+`Uvicorn running on http://0.0.0.0:9500` and `ARQ worker started. Ready to process creative jobs.`
+
+To stop the entire application, press `Ctrl+C`, then run `docker-compose down`.
+
+---
+
+## 2. Day-to-Day Workflow
+
+### Interacting with the Engine
+
+The recommended way to test the running service is with the provided API client.
+
+1.  **Start the application** with `docker-compose up`.
+2.  **In a separate terminal,** activate your local virtual environment: `source venv/bin/activate`.
+3.  **Modify the test prompt** in `api_client/example.py`.
+4.  **Run the client:** `python -m api_client.example`.
+
+### Modifying Code
+
+The project is configured with a **live-sync volume**. When you save a change to a `.py` file, the change is instantly reflected inside the running Docker containers. The FastAPI server will automatically restart. To apply changes to the worker, you must manually restart it:
+```bash
+# Run this in a separate terminal
+docker-compose restart worker
+```
+
+### Managing Dependencies
+
+This project uses `pip-tools` for robust, deterministic dependency management.
+
+*   **To add or change a dependency:** Edit the high-level `requirements.in` (for production) or `dev-requirements.in` (for development tools) file.
+*   **To update the lock files:**
+    1.  Activate your local virtual environment: `source venv/bin/activate`
+    2.  Run the compile commands:
+        ```bash
+        pip-compile --strip-extras requirements.in
+        pip-compile --strip-extras dev-requirements.in
+        ```
+    3.  Commit both the `.in` and `.txt` files to Git.
+    4.  Rebuild your Docker image with `docker-compose up --build`.
+
+### Running Scripts & Tests
+
+Use `docker-compose run` to execute one-off commands inside a temporary container.
+
+*   **To Clear All Caches:**
+    ```bash
+    docker-compose run --rm clear-cache
+    ```
+*   **To Run the Test Suite:**
+    ```bash
+    docker-compose run --rm worker pytest
+    ```
+
+---
+
+## 3. Debugging
+
+### Method 1: Real-Time Log Tailing
+
+The `docker-compose up` command streams the logs from all services. For a cleaner view, you can tail the logs for a specific service in a separate terminal.
+
+```bash
+# Follow the logs for only the worker container
+docker-compose logs -f worker
+```
+
+### Method 2: Interactive Debugging with VS Code
+
+You can set breakpoints in VS Code and debug your code while it runs *inside the containers*.
+
+**Prerequisites:** VS Code with the **Docker** and **Python** extensions.
+
+1.  **Launch in Debug Mode:**
+    Start the application using the `docker-compose.debug.yml` override file.
+    ```bash
+    docker-compose -f docker-compose.yml -f docker-compose.debug.yml up --build
+    ```
+2.  **Set a Breakpoint:**
+    Open any file (e.g., `api/worker.py`) and set a breakpoint.
+
+3.  **Attach the Debugger:**
+    *   Go to the "Run and Debug" panel in VS Code.
+    *   From the dropdown, select either **"Attach to API (Docker)"** or **"Attach to Worker (Docker)"**.
+    *   Click the green play button.
+
+4.  **Trigger the Code:**
+    Send a request to your API. Execution will pause at your breakpoint.
+
+---
+
+## 4. Architecture Deep Dive
+
+### Guiding Principles
 This engine is built with a few core architectural principles in mind:
 
 *   **Separation of Concerns:** The **Service Layer** (`api/`) is strictly decoupled from the **Core Engine** (`catalyst/`). The API handles web requests and jobs, while the engine focuses purely on generating fashion intelligence.
@@ -37,10 +182,8 @@ This engine is built with a few core architectural principles in mind:
 *   **Resilience by Design:** The pipeline features granular, stage-aware exception handling, a fallback synthesis path, and integrated error tracking with Sentry to ensure high availability.
 *   **Production-Ready by Design:** The entire application is containerized, ensuring a consistent and reproducible environment from local development to production. Key behaviors are controlled via environment variables, not hardcoded values.
 
----
 
-## Key Features
-
+### Key Features
 *   **True Asynchronous Processing**: A FastAPI front-end accepts jobs and queues them to **ARQ (Async-Redis-Queue)**, a modern, high-performance `asyncio`-native task queue, ensuring the API is always responsive.
 *   **Containerized & Reproducible**: The entire application stack (API, worker, Redis) is defined in Docker and orchestrated with a single `docker-compose` command for a seamless, one-step setup.
 *   **Intelligent Multi-Level Caching**:
@@ -52,10 +195,8 @@ This engine is built with a few core architectural principles in mind:
     *   **Conceptual Blending:** Uses a "Creative Antagonist" to synthesize a single, surprising, and innovative design detail.
     *   **Creative Compass (`desired_mood`):** Infers a set of "mood words" that guide all downstream creative choices for a coherent final package.
 
----
 
-## Architecture Overview
-
+### Architecture Diagram
 The engine is architected as a modern, decoupled web service. The diagram below illustrates the full request lifecycle.
 
 <details>
@@ -118,27 +259,32 @@ graph TD
 ```
 </details>
 
----
 
-## Repository Structure
+### Repository Structure
 
 ```
 creative-catalyst-engine/
+├── .vscode/
+│   └── launch.json         # VS Code debugger configurations for attaching to Docker containers.
+├── .env.example            # Template for environment variables.
 ├── .env                    # Local environment variables (API keys, DSN). Ignored by Git.
 ├── .gitignore              # Specifies files for Git to ignore.
 ├── .dockerignore           # Specifies files for Docker to ignore during image builds.
-├── Dockerfile              # The multi-stage blueprint for building our secure, production-ready container image.
-├── docker-compose.yml      # The master orchestrator for running the entire application stack (api, worker, redis).
-├── requirements.in         # The high-level, human-managed list of Python dependencies.
-├── requirements.txt        # The full, frozen "lock file" of all dependencies, generated by pip-tools.
-├── clear_cache.py          # A utility script to wipe all caches (Redis, Chroma, files) for a fresh start.
+├── Dockerfile              # The multi-stage blueprint for building the secure, production-ready application image.
+├── docker-compose.yml      # The master orchestrator for running the entire application stack (api, worker, redis, chroma).
+├── docker-compose.debug.yml# Overrides for running services in debug mode with the VS Code debugger attached.
+├── requirements.in         # The high-level, human-managed list of PRODUCTION dependencies.
+├── dev-requirements.in     # The high-level, human-managed list of DEVELOPMENT dependencies (e.g., pip-tools, debugpy).
+├── requirements.txt        # The full, frozen "lock file" of production dependencies, generated by pip-tools.
+├── dev-requirements.txt    # The full, frozen "lock file" of development dependencies.
+├── clear_cache.py          # A utility script to wipe all caches, designed to be run via Docker Compose.
 ├── LICENSE                 # The project's software license.
-├── README.md               # The high-level project documentation.
-└── WORKFLOW_GUIDE.md       # The definitive guide to the team's Git workflow.
+├── README.md               # The high-level project documentation (the "User Manual").
+└── WORKFLOW_GUIDE.md       # The definitive guide to the team's Git workflow (the "Contributor's Guide").
 │
 ├── api/                    # The Service Layer: Handles web requests, jobs, and observability.
 │   ├── __init__.py
-│   ├── main.py             # The FastAPI application, including Sentry initialization and ARQ job submission logic.
+│   ├── main.py             # The FastAPI application, including Sentry initialization and ARQ job submission/streaming logic.
 │   ├── worker.py           # Contains the main ARQ task function (`create_creative_report`).
 │   ├── worker_settings.py  # The configuration file for the ARQ worker, including Sentry initialization.
 │   ├── cache.py            # Async-native logic for the L0 (high-speed intent) Redis cache.
@@ -147,27 +293,27 @@ creative-catalyst-engine/
 │
 ├── api_client/             # A standalone Python client for interacting with the API.
 │   ├── __init__.py
-│   ├── client.py           # The `CreativeCatalystClient` class for submitting and polling jobs.
+│   ├── client.py           # The `CreativeCatalystClient` class for submitting jobs and listening to the SSE stream.
 │   ├── exceptions.py       # Custom exceptions for the client.
 │   └── example.py          # A simple script demonstrating how to use the client.
 │
 └── catalyst/               # The Core Engine: All business logic for the creative pipeline.
     ├── __init__.py
     ├── main.py             # Core `run_pipeline` function; the main entry point for the engine.
-    ├── settings.py         # Central configuration for the engine (file paths, model names).
+    ├── settings.py         # Central configuration for the engine (file paths, model names, resilience settings).
     ├── context.py          # Defines the `RunContext` class, the data object passed through the pipeline.
     │
     ├── caching/            # L1 Semantic Cache logic.
     │   ├── __init__.py
     │   ├── cache_manager.py # High-level interface for the L1 cache.
-    │   └── report_cache.py  # ChromaDB implementation for vector-based semantic caching.
+    │   └── report_cache.py  # ChromaDB client logic for connecting to the central Chroma server.
     │
     ├── clients/            # Clients for external services.
     │   └── gemini/
     │       ├── __init__.py
     │       ├── client_instance.py
-    │       ├── core.py
-    │       ├── resilience.py
+    │       ├── core.py         # The hardened, resilient core logic for making Gemini API calls.
+    │       ├── resilience.py   # Helpers for retry logic and backoff delays.
     │       └── schema.py
     │
     ├── models/
@@ -185,7 +331,7 @@ creative-catalyst-engine/
     │   │   ├── reporting.py
     │   │   └── generation/
     │   │       ├── __init__.py
-    │   │       ├── base_generator.py
+    │   │       ├── base_generator.py # Now inherits from BaseProcessor.
     │   │       └── nanobanana_generator.py
     │   │
     │   ├── prompt_engineering/
@@ -193,8 +339,8 @@ creative-catalyst-engine/
     │   │
     │   └── synthesis_strategies/ # The modular, "divide and conquer" logic for report assembly.
     │       ├── __init__.py
-    │       ├── report_assembler.py
-    │       ├── section_builders.py
+    │       ├── report_assembler.py   # Orchestrates the concurrent execution of builders.
+    │       ├── section_builders.py   # The hardened, defensive builder classes.
     │       └── synthesis_models.py
     │
     ├── prompts/
@@ -208,103 +354,19 @@ creative-catalyst-engine/
         └── log_formatter.py  # The custom class for color-coded console log formatting.
 │
 ├── artifact_cache/         # Permanent storage for L1 cached artifacts (images, reports). Ignored by Git.
-├── chroma_cache/           # Directory for the ChromaDB vector store (L1 cache). Ignored by Git.
-├── logs/                   # Contains the rotating log files (e.g., catalyst_engine.log). Ignored by Git.
+├── chroma_cache/           # Directory for the ChromaDB vector store data. Ignored by Git.
+├── logs/                   # Contains the rotating JSON log files (e.g., catalyst_engine.log). Ignored by Git.
 └── results/                # Rotating storage for the N most recent user-facing runs. Ignored by Git.
 ```
 
 ---
 
-## Setup and Configuration
+## 5. Troubleshooting
 
-### Prerequisites
-
-*   **Docker Desktop:** The primary requirement for running the application.
-*   **Python 3.11+:** Required only for managing dependencies with `pip-tools`.
-
-### Installation
-
-1.  **Clone the Repository:**
-    ```bash
-    git clone https://github.com/MTawhid7/creative-catalyst-engine.git
-    cd creative-catalyst-engine
-    ```
-2.  **Create the Environment File:**
-    Copy the provided `.env.example` file to `.env` and fill in your secret keys (at a minimum, `GEMINI_API_KEY` and `SENTRY_DSN`).
-
-### Environment Variables
-
-Your `.env` file controls the application's configuration.
-
-```ini
-# .env
-
-# --- API Keys & Secrets ---
-GEMINI_API_KEY="your_gemini_api_key_here"
-SENTRY_DSN="your_sentry_dsn_here"
-
-# --- Feature Flags & Model Selection ---
-ENABLE_IMAGE_GENERATION=True
-IMAGE_GENERATION_MODEL="nano-banana"
-
-# --- Infrastructure & Networking ---
-# CRITICAL: This MUST be 'redis' to connect to the Docker service.
-REDIS_URL="redis://redis:6379/0"
-
-# The public-facing base URL for the server.
-# Replace with your computer's IP address on your local network.
-ASSET_BASE_URL="http://192.168.10.189:9500"
-```
-
----
-
-## Running the Engine
-
-The entire application stack is orchestrated with a single command.
-
-1.  **Ensure Docker Desktop is running.**
-2.  **Open a terminal** in the project's root directory.
-3.  **Run the master command:**
-    ```bash
-    docker-compose up --build
-    ```
-    *   The `--build` flag is only necessary the first time you run the application or after you've changed dependencies or the `Dockerfile`.
-    *   For daily use, you can simply run `docker-compose up`.
-
-You will see the logs from the API server, the ARQ worker, and Redis streaming in your terminal. The application is ready when you see the lines:
-`Uvicorn running on http://0.0.0.0:9500` and `ARQ worker started. Ready to process creative jobs.`
-
-To stop the entire application, press `Ctrl+C` in the terminal, then run `docker-compose down`.
-
----
-
-## Interacting with the Engine
-
-*   **Local:** Run in terminal `python -m catalyst.main`.
-*   **Recommended:** Use the API Client via `python -m api_client.example`.
-*   **Direct API (curl):** First, `POST` to `/v1/creative-jobs`, then `GET` the `/v1/creative-jobs/{job_id}` endpoint.
-
----
-
-## Dependency Management
-
-This project uses `pip-tools` for robust, deterministic dependency management.
-
-*   **To add or change a dependency:** Edit the high-level `requirements.in` file.
-*   **To update the lock file:** Activate your local virtual environment (`source venv/bin/activate`) and run:
-    ```bash
-    pip-compile --strip-extras requirements.in
-    ```
-    Then, commit both the updated `requirements.in` and `requirements.txt` files.
-
----
-
-## Troubleshooting
-
-| Symptom                                                      | Probable Cause & Solution                                                                                                                                                                                                                                                 |
-| :----------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **`docker-compose up` fails with a container name conflict** | A container from a previous run was not properly shut down. **Solution:** Run `docker-compose down` to remove the old containers, then run `docker-compose up` again.                                                                                                     |
-| **Build fails with `No matching distribution found`**        | A Python dependency is incompatible with the `glibc`-based builder image. This is rare but possible. **Solution:** Research the problematic package for a compatible version or alternative.                                                                              |
-| **500 Internal Server Error**                                | A background job in the ARQ worker failed. **Solution:** Check your **Sentry dashboard**. The full Python traceback, request data, and context will be there, allowing for instant debugging. You can also check the container logs with `docker-compose logs -f worker`. |
-| **Images not loading (404 Not Found)**                       | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing address of your server that the client machine can reach (e.g., `http://<your_macbook_lan_ip>:9500`).                                                                                 |
-| **Getting old/cached results**                               | The L0 (Redis) or L1 (Chroma) caches are still active. **Solution:** Run the master cache clearing utility: `python clear_cache.py`. This script now clears all file-based caches, results folders, and the Redis database for a completely fresh start.                  | ``` |
+| Symptom                                                      | Probable Cause & Solution                                                                                                                                                                                        |
+| :----------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`docker-compose up` fails with a container name conflict** | A container from a previous run was not properly shut down. **Solution:** Run `docker-compose down` to remove the old containers, then run `docker-compose up` again.                                            |
+| **Build fails with `No matching distribution found`**        | A Python dependency in `requirements.txt` is incompatible with the Debian-based builder image. **Solution:** Research the problematic package for a compatible version or an alternative.                        |
+| **500 Internal Server Error**                                | A background job in the ARQ worker failed. **Solution:** **1. Check your Sentry dashboard.** The full traceback and context will be there. **2. Check the container logs** with `docker-compose logs -f worker`. |
+| **Images not loading (404 Not Found)**                       | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing IP address of your computer that the client machine can reach (e.g., `http://192.168.1.100:9500`).                           |
+| **Getting old/cached results**                               | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility with Docker: `docker-compose run --rm clear-cache`.                                                         |

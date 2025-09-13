@@ -44,7 +44,7 @@ class NanoBananaGeneration(BaseImageGenerator):
             )
             self.client = None
 
-    async def generate_images(self, context: RunContext) -> RunContext:
+    async def process(self, context: RunContext) -> RunContext:
         """Orchestrates the image generation process for each key piece in the trend report."""
         if not self.client:
             self.logger.error("Halting generation: Gemini client was not initialized.")

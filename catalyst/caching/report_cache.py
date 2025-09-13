@@ -11,7 +11,7 @@ synthesis and image generation steps are skipped.
 """
 
 import json
-import hashlib  # <-- ADD THIS IMPORT
+import hashlib
 from typing import Optional, Dict
 
 import chromadb
@@ -28,9 +28,8 @@ logger = get_logger(__name__)
 _collection_name = settings.CHROMA_COLLECTION_NAME
 _report_collection = None
 try:
-    chroma_client = chromadb.PersistentClient(
-        path=str(settings.CHROMA_PERSIST_DIR),
-        settings=ChromaSettings(anonymized_telemetry=False),
+    chroma_client = chromadb.HttpClient(
+        host=settings.CHROMA_SERVER_HOST, port=settings.CHROMA_SERVER_PORT
     )
     _report_collection = chroma_client.get_or_create_collection(name=_collection_name)
     logger.info(

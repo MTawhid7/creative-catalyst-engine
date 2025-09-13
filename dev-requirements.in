@@ -1,0 +1,7 @@
+# dev-requirements.in
+
+# --- Dependency Management ---
+pip-tools
+
+# --- Debugging ---
+debugpy

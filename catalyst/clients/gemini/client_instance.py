@@ -19,6 +19,16 @@ logger = get_logger(__name__)
 client = None
 try:
     if settings.GEMINI_API_KEY:
+        # Updated client initialization for the Google GenAI SDK (2025)
+        # The Client constructor only accepts these parameters:
+        # - vertexai: bool (for Vertex AI API, defaults to False)
+        # - api_key: str (for Gemini Developer API)
+        # - credentials: google.auth.credentials.Credentials (for Vertex AI)
+        # - project: str (for Vertex AI)
+        # - location: str (for Vertex AI)
+        # - debug_config: DebugConfig (for testing)
+        # - http_options: HttpOptions (for API version, etc.)
+
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
         logger.info("🔑 Gemini API client configured successfully.")
     else:
