@@ -4,13 +4,26 @@
 # memorable aliases for all common development, maintenance, and release operations.
 # To see a list of all available commands, run: make help
 
+# ===================================================================
+#  CONFIGURATION & VARIABLES
+# ===================================================================
+
 # This variable defaults to the project's directory name, making commands more robust.
 COMPOSE_PROJECT_NAME ?= creativecatalystengine
 # This magic gets the current git branch name for use in git commands.
 CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 
 # This ensures that 'make' runs the command even if a file with the same name exists.
-.PHONY: help build up down restart logs test debug clear-cache deps scan clean-docker release tag
+# This list should contain EVERY command target in the file.
+.PHONY: help \
+	up down build build-clean \
+	restart restart-api restart-worker \
+	logs logs-api logs-worker \
+	shell test debug \
+	sync-main new-branch save sync-branch submit cleanup-branch \
+	deps clear-cache scan clean-docker clean-docker-full clean-build-cache \
+	release tag
+
 # This sets the default command to 'help' if 'make' is run without arguments.
 .DEFAULT_GOAL := help
 
@@ -38,9 +51,9 @@ help:
 	@echo "   test           Run the full test suite inside a fresh Docker container."
 	@echo "   debug          Start all services in interactive debugging mode for VS Code."
 	@echo ""
-	@echo "  Git Workflow:"
-	@echo "   sync-main      Sync your local 'main' branch with the official remote."
-	@echo "   new-branch     Create a new feature branch from the latest 'main' (e.g., make new-branch b=feat/new-thing)."
+	@echo "   Git Workflow:"
+	@echo "   sync-main      Sync your local 'main' branch with BOTH remotes."
+	@echo "   new-branch     Create a new feature branch from latest 'main' (e.g., make new-branch b=feat/new-thing)."
 	@echo "   save           Push the current branch to your personal remote ('origin')."
 	@echo "   sync-branch    Rebase the current branch on the latest 'main'."
 	@echo "   submit         Push the current branch to the company remote for a PR."
@@ -55,7 +68,7 @@ help:
 	@echo ""
 	@echo " 🚢 Release Management:"
 	@echo "   release        Merge the main branch into the release branch safely."
-	@echo "   (Tagging is a manual process, see WORKFLOW_GUIDE.md)"
+	@echo "   tag            Display instructions for the manual tagging process."
 	@echo ""
 
 
@@ -116,9 +129,11 @@ debug:
 # ===================================================================
 
 sync-main:
-	@echo "🔄 Syncing the local 'main' branch with the official remote..."
+	@echo "🔄 Syncing the local 'main' branch with BOTH remotes..."
 	git switch main
+	@echo "   Pulling latest from company..."
 	git pull --rebase company main
+	@echo "   Pushing latest to personal remote (origin)..."
 	git push origin main
 
 new-branch:
@@ -190,3 +205,7 @@ release:
 	git merge main
 	git push company release
 	git switch main
+
+tag:
+	@echo "🏷️  Tagging is a manual process to ensure high-quality release notes."
+	@echo "   Please see the 'Release & Tagging Workflow' section in WORKFLOW_GUIDE.md"
