@@ -17,6 +17,10 @@ Welcome to the official development workflow for the Creative Catalyst Engine. T
     - [Step 5: Submitting for Review](#step-5-submitting-for-review)
     - [Step 6: Finalizing the Merge](#step-6-finalizing-the-merge)
     - [Step 7: Post-Merge Cleanup](#step-7-post-merge-cleanup)
+  - [Phase 2: Release \& Tagging Workflow](#phase-2-release--tagging-workflow)
+    - [Step 1: Prepare the Release](#step-1-prepare-the-release)
+    - [Step 2: Create the Signed Tag (Manual Process)](#step-2-create-the-signed-tag-manual-process)
+    - [Step 3: Push the Tag to Remotes](#step-3-push-the-tag-to-remotes)
   - [Phase 2: Philosophy \& Conventions](#phase-2-philosophy--conventions)
     - [Our Guiding Principles (The "Why")](#our-guiding-principles-the-why)
     - [Branch Naming Conventions](#branch-naming-conventions)
@@ -28,7 +32,6 @@ Welcome to the official development workflow for the Creative Catalyst Engine. T
     - [Scenario 3: Escape a rebase with a major conflict](#scenario-3-escape-a-rebase-with-a-major-conflict)
     - [Scenario 4: Accidentally committed to `main`](#scenario-4-accidentally-committed-to-main)
   - [Strategic Command Reference](#strategic-command-reference)
-
 ---
 
 ## Phase 1: The Core Workflow
@@ -65,77 +68,93 @@ This is the end-to-end process for taking a task from idea to merged reality.
 
 ### Step 2: Starting a New Task
 
-1.  **Sync `main`:**
+1.  **Create Your Feature Branch:** Use our [Branch Naming Conventions](#branch-naming-conventions).
     ```bash
-    git switch main
-    git pull --rebase company main
+    make new-branch b=feat/add-image-watermarking
     ```
-2.  **Create Your Feature Branch:** Use our [Branch Naming Conventions](#branch-naming-conventions).
-    ```bash
-    git switch -c feat/add-image-watermarking
-    ```
+    This command automatically syncs your `main` branch before creating the new feature branch.
 
 ### Step 3: Daily Development Loop
 
-1.  **Code & Commit:** Make small, logical commits. Follow our [Commit Message Conventions](#commit-message-conventions).
+1.  **Code & Commit (Manual):** Make small, logical commits. This step remains manual to ensure high-quality, human-written commit messages. Follow our [Commit Message Conventions](#commit-message-conventions).
     ```bash
     git add .
     git commit -m "feat(images): Implement core watermarking function"
     ```
-2.  **Push to Your Workshop:** Use your personal remote as a constant backup.
+2.  **Push to Your Workshop (Automated):** Use your personal remote as a constant backup.
     ```bash
-    git push -u origin feat/add-image-watermarking
+    make save
     ```
 
 ### Step 4: Keeping Your Branch Synced
 
 Keep your feature branch updated with the latest from `main` to prevent large conflicts later.
-
-1.  **Fetch the latest official history:**
-    ```bash
-    git fetch company
-    ```
-2.  **Rebase your branch onto `main`:**
-    ```bash
-    git rebase company/main
-    ```
-3.  **Force-push the updated branch to your workshop:** This is required and safe after rebasing a personal feature branch.
-    ```bash
-    git push --force-with-lease origin feat/add-image-watermarking
-    ```
+```bash
+make sync-branch
+```
+*(Note: This command will still require you to manually resolve any merge conflicts that arise during the rebase.)*
 
 ### Step 5: Submitting for Review
 
-1.  **Push to the Showroom:** Make your branch visible to the company.
-    ```bash
-    git push company feat/add-image-watermarking
-    ```
-2.  **Open a Pull Request** on the company's GitHub repo, following the [PR Conventions](#pull-request-pr-conventions).
+```bash
+make submit
+```
+After running this, open a Pull Request on the company's GitHub repo, following the [PR Conventions](#pull-request-pr-conventions).
 
 ### Step 6: Finalizing the Merge
 
-1.  **Squash and Merge:** Once approved, merge the PR using the **"Squash and merge"** option.
+1.  **Squash and Merge:** Once approved, merge the PR using the **"Squash and merge"** option in the GitHub UI.
 2.  **Edit Commit Message:** Condense the commit history into a single, clear message that follows our conventions.
 
 ### Step 7: Post-Merge Cleanup
 
-1.  **Sync `main`:**
-    ```bash
-    git switch main
-    git pull --rebase company main
-    ```
-2.  **Update Your Personal `main`:**
-    ```bash
-    git push origin main
-    ```
-3.  **Delete the Merged Branch Everywhere:**
-    ```bash
-    git branch -d feat/add-image-watermarking
-    git push origin --delete feat/add-image-watermarking
-    git push company --delete feat/add-image-watermarking
-    ```
+```bash
+make cleanup-branch b=feat/add-image-watermarking
+```
+This command automatically syncs your `main` branch before deleting the feature branch from your local machine and both remotes.
 
 ---
+
+## Phase 2: Release & Tagging Workflow
+
+### Step 1: Prepare the Release
+**Sync the `release` Branch:** Run the `make release` command to merge all the latest changes from `main` into your `release` branch.
+```bash
+make release
+```
+
+### Step 2: Create the Signed Tag (Manual Process)
+Creating a release tag is a significant, human-centric event. It is done manually to ensure a high-quality, detailed release message.
+
+1.  **Switch to the `release` branch:** `git switch release`
+2.  **Run the annotated, signed tag command:** Replace `v1.2.3` with the new version.
+    ```bash
+    git tag -s v1.2.3
+    ```
+3.  **Write a High-Quality Tag Message:** Your text editor will open. The message should be a concise changelog for the new version.
+
+    **Example:**
+    ```
+    Release v1.2.3
+
+    This release finalizes the migration to a fully containerized,
+    asyncio-native architecture and hardens the application.
+
+    ### Features
+    - Migrated from Celery to ARQ for improved stability.
+    - Containerized the full application stack with Docker Compose.
+    - Implemented Sentry for real-time error monitoring.
+
+    ### Fixes
+    - Resolved the ChromaDB "database is locked" race condition.
+    ```
+4.  **Save and close the editor** to create the tag.
+
+### Step 3: Push the Tag to Remotes
+```bash
+git push company v1.2.3
+git push origin v1.2.3
+```
 
 ## Phase 2: Philosophy & Conventions
 

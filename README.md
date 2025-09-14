@@ -70,21 +70,22 @@ This project is fully containerized. The primary workflow uses `docker-compose` 
 
 ### Running the Application
 
-The entire application stack—API server, background worker, Redis, and ChromaDB—is orchestrated with a single command.
+The entire application stack—API server, background worker, Redis, and ChromaDB—is orchestrated with simple `make` commands.
 
 1.  **Ensure Docker Desktop is running.**
 2.  **Open a terminal** in the project's root directory (no `venv` needed).
 3.  **Build and Run the Services:**
     ```bash
-    docker-compose up --build
+    # This command will build the images if they don't exist and then start all services.
+    make up
     ```
-    *   The first time you run this command, it will be slow as it builds the Docker image.
-    *   For daily use after the first build, you can simply run `docker-compose up`.
+    *   The first time you run this, the build process will be slow. Subsequent starts will be very fast.
 
 The application is ready when you see logs from all services, including:
 `Uvicorn running on http://0.0.0.0:9500` and `ARQ worker started. Ready to process creative jobs.`
 
-To stop the entire application, press `Ctrl+C`, then run `docker-compose down`.
+To stop the entire application, press `Ctrl+C` in the terminal, then run `make down`.
+
 
 ---
 
@@ -94,7 +95,7 @@ To stop the entire application, press `Ctrl+C`, then run `docker-compose down`.
 
 The recommended way to test the running service is with the provided API client.
 
-1.  **Start the application** with `docker-compose up`.
+1.  **Start the application** with `make up`.
 2.  **In a separate terminal,** activate your local virtual environment: `source venv/bin/activate`.
 3.  **Modify the test prompt** in `api_client/example.py`.
 4.  **Run the client:** `python -m api_client.example`.
@@ -104,7 +105,7 @@ The recommended way to test the running service is with the provided API client.
 The project is configured with a **live-sync volume**. When you save a change to a `.py` file, the change is instantly reflected inside the running Docker containers. The FastAPI server will automatically restart. To apply changes to the worker, you must manually restart it:
 ```bash
 # Run this in a separate terminal
-docker-compose restart worker
+make restart-worker
 ```
 
 ### Managing Dependencies
@@ -114,25 +115,26 @@ This project uses `pip-tools` for robust, deterministic dependency management.
 *   **To add or change a dependency:** Edit the high-level `requirements.in` (for production) or `dev-requirements.in` (for development tools) file.
 *   **To update the lock files:**
     1.  Activate your local virtual environment: `source venv/bin/activate`
-    2.  Run the compile commands:
-        ```bash
-        pip-compile --strip-extras requirements.in
-        pip-compile --strip-extras dev-requirements.in
-        ```
+    2.  Run the compile command: `make deps`
     3.  Commit both the `.in` and `.txt` files to Git.
-    4.  Rebuild your Docker image with `docker-compose up --build`.
+    4.  Rebuild your Docker image: `make build`
 
 ### Running Scripts & Tests
 
-Use `docker-compose run` to execute one-off commands inside a temporary container.
+Use `make` commands to execute one-off tasks inside a temporary container.
 
 *   **To Clear All Caches:**
     ```bash
-    docker-compose run --rm clear-cache
+    make clear-cache
     ```
 *   **To Run the Test Suite:**
     ```bash
-    docker-compose run --rm worker pytest
+    make test
+    ```
+*   **To Open a Shell Inside the Worker:**
+    This is incredibly useful for debugging.
+    ```bash
+    make shell
     ```
 
 ---
@@ -141,26 +143,26 @@ Use `docker-compose run` to execute one-off commands inside a temporary containe
 
 ### Method 1: Real-Time Log Tailing
 
-The `docker-compose up` command streams the logs from all services. For a cleaner view, you can tail the logs for a specific service in a separate terminal.
+For a cleaner view of the logs for a specific service, run one of the following commands in a separate terminal:
 
 ```bash
 # Follow the logs for only the worker container
-docker-compose logs -f worker
+make logs-worker
+
+# Follow the logs for only the API container
+make logs-api
 ```
 
 ### Method 2: Interactive Debugging with VS Code
 
 You can set breakpoints in VS Code and debug your code while it runs *inside the containers*.
 
-**Prerequisites:** VS Code with the **Docker** and **Python** extensions.
-
 1.  **Launch in Debug Mode:**
-    Start the application using the `docker-compose.debug.yml` override file.
+    Start the application using the dedicated debug command.
     ```bash
-    docker-compose -f docker-compose.yml -f docker-compose.debug.yml up --build
+    make debug
     ```
-2.  **Set a Breakpoint:**
-    Open any file (e.g., `api/worker.py`) and set a breakpoint.
+2.  **Set a Breakpoint** in any `.py` file in VS Code.
 
 3.  **Attach the Debugger:**
     *   Go to the "Run and Debug" panel in VS Code.

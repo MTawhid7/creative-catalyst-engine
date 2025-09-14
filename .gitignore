@@ -56,3 +56,5 @@ htmlcov/
 
 # Ignore JetBrains IDE files
 .idea/
+
+downloaded_images/
