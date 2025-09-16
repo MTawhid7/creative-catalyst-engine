@@ -1,3 +1,5 @@
+# catalyst/context.py
+
 """
 This module defines the RunContext, a central data object to hold the state
 and artifacts of a single execution pipeline.
@@ -32,14 +34,20 @@ class RunContext:
         # --- Pipeline Data Fields ---
         self.enriched_brief: Dict = {}
         self.brand_ethos: str = ""
-        # --- START OF DEFINITIVE FIX ---
-        # Add a new field to hold the specific, synthesized design idea that
-        # will be used to inject innovation into the core theme.
         self.antagonist_synthesis: str = ""
-        # --- END OF DEFINITIVE FIX ---
         self.raw_research_context: str = ""
         self.structured_research_context: str = ""
         self.final_report: Dict = {}
+
+        # --- START: GRANULAR STATUS TRACKING FIELDS ---
+        # A human-readable string representing the current stage of the pipeline.
+        # This will be updated by the orchestrator and published by the worker.
+        self.current_status: str = "Initializing..."
+
+        # A flag to signal to background tasks (like the status publisher)
+        # that the main pipeline has finished processing.
+        self.is_complete: bool = False
+        # --- END: GRANULAR STATUS TRACKING FIELDS ---
 
     def record_artifact(self, step_name: str, data: Any):
         """Records the output of a processor for debugging purposes."""
@@ -65,13 +73,12 @@ class RunContext:
             "user_passage": self.user_passage,
             "enriched_brief": self.enriched_brief,
             "brand_ethos": self.brand_ethos,
-            # --- START OF DEFINITIVE FIX ---
-            # Add the new field to the logging output.
             "antagonist_synthesis": self.antagonist_synthesis,
-            # --- END OF DEFINITIVE FIX ---
             "raw_research_context_length": len(self.raw_research_context),
             "structured_research_context_length": len(self.structured_research_context),
             "final_report_keys": (
                 list(self.final_report.keys()) if self.final_report else []
             ),
+            # Add the new status field to our debug output.
+            "current_status": self.current_status,
         }

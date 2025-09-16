@@ -47,6 +47,13 @@ class PipelineOrchestrator:
         and re-raising exceptions for the main loop to handle.
         """
         step_name = processor.__class__.__name__
+
+        # --- START: GRANULAR STATUS UPDATE ---
+        # Update the context with a human-readable status before each step.
+        # This message will be published to Redis by the worker.
+        context.current_status = f"Running: {step_name}"
+        # --- END: GRANULAR STATUS UPDATE ---
+
         self.logger.info(f"--- ▶️ START: {step_name} ---")
         try:
             processed_context = await processor.process(context)
@@ -68,6 +75,7 @@ class PipelineOrchestrator:
 
         try:
             # --- STAGE 1: BRIEFING (CRITICAL) ---
+            context.current_status = "Phase 1: Creative Briefing"
             briefing_pipeline: list[BaseProcessor] = [
                 BriefDeconstructionProcessor(),
                 EthosClarificationProcessor(),
@@ -77,6 +85,7 @@ class PipelineOrchestrator:
                 context = await self._run_step(processor, context)
 
             # --- STAGE 2: CACHE CHECK & ARTIFACT RESTORATION ---
+            context.current_status = "Phase 2: Checking Semantic Cache"
             try:
                 cached_payload_json = await cache_manager.check_report_cache_async(
                     context.enriched_brief
@@ -91,6 +100,7 @@ class PipelineOrchestrator:
                         source_path = settings.ARTIFACT_CACHE_DIR / cached_folder_name
                         dest_path = context.results_dir
                         if source_path.exists() and source_path.is_dir():
+                            context.current_status = "Restoring from cache..."
                             self.logger.info(
                                 f"Restoring artifacts from '{source_path}' to '{dest_path}'..."
                             )
@@ -118,6 +128,7 @@ class PipelineOrchestrator:
                 )
 
             # --- STAGE 3: SYNTHESIS (CRITICAL, WITH FALLBACK) ---
+            context.current_status = "Phase 3: Synthesis"
             self.logger.info("💨 L1 CACHE MISS. Proceeding with full synthesis.")
             try:
                 synthesis_pipeline: list[BaseProcessor] = [
@@ -140,15 +151,16 @@ class PipelineOrchestrator:
                     f"❌ A catastrophic, unrecoverable error occurred during the synthesis stage: {e}",
                     exc_info=True,
                 )
-                # Let the process continue to the 'finally' block to save artifacts.
 
             # --- STAGE 4: FINAL OUTPUT GENERATION (NON-CRITICAL) ---
             if context.final_report:
+                context.current_status = "Phase 4: Finalizing Output"
                 try:
                     final_output_pipeline: list[BaseProcessor] = [
                         FinalOutputGeneratorProcessor()
                     ]
                     if settings.ENABLE_IMAGE_GENERATION:
+                        context.current_status = "Phase 5: Generating Images"
                         final_output_pipeline.append(get_image_generator())
                     else:
                         self.logger.warning(
@@ -164,13 +176,13 @@ class PipelineOrchestrator:
                     )
 
         except Exception as e:
-            # This is the final catch-all for CRITICAL failures (e.g., in the briefing stage).
             self.logger.critical(
                 f"❌ PIPELINE HALTED due to a critical, unrecoverable error in a core stage: {e}",
                 exc_info=True,
             )
 
         finally:
+            context.current_status = "Finishing..."
             self.logger.info("⚙️ Saving all debug artifacts for the run...")
             try:
                 context.save_artifacts()
@@ -180,18 +192,18 @@ class PipelineOrchestrator:
                     "❌ CRITICAL: Failed to save debug artifacts.", exc_info=True
                 )
 
-            # --- START: DEFINITIVE SILENT FAILURE PREVENTION ---
             if not context.final_report and not is_from_cache:
                 self.logger.critical(
                     "❌ PIPELINE FINISHED BUT PRODUCED AN EMPTY REPORT. THIS IS A CRITICAL FAILURE."
                 )
-                # This ensures that if all synthesis paths fail, the task itself fails
-                # with a clear and descriptive error message that will be sent to the API.
                 raise RuntimeError(
                     "Pipeline finished but produced an empty final report."
                 )
-            # --- END: DEFINITIVE SILENT FAILURE PREVENTION ---
 
             self.logger.info(f"⏹️ PIPELINE FINISHED | Run ID: {context.run_id}")
+            # --- START: GRANULAR STATUS UPDATE ---
+            # Signal that the pipeline is complete.
+            context.is_complete = True
+            # --- END: GRANULAR STATUS UPDATE ---
 
         return is_from_cache

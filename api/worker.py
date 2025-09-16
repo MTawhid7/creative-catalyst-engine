@@ -3,31 +3,102 @@
 """
 This module defines the ARQ worker tasks. Each task is a standard async
 function that ARQ can discover and execute.
+
+This version is enhanced to publish granular, real-time status updates
+to a Redis channel during pipeline execution.
 """
 
 import os
 import shutil
+import asyncio
 from pathlib import Path
 from typing import Dict, Any
 
-# --- START: ARCHITECTURAL REFACTOR ---
-# Replace Celery logger with the standard application logger.
+from arq.connections import ArqRedis
 from catalyst.utilities.logger import get_logger, setup_logging_run_id
-# Import the async-native cache functions.
 from api.cache import get_from_l0_cache, set_in_l0_cache
-# Import the core pipeline logic.
 from catalyst.main import run_pipeline
 from catalyst.context import RunContext
 
 logger = get_logger(__name__)
-# --- END: ARCHITECTURAL REFACTOR ---
 
-# These environment variables are still needed for the logic within the task.
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 ASSET_BASE_URL = os.getenv("ASSET_BASE_URL", "http://127.0.0.1:9500")
 
 
-# This is a standard Python function, not tied to a specific library.
+# --- START: GRANULAR STATUS PUBLISHING REFACTOR ---
+async def _publish_status(redis_client: ArqRedis, job_id: str, context: RunContext):
+    """
+    A lightweight, background coroutine that periodically publishes the
+    pipeline's current status to a dedicated Redis key.
+    """
+    status_key = f"job_progress:{job_id}"
+    while not context.is_complete:
+        # Set the current status with a 60-second expiry. If the worker
+        # crashes hard, the key will eventually disappear.
+        await redis_client.set(status_key, context.current_status, ex=60)
+        await asyncio.sleep(1)  # Publish status once per second.
+
+    # One final update to ensure the "Finishing..." status is captured.
+    await redis_client.set(status_key, context.current_status, ex=60)
+
+
+async def create_creative_report(ctx: dict, user_passage: str) -> Dict[str, Any]:
+    """
+    The main ARQ task. It now runs the core pipeline and a status publisher
+    concurrently for real-time progress updates.
+    """
+    redis_client: ArqRedis = ctx["redis"]
+    job_id = ctx["job_id"]
+    setup_logging_run_id(job_id)
+
+    logger.info(f"Received creative brief for processing: '{user_passage[:100]}...'")
+
+    try:
+        cached_result = await get_from_l0_cache(user_passage, redis_client)
+        if cached_result:
+            cleanup_old_results()
+            return cached_result
+    except Exception as e:
+        logger.error(f"⚠️ An error occurred during L0 cache check: {e}", exc_info=True)
+
+    # We now create the context here so we can pass it to both concurrent tasks.
+    # The results_dir path must be the path *inside* the container.
+    context = RunContext(user_passage=user_passage, results_dir=Path("/app/results"))
+
+    # Create the two concurrent tasks.
+    publisher_task = asyncio.create_task(_publish_status(redis_client, job_id, context))
+    pipeline_task = asyncio.create_task(run_pipeline(context))
+
+    try:
+        # Wait for the main pipeline task to complete.
+        await pipeline_task
+    finally:
+        # This block ensures that the publisher is always stopped gracefully,
+        # whether the pipeline succeeds or fails.
+        context.is_complete = True
+        await publisher_task
+
+    # The orchestrator will raise an error if the report is empty.
+
+    report_with_urls = _inject_public_urls(
+        final_report=context.final_report,
+        base_url=ASSET_BASE_URL,
+        final_results_dir=context.results_dir,
+    )
+    final_result = {
+        "final_report": report_with_urls,
+        "artifacts_path": str(context.results_dir),
+    }
+
+    await set_in_l0_cache(user_passage, final_result, redis_client)
+    cleanup_old_results()
+    return final_result
+
+
+# --- END: GRANULAR STATUS PUBLISHING REFACTOR ---
+
+
 def cleanup_old_results():
     """
     Keeps the most recent N result folders and deletes the rest.
@@ -49,7 +120,6 @@ def cleanup_old_results():
         logger.warning(f"⚠️ Could not perform results cleanup: {e}")
 
 
-# This is also a standard Python function.
 def _inject_public_urls(
     final_report: Dict[str, Any], base_url: str, final_results_dir: Path
 ) -> Dict[str, Any]:
@@ -70,53 +140,3 @@ def _inject_public_urls(
                 piece[url_key] = f"{base_url.rstrip('/')}/{correct_path}"
     logger.info("✅ Successfully injected all public image URLs.")
     return final_report
-
-
-# --- START: DEFINITIVE ARQ TASK IMPLEMENTATION ---
-async def create_creative_report(ctx: dict, user_passage: str) -> Dict[str, Any]:
-    """
-    This is the main ARQ task. It's a regular async function that receives
-    a context dictionary (`ctx`) and the job arguments.
-    """
-    # ARQ provides the Redis client and other job info in the context dict.
-    redis_client = ctx['redis']
-    job_id = ctx['job_id']
-
-    # Associate the run_id with the job_id for consistent logging.
-    setup_logging_run_id(job_id)
-
-    logger.info(f"Received creative brief for processing: '{user_passage[:100]}...'")
-
-    try:
-        # Await the async cache check function.
-        cached_result = await get_from_l0_cache(user_passage, redis_client)
-        if cached_result:
-            cleanup_old_results()
-            return cached_result
-    except Exception as e:
-        logger.error(f"⚠️ An error occurred during L0 cache check: {e}", exc_info=True)
-
-    # No more manual loop management. We can now directly await the pipeline.
-    # This is the core of the stability fix.
-    context: RunContext = await run_pipeline(user_passage)
-
-    # The orchestrator will raise an error if the report is empty, which ARQ
-    # will correctly catch and report as a job failure.
-
-    report_with_urls = _inject_public_urls(
-        final_report=context.final_report,
-        base_url=ASSET_BASE_URL,
-        final_results_dir=context.results_dir,
-    )
-    final_result = {
-        "final_report": report_with_urls,
-        "artifacts_path": str(context.results_dir),
-    }
-
-    # Await the async cache set function.
-    await set_in_l0_cache(user_passage, final_result, redis_client)
-
-    cleanup_old_results()
-
-    return final_result
-# --- END: DEFINITIVE ARQ TASK IMPLEMENTATION ---

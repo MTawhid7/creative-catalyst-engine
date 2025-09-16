@@ -5,7 +5,7 @@
 
 The **Creative Catalyst Engine** is an AI-powered, idea-to-image pipeline delivered as a scalable and resilient web service. It transforms a simple creative brief into a multi-format fashion intelligence package: a structured trend report (JSON), an art-directed style guide, and a suite of editorial-quality images.
 
-Built on a robust, modern stack of **FastAPI, ARQ, Redis, and ChromaDB**, the engine is fully containerized with Docker for perfect reproducibility and ease of use. It features an intelligent, multi-level caching system, integrated error monitoring with Sentry, and a modular, "divide and conquer" synthesis process to achieve a level of creative coherence that mimics a world-class design studio.
+Built on a robust, modern stack of **FastAPI, ARQ, Redis, and ChromaDB**, the engine is fully containerized with Docker and managed by a simple `Makefile` command interface for perfect reproducibility and ease of use.
 
 ---
 
@@ -36,12 +36,13 @@ Built on a robust, modern stack of **FastAPI, ARQ, Redis, and ChromaDB**, the en
 
 ## 1. Getting Started
 
-This project is fully containerized. The primary workflow uses `docker-compose` to orchestrate all services.
+This project is fully containerized. The primary workflow uses a `Makefile` to simplify and orchestrate all Docker commands.
 
 ### Prerequisites
 
 *   **Docker Desktop:** The primary requirement for running the application.
-*   **Python 3.11+:** Required *only* for managing dependencies (`pip-tools`) and running the `api_client` locally.
+*   **Make:** A standard command-line tool, available by default on macOS and Linux.
+*   **Python 3.11+:** Required *only* for managing dependencies and running the `api_client` locally.
 
 ### First-Time Setup
 
@@ -51,7 +52,7 @@ This project is fully containerized. The primary workflow uses `docker-compose` 
     cd creative-catalyst-engine
     ```
 2.  **Create Your Local Environment:**
-    Set up a local virtual environment. This is used for IDE integration and dependency management tools, not for running the application itself.
+    Set up a local virtual environment. This is used for IDE integration and dependency management tools.
     ```bash
     python3 -m venv venv
     source venv/bin/activate
@@ -63,14 +64,11 @@ This project is fully containerized. The primary workflow uses `docker-compose` 
     cp .env.example .env
     ```
 4.  **Configure Your Secrets:**
-    Open the newly created `.env` file and fill in your secret keys, at a minimum:
-    *   `GEMINI_API_KEY`: Your API key for Google Gemini.
-    *   `SENTRY_DSN`: Your DSN key from your Sentry project.
-    *   `ASSET_BASE_URL`: The public-facing IP address of your computer (e.g., `http://192.168.1.100:9500`) so that clients on your network can access the generated images.
+    Open the newly created `.env` file and fill in your secret keys (e.g., `GEMINI_API_KEY`, `SENTRY_DSN`, `ASSET_BASE_URL`).
 
 ### Running the Application
 
-The entire application stack—API server, background worker, Redis, and ChromaDB—is orchestrated with simple `make` commands.
+The entire application stack is orchestrated with simple `make` commands.
 
 1.  **Ensure Docker Desktop is running.**
 2.  **Open a terminal** in the project's root directory (no `venv` needed).
@@ -85,7 +83,6 @@ The application is ready when you see logs from all services, including:
 `Uvicorn running on http://0.0.0.0:9500` and `ARQ worker started. Ready to process creative jobs.`
 
 To stop the entire application, press `Ctrl+C` in the terminal, then run `make down`.
-
 
 ---
 
@@ -112,7 +109,7 @@ make restart-worker
 
 This project uses `pip-tools` for robust, deterministic dependency management.
 
-*   **To add or change a dependency:** Edit the high-level `requirements.in` (for production) or `dev-requirements.in` (for development tools) file.
+*   **To add or change a dependency:** Edit the high-level `requirements.in` or `dev-requirements.in` file.
 *   **To update the lock files:**
     1.  Activate your local virtual environment: `source venv/bin/activate`
     2.  Run the compile command: `make deps`
@@ -365,10 +362,10 @@ creative-catalyst-engine/
 
 ## 5. Troubleshooting
 
-| Symptom                                                      | Probable Cause & Solution                                                                                                                                                                                        |
-| :----------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`docker-compose up` fails with a container name conflict** | A container from a previous run was not properly shut down. **Solution:** Run `docker-compose down` to remove the old containers, then run `docker-compose up` again.                                            |
-| **Build fails with `No matching distribution found`**        | A Python dependency in `requirements.txt` is incompatible with the Debian-based builder image. **Solution:** Research the problematic package for a compatible version or an alternative.                        |
-| **500 Internal Server Error**                                | A background job in the ARQ worker failed. **Solution:** **1. Check your Sentry dashboard.** The full traceback and context will be there. **2. Check the container logs** with `docker-compose logs -f worker`. |
-| **Images not loading (404 Not Found)**                       | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing IP address of your computer that the client machine can reach (e.g., `http://192.168.1.100:9500`).                           |
-| **Getting old/cached results**                               | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility with Docker: `docker-compose run --rm clear-cache`.                                                         |
+| Symptom                                               | Probable Cause & Solution                                                                                                                                                                           |
+| :---------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`make up` fails with a container name conflict**    | A container from a previous run was not properly shut down. **Solution:** Run `make down` to remove the old containers, then run `make up` again.                                                   |
+| **Build fails with `No matching distribution found`** | A Python dependency in `requirements.txt` is incompatible with the Debian-based builder image. **Solution:** Research the problematic package for a compatible version or an alternative.           |
+| **500 Internal Server Error**                         | A background job in the ARQ worker failed. **Solution:** **1. Check your Sentry dashboard.** The full traceback and context will be there. **2. Check the container logs** with `make logs-worker`. |
+| **Images not loading (404 Not Found)**                | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing IP address of your computer that the client machine can reach (e.g., `http://192.168.1.100:9500`).              |
+| **Getting old/cached results**                        | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility: `make clear-cache`.                                                      |

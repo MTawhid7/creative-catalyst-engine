@@ -89,7 +89,6 @@ async def submit_job(request: JobRequest, http_request: Request) -> JobResponse:
     return JobResponse(job_id=job.job_id, status="queued")
 
 
-# --- START: DEFINITIVE API IMPLEMENTATION BASED ON VERIFIED FACTS ---
 @app.get(
     "/v1/creative-jobs/{job_id}",
     response_model=JobStatusResponse,
@@ -100,8 +99,6 @@ async def get_job_status(job_id: str, http_request: Request) -> JobStatusRespons
     """
     redis: ArqRedis = http_request.app.state.redis
     job = Job(job_id, redis)
-
-    # Use the lightweight job.status() call, which returns a clean JobStatus enum.
     current_status = await job.status()
 
     if current_status == JobStatus.not_found:
@@ -109,26 +106,22 @@ async def get_job_status(job_id: str, http_request: Request) -> JobStatusRespons
             status_code=404, detail=f"Job with ID '{job_id}' not found."
         )
 
-    # A job's result is only available when it is complete. A failed job's result
-    # is the exception it raised. We use job.result() to retrieve it.
     if current_status == JobStatus.complete:
         try:
             result = await job.result()
-            # We assume a successful job returns a dictionary.
             return JobStatusResponse(job_id=job_id, status="complete", result=result)
         except Exception as e:
-            # If the job failed, job.result() will re-raise the exception.
             logger.error(f"Job {job_id} failed with error: {e}", exc_info=True)
             return JobStatusResponse(job_id=job_id, status="failed", error=str(e))
 
-    # For in-progress or queued jobs, just return the status.
     return JobStatusResponse(job_id=job_id, status=current_status.value)
 
 
+# --- START: DEFINITIVE GRANULAR STATUS STREAMING REFACTOR ---
 @app.get("/v1/creative-jobs/{job_id}/stream")
 async def stream_job_status(job_id: str, http_request: Request):
     """
-    (Recommended) Streams job status using Server-Sent Events (SSE).
+    (Recommended) Streams the status of a creative job using Server-Sent Events (SSE).
     """
     redis: ArqRedis = http_request.app.state.redis
     job = Job(job_id, redis)
@@ -139,10 +132,13 @@ async def stream_job_status(job_id: str, http_request: Request):
             yield {"event": "error", "data": json.dumps({"detail": "Job not found"})}
             return
 
-        while True:
-            current_status = await job.status()
+        progress_key = f"job_progress:{job_id}"
 
-            if current_status == JobStatus.complete:
+        while True:
+            # Check the definitive job status first.
+            current_job_status = await job.status()
+
+            if current_job_status == JobStatus.complete:
                 try:
                     result = await job.result()
                     result_payload = {
@@ -152,7 +148,6 @@ async def stream_job_status(job_id: str, http_request: Request):
                     }
                     yield {"event": "complete", "data": json.dumps(result_payload)}
                 except Exception as e:
-                    # Job completed but with an error.
                     result_payload = {
                         "status": "failed",
                         "result": None,
@@ -160,15 +155,25 @@ async def stream_job_status(job_id: str, http_request: Request):
                     }
                     yield {"event": "complete", "data": json.dumps(result_payload)}
                 break  # Exit the loop after the final event.
-            else:
+
+            # If the job is still in progress, get the granular status.
+            granular_status = await redis.get(progress_key)
+            if granular_status:
+                # We found a detailed status from the worker.
                 yield {
                     "event": "progress",
-                    "data": json.dumps({"status": current_status.value}),
+                    "data": json.dumps({"status": granular_status.decode()}),
+                }
+            else:
+                # Fallback to the generic ARQ status if the progress key isn't available yet.
+                yield {
+                    "event": "progress",
+                    "data": json.dumps({"status": current_job_status.value}),
                 }
 
-            await asyncio.sleep(3)
+            await asyncio.sleep(2)  # Poll for status every 2 seconds.
 
     return EventSourceResponse(event_generator())
 
 
-# --- END: DEFINITIVE API IMPLEMENTATION BASED ON VERIFIED FACTS ---
+# --- END: DEFINITIVE GRANULAR STATUS STREAMING REFACTOR ---
