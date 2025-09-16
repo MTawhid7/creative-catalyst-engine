@@ -37,7 +37,7 @@ async def _publish_status(redis_client: ArqRedis, job_id: str, context: RunConte
         # Set the current status with a 60-second expiry. If the worker
         # crashes hard, the key will eventually disappear.
         await redis_client.set(status_key, context.current_status, ex=60)
-        await asyncio.sleep(1)  # Publish status once per second.
+        await asyncio.sleep(3)  # Publish status once per second.
 
     # One final update to ensure the "Finishing..." status is captured.
     await redis_client.set(status_key, context.current_status, ex=60)

@@ -12,7 +12,7 @@ from .exceptions import APIClientError
 # The client will send this text to the API.
 
 USER_PASSAGE = """
-A collection of rugged, functional workwear for Martian colonists in the year 2085, inspired by vintage Carhartt and Soviet-era space suits.
+Tribal dress for women from a historical timeline.
 """
 
 # ===================================================================
@@ -56,41 +56,38 @@ def main():
     A demonstration of how to use the CreativeCatalystClient to get a report
     and download the associated images.
     """
-    # --- START: ROBUST CLIENT INITIALIZATION ---
-    # The client now automatically reads the API URL from the environment
-    # variable defined in your .env file, falling back to localhost if not set.
-    # This makes the client configurable without code changes.
     client = CreativeCatalystClient()
-    # --- END: ROBUST CLIENT INITIALIZATION ---
-
     print("--- Starting Creative Catalyst API Client Demo ---")
     print(f"--- Target API Server: {client.base_url} ---")
+    final_report = None
+    all_image_urls = []
 
     try:
-        # We now use the USER_PASSAGE variable defined at the top of the file.
-        response_data = client.get_creative_report(USER_PASSAGE)
+        # Iterate over the new generator-based stream method.
+        for update in client.get_creative_report_stream(USER_PASSAGE):
+            event_type = update.get("event")
+            if event_type == "job_submitted":
+                print(f"Job submitted with ID: {update.get('job_id')}")
+            elif event_type == "progress":
+                print(f"Progress: {update.get('status')}")
+            elif event_type == "complete":
+                final_report = update.get("result")
+                print("\n--- ✅ Final Report Received ---")
+                break
 
-        print("\n--- ✅ Final Report Received ---")
-
-        final_report = response_data.get("final_report", {})
         if not final_report:
-            print("Report content is empty. Cannot proceed.")
+            print("Stream finished without a final report.")
             return
 
-        print(f"Theme: {final_report.get('overarching_theme')}")
-        print(f"Server Artifacts Path: {response_data.get('artifacts_path')}")
+        print(f"Theme: {final_report.get('final_report', {}).get('overarching_theme')}")
+        print(f"Server Artifacts Path: {final_report.get('artifacts_path')}")
 
-        all_image_urls = []
-        key_pieces = final_report.get("detailed_key_pieces", [])
-        print(f"Found {len(key_pieces)} key pieces in the report.")
-
+        key_pieces = final_report.get("final_report", {}).get("detailed_key_pieces", [])
         for piece in key_pieces:
-            garment_url = piece.get("final_garment_image_url")
-            moodboard_url = piece.get("mood_board_image_url")
-            if garment_url:
-                all_image_urls.append(garment_url)
-            if moodboard_url:
-                all_image_urls.append(moodboard_url)
+            if piece.get("final_garment_image_url"):
+                all_image_urls.append(piece["final_garment_image_url"])
+            if piece.get("mood_board_image_url"):
+                all_image_urls.append(piece["mood_board_image_url"])
 
         download_images(all_image_urls, download_dir=Path("downloaded_images"))
 
