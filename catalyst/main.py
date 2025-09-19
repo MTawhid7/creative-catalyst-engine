@@ -43,7 +43,7 @@ async def run_pipeline(context: RunContext) -> RunContext:
                 )
                 return context
 
-            os.rename(context.results_dir, final_path)
+            shutil.move(context.results_dir, final_path)
             context.results_dir = final_path
 
             latest_link_path = settings.RESULTS_DIR / "latest"

@@ -1,54 +1,44 @@
 # catalyst/clients/gemini/resilience.py
 
 """
-Provides resilience helpers (retry logic, backoff delays) for API clients.
-This version is enhanced to be more robust by checking for specific, structured
-exception types in addition to string matching.
+Provides low-level, network-focused resilience helpers (retry logic, backoff
+delays) for the Gemini API client.
 """
 
 import random
 from google.api_core import exceptions as google_exceptions
+from ... import settings  # Import settings to make max delay configurable
 
 
 def should_retry(e: Exception) -> bool:
     """
-    Determines if an API error is transient and worth retrying.
+    Determines if an API error is transient and purely network-related.
 
-    This function checks for both specific exception types from the Google API
-    client library and common transient error messages. This provides a more
-    robust and future-proof way to handle retryable conditions.
+    This function's responsibility is now strictly limited to identifying
+    temporary network or server-side issues that are likely to be resolved
+    on a subsequent attempt. It no longer handles content-level errors.
     """
-    # --- START: ROBUST EXCEPTION CHECKING REFACTOR ---
-
-    # 1. Check for specific, known-retryable exception types first.
-    # This is the most robust method.
+    # Check for specific, known-retryable Google API exception types.
+    # This is the most robust and preferred method.
     if isinstance(
         e,
         (
-            google_exceptions.DeadlineExceeded,
-            google_exceptions.ServiceUnavailable,
-            google_exceptions.TooManyRequests,  # Handles 429 errors
-            google_exceptions.InternalServerError,  # Handles 500 errors
-            google_exceptions.GatewayTimeout,  # Handles 504 errors
+            google_exceptions.DeadlineExceeded,  # 504
+            google_exceptions.ServiceUnavailable,  # 503
+            google_exceptions.TooManyRequests,  # 429
+            google_exceptions.InternalServerError,  # 500
+            google_exceptions.GatewayTimeout,  # 504
         ),
     ):
         return True
 
-    # 2. As a fallback, check for common error message strings.
-    # This catches errors that might not have a specific type, like our
-    # custom "empty response" error.
-    error_str = str(e).lower()
-    retryable_messages = [
-        "service unavailable",  # A common fallback message for 503
-        "api call returned an empty response object",
-    ]
-
-    if any(msg in error_str for msg in retryable_messages):
+    # As a fallback, check for a common "service unavailable" string.
+    # This can catch transient errors that don't map to a specific exception type.
+    if "service unavailable" in str(e).lower():
         return True
 
-    # --- END: ROBUST EXCEPTION CHECKING REFACTOR ---
-
-    # If none of the above conditions are met, the error is not retryable.
+    # If none of the above conditions are met, the error is considered
+    # a content-level or permanent issue and should not be retried here.
     return False
 
 
@@ -66,5 +56,6 @@ def calculate_backoff_delay(attempt: int) -> float:
 
     delay = base_delay + jitter
 
-    # Cap the delay at a reasonable maximum (e.g., 60 seconds).
+    # Cap the delay at a reasonable maximum to prevent excessively long waits.
+    # Note: We could make this maximum delay configurable in settings.py if needed.
     return min(delay, 60)

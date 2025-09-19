@@ -38,3 +38,9 @@ pillow
 anyio
 requests
         # For the standalone api_client
+
+pytest
+pytest-asyncio
+pytest-mock
+pytest-cov
+pytest-snapshot

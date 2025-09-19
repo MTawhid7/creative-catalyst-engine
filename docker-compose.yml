@@ -6,19 +6,16 @@ services:
     container_name: creative-catalyst-redis
     ports:
       - "6379:6379"
+    profiles: ["app"]
 
-  # --- START: DEFINITIVE CHROMA SERVICE REFACTOR ---
   chroma:
     image: chromadb/chroma:latest
     container_name: creative-catalyst-chroma
     ports:
-      # This maps the EXTERNAL port on your Mac to the INTERNAL port 8000.
-      # It will use the value of CHROMA_EXTERNAL_PORT from your .env file,
-      # or default to 8000 if it's not set.
       - "${CHROMA_EXTERNAL_PORT:-8000}:8000"
     volumes:
       - ./chroma_cache:/chroma/.chroma/server/
-  # --- END: DEFINITIVE CHROMA SERVICE REFACTOR ---
+    profiles: ["app"]
 
   api:
     build: .
@@ -30,8 +27,11 @@ services:
     env_file:
       - .env
     depends_on:
-      - redis
-      - chroma
+      redis:
+        condition: service_started
+      chroma:
+        condition: service_started
+    profiles: ["app"]
 
   worker:
     build: .
@@ -42,15 +42,20 @@ services:
     env_file:
       - .env
     depends_on:
-      - redis
-      - chroma
+      redis:
+        condition: service_started
+      chroma:
+        condition: service_started
+    profiles: ["app"]
 
   clear-cache:
     build: .
-    command: ["clear_cache.py", "-y"]
+    entrypoint: ""
+    command: ["python", "-m", "clear_cache", "-y"]
     volumes:
       - .:/app
     env_file:
       - .env
     depends_on:
       - redis
+    profiles: ["tasks"]

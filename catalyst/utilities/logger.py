@@ -34,7 +34,7 @@ LOGGING_CONFIG = {
     },
     "formatters": {
         "json_formatter": {
-            "class": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "class": "pythonjsonlogger.json.JsonFormatter",
             "format": "%(asctime)s %(levelname)s %(name)s %(funcName)s %(lineno)d %(run_id)s %(message)s",
         },
         # The console formatter now points to the class in its new, separate file.

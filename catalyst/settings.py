@@ -46,8 +46,16 @@ if not DALLE_API_KEY:
 # --- 3. LLM Configuration ---
 # Tunable parameters for the AI.
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
-GEMINI_MAX_RETRIES = 3
+GEMINI_MAX_RETRIES = 5
 GEMINI_DEFAULT_TIMEOUT_SECONDS = 60
+
+# The number of times the main resilience invoker will attempt to
+# re-format a failed AI response.
+RESILIENCE_MAX_RETRIES = 3
+
+# The number of times a text-to-text processor (like WebResearch)
+# will retry on an empty or failed response.
+TEXT_PROCESSOR_MAX_RETRIES = 3
 
 
 # --- 4. Caching Configuration ---

@@ -26,7 +26,6 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 ASSET_BASE_URL = os.getenv("ASSET_BASE_URL", "http://127.0.0.1:9500")
 
 
-# --- START: GRANULAR STATUS PUBLISHING REFACTOR ---
 async def _publish_status(redis_client: ArqRedis, job_id: str, context: RunContext):
     """
     A lightweight, background coroutine that periodically publishes the
@@ -34,12 +33,9 @@ async def _publish_status(redis_client: ArqRedis, job_id: str, context: RunConte
     """
     status_key = f"job_progress:{job_id}"
     while not context.is_complete:
-        # Set the current status with a 60-second expiry. If the worker
-        # crashes hard, the key will eventually disappear.
         await redis_client.set(status_key, context.current_status, ex=60)
-        await asyncio.sleep(3)  # Publish status once per second.
+        await asyncio.sleep(3)
 
-    # One final update to ensure the "Finishing..." status is captured.
     await redis_client.set(status_key, context.current_status, ex=60)
 
 
@@ -48,6 +44,13 @@ async def create_creative_report(ctx: dict, user_passage: str) -> Dict[str, Any]
     The main ARQ task. It now runs the core pipeline and a status publisher
     concurrently for real-time progress updates.
     """
+    # --- START: DEFINITIVE RACE CONDITION FIX ---
+    # The cleanup function is now called at the BEGINNING of the task.
+    # This ensures that old results are deleted before the new run starts,
+    # preventing the new results from being accidentally deleted.
+    cleanup_old_results()
+    # --- END: DEFINITIVE RACE CONDITION FIX ---
+
     redis_client: ArqRedis = ctx["redis"]
     job_id = ctx["job_id"]
     setup_logging_run_id(job_id)
@@ -57,29 +60,24 @@ async def create_creative_report(ctx: dict, user_passage: str) -> Dict[str, Any]
     try:
         cached_result = await get_from_l0_cache(user_passage, redis_client)
         if cached_result:
-            cleanup_old_results()
+            # The cleanup is no longer needed here as it ran at the start.
             return cached_result
     except Exception as e:
         logger.error(f"⚠️ An error occurred during L0 cache check: {e}", exc_info=True)
 
-    # We now create the context here so we can pass it to both concurrent tasks.
-    # The results_dir path must be the path *inside* the container.
     context = RunContext(user_passage=user_passage, results_dir=Path("/app/results"))
 
-    # Create the two concurrent tasks.
     publisher_task = asyncio.create_task(_publish_status(redis_client, job_id, context))
     pipeline_task = asyncio.create_task(run_pipeline(context))
 
     try:
-        # Wait for the main pipeline task to complete.
         await pipeline_task
     finally:
-        # This block ensures that the publisher is always stopped gracefully,
-        # whether the pipeline succeeds or fails.
         context.is_complete = True
         await publisher_task
 
-    # The orchestrator will raise an error if the report is empty.
+    if not context.final_report:
+        raise RuntimeError("Pipeline finished but the final report is empty.")
 
     report_with_urls = _inject_public_urls(
         final_report=context.final_report,
@@ -92,11 +90,8 @@ async def create_creative_report(ctx: dict, user_passage: str) -> Dict[str, Any]
     }
 
     await set_in_l0_cache(user_passage, final_result, redis_client)
-    cleanup_old_results()
+    # The cleanup function has been removed from the end of the task.
     return final_result
-
-
-# --- END: GRANULAR STATUS PUBLISHING REFACTOR ---
 
 
 def cleanup_old_results():
@@ -106,16 +101,21 @@ def cleanup_old_results():
     from catalyst import settings
 
     try:
+        # Get all directories, ignoring files (like .DS_Store)
         all_dirs = [d for d in settings.RESULTS_DIR.iterdir() if d.is_dir()]
+        # Sort by name, which works because the names start with a timestamp.
         sorted_dirs = sorted(all_dirs, key=lambda p: p.name, reverse=True)
+
         if len(sorted_dirs) > settings.KEEP_N_RESULTS:
-            dirs_to_delete = sorted_dirs[settings.KEEP_N_RESULTS :]
+            dirs_to_delete = sorted_dirs[settings.KEEP_N_RESULTS:]
             logger.info(
                 f"♻️ RESULTS CLEANUP: Deleting {len(dirs_to_delete)} oldest result folders."
             )
             for old_dir in dirs_to_delete:
                 shutil.rmtree(old_dir)
             logger.info("✅ Results cleanup complete.")
+    except FileNotFoundError:
+        logger.info("Results directory not found. Skipping cleanup.")
     except Exception as e:
         logger.warning(f"⚠️ Could not perform results cleanup: {e}")
 

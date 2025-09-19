@@ -4,22 +4,29 @@
 This module contains the individual "Builder" strategies for each section
 of the final fashion trend report. Each builder is a self-contained unit
 responsible for a single, focused synthesis task.
-
-This version has been hardened to be defensive against failed or empty
-responses from the underlying Gemini client.
 """
 
+import asyncio
 import json
 import re
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 
+
+from pydantic import ValidationError
+from .synthesis_models import ColorPaletteStrategyModel, AccessoryStrategyModel
 from ...clients import gemini
 from ...context import RunContext
 from ...models.trend_report import KeyPieceDetail
 from ...prompts import prompt_library
 from ...utilities.logger import get_logger
 from ...utilities.json_parser import parse_json_from_llm_output
+
+# --- START: RESILIENCE REFACTOR ---
+# Import the new invoker and exception classes.
+from ...resilience import invoke_with_resilience, MaxRetriesExceededError
+
+# --- END: RESILIENCE REFACTOR ---
 
 from .synthesis_models import (
     OverarchingThemeModel,
@@ -62,82 +69,87 @@ class TopLevelFieldsBuilder(BaseSectionBuilder):
 
     async def build(self, research_context: str, is_fallback: bool) -> Dict[str, Any]:
         self.logger.info("✨ Synthesizing top-level fields...")
-        theme = await self._build_theme(research_context, is_fallback)
-        drivers = await self._build_drivers(research_context, is_fallback)
-        models = await self._build_models(research_context, is_fallback)
+        # Now we expect dictionaries, so we can merge them directly.
+        results = await asyncio.gather(
+            self._build_theme(research_context, is_fallback),
+            self._build_drivers(research_context, is_fallback),
+            self._build_models(research_context, is_fallback),
+        )
 
-        return {
-            "overarching_theme": theme,
-            "cultural_drivers": drivers,
-            "influential_models": models,
-        }
+        # Merge the list of dictionaries into a single dictionary.
+        final_data = {}
+        for res_dict in results:
+            final_data.update(res_dict)
+        return final_data
 
-    async def _build_theme(self, research_context: str, is_fallback: bool) -> str:
+    async def _build_theme(
+        self, research_context: str, is_fallback: bool
+    ) -> Dict[str, str]:
         context_for_prompt = (
             research_context if not is_fallback else json.dumps(self.brief, indent=2)
         )
         prompt = prompt_library.THEME_SYNTHESIS_PROMPT.format(
             research_context=context_for_prompt
         )
-
-        response = await gemini.generate_content_async(
-            prompt_parts=[prompt], response_schema=OverarchingThemeModel
-        )
-
-        # --- DEFENSIVE CHECK ---
-        if response and response.get("overarching_theme"):
-            return response["overarching_theme"]
-
-        self.logger.warning(
-            "Failed to synthesize overarching theme. Returning empty string."
-        )
-        return ""
+        try:
+            model = await invoke_with_resilience(
+                ai_function=gemini.generate_content_async,
+                prompt=prompt,
+                response_schema=OverarchingThemeModel,
+            )
+            # Return a dictionary directly
+            return {"overarching_theme": model.overarching_theme}
+        except MaxRetriesExceededError:
+            self.logger.warning(
+                "Failed to synthesize theme after all retries. Using safe default."
+            )
+            return {"overarching_theme": ""}
 
     async def _build_drivers(
         self, research_context: str, is_fallback: bool
-    ) -> List[str]:
+    ) -> Dict[str, List[str]]:
         context_for_prompt = (
             research_context if not is_fallback else json.dumps(self.brief, indent=2)
         )
         prompt = prompt_library.DRIVERS_SYNTHESIS_PROMPT.format(
             research_context=context_for_prompt
         )
-
-        response = await gemini.generate_content_async(
-            prompt_parts=[prompt], response_schema=CulturalDriversModel
-        )
-
-        # --- DEFENSIVE CHECK ---
-        if response and response.get("cultural_drivers"):
-            return response["cultural_drivers"]
-
-        self.logger.warning(
-            "Failed to synthesize cultural drivers. Returning empty list."
-        )
-        return []
+        try:
+            model = await invoke_with_resilience(
+                ai_function=gemini.generate_content_async,
+                prompt=prompt,
+                response_schema=CulturalDriversModel,
+            )
+            # Return a dictionary directly
+            return {"cultural_drivers": model.cultural_drivers}
+        except MaxRetriesExceededError:
+            self.logger.warning(
+                "Failed to synthesize drivers after all retries. Using safe default."
+            )
+            return {"cultural_drivers": []}
 
     async def _build_models(
         self, research_context: str, is_fallback: bool
-    ) -> List[str]:
+    ) -> Dict[str, List[str]]:
         context_for_prompt = (
             research_context if not is_fallback else json.dumps(self.brief, indent=2)
         )
         prompt = prompt_library.MODELS_SYNTHESIS_PROMPT.format(
             research_context=context_for_prompt
         )
-
-        response = await gemini.generate_content_async(
-            prompt_parts=[prompt], response_schema=InfluentialModelsModel
-        )
-
-        # --- DEFENSIVE CHECK ---
-        if response and response.get("influential_models"):
-            return response["influential_models"]
-
-        self.logger.warning(
-            "Failed to synthesize influential models. Returning empty list."
-        )
-        return []
+        try:
+            model = await invoke_with_resilience(
+                ai_function=gemini.generate_content_async,
+                prompt=prompt,
+                response_schema=InfluentialModelsModel,
+            )
+            # Return a dictionary directly
+            return {"influential_models": model.influential_models}
+        except MaxRetriesExceededError:
+            self.logger.warning(
+                "Failed to synthesize models after all retries. Using safe default."
+            )
+            return {"influential_models": []}
 
 
 class NarrativeSettingBuilder(BaseSectionBuilder):
@@ -153,51 +165,98 @@ class NarrativeSettingBuilder(BaseSectionBuilder):
         prompt = prompt_library.NARRATIVE_SETTING_PROMPT.format(
             overarching_theme=self.theme, cultural_drivers=", ".join(self.drivers)
         )
-        response = await gemini.generate_content_async(
-            prompt_parts=[prompt], response_schema=NarrativeSettingModel
-        )
 
-        # --- DEFENSIVE CHECK ---
-        if response and response.get("narrative_setting"):
-            narrative_desc = response["narrative_setting"]
-        else:
-            self.logger.warning("Could not generate narrative setting. Using fallback.")
+        # --- START: RESILIENCE REFACTOR ---
+        try:
+            # Delegate the AI call to our robust invoker
+            response_model = await invoke_with_resilience(
+                ai_function=gemini.generate_content_async,
+                prompt=prompt,
+                response_schema=NarrativeSettingModel,
+            )
+            narrative_desc = response_model.narrative_setting
+        except MaxRetriesExceededError:
+            # If the invoker fails completely, use the safe, hardcoded fallback
+            self.logger.warning(
+                "Could not generate narrative setting after all retries. Using fallback."
+            )
             narrative_desc = "A minimalist, contemporary architectural setting."
 
         return {"narrative_setting_description": narrative_desc}
+        # --- END: RESILIENCE REFACTOR ---
 
 
 class StrategiesBuilder(BaseSectionBuilder):
-    """Extracts the color and accessory strategies from the research context."""
+    """Extracts the color and accessory strategies from the research context using Pydantic validation."""
 
     async def build(self, research_context: str, is_fallback: bool) -> Dict[str, Any]:
+
+        # --- START: REFACTOR ---
+        # The fallback path is now simpler and uses the default Pydantic models.
         if is_fallback:
             return {
-                "color_palette_strategy": "No specific color strategy was defined.",
-                "accessory_strategy": "Accessories play a supportive role to complete the look.",
+                "color_palette_strategy": ColorPaletteStrategyModel(
+                    tonal_story="No specific color strategy was defined."
+                ).tonal_story,
+                "accessory_strategy": AccessoryStrategyModel(
+                    accessory_strategy="Accessories play a supportive role to complete the look."
+                ).accessory_strategy,
             }
 
         self.logger.info("✨ Extracting creative strategies from research context...")
-        strategies_json = parse_json_from_llm_output(research_context)
+        # Use a regex to find the content inside our new XML tag.
+        strategies_json = None
+        match = re.search(
+            r"<strategic_narratives_json>(.*?)</strategic_narratives_json>",
+            research_context,
+            re.DOTALL,
+        )
+        if match:
+            try:
+                # The content is in the first capturing group.
+                strategies_json = json.loads(match.group(1).strip())
+            except json.JSONDecodeError:
+                self.logger.warning(
+                    "⚠️ Found strategy tags, but the content was not valid JSON."
+                )
 
-        tonal_story = ""
-        accessory_role = ""
+        tonal_story = "No specific color strategy was defined."
+        accessory_role = "Accessories play a supportive role to complete the look."
 
         if strategies_json and isinstance(strategies_json, dict):
-            tonal_story = strategies_json.get("tonal_story", "")
-            accessory_role = strategies_json.get("accessory_strategy", "")
-            self.logger.info("✅ Successfully extracted strategies via JSON parsing.")
+            try:
+                # Use Pydantic to validate the color strategy part of the JSON
+                color_model = ColorPaletteStrategyModel.model_validate(strategies_json)
+                tonal_story = color_model.tonal_story
+                self.logger.info(
+                    "✅ Successfully extracted and validated 'tonal_story'."
+                )
+            except ValidationError:
+                self.logger.warning(
+                    "⚠️ Could not validate 'tonal_story' from research. Using default."
+                )
+
+            try:
+                # Use Pydantic to validate the accessory strategy part of the JSON
+                accessory_model = AccessoryStrategyModel.model_validate(strategies_json)
+                accessory_role = accessory_model.accessory_strategy
+                self.logger.info(
+                    "✅ Successfully extracted and validated 'accessory_strategy'."
+                )
+            except ValidationError:
+                self.logger.warning(
+                    "⚠️ Could not validate 'accessory_strategy' from research. Using default."
+                )
         else:
             self.logger.warning(
-                "⚠️ Could not find or parse the STRATEGIC_NARRATIVES_JSON object."
+                "⚠️ Could not find or parse a valid JSON object for strategies. Using defaults."
             )
 
         return {
-            "color_palette_strategy": tonal_story
-            or "No specific color strategy was defined.",
-            "accessory_strategy": accessory_role
-            or "Accessories play a supportive role to complete the look.",
+            "color_palette_strategy": tonal_story,
+            "accessory_strategy": accessory_role,
         }
+        # --- END: REFACTOR ---
 
 
 class AccessoriesBuilder(BaseSectionBuilder):
@@ -232,34 +291,46 @@ class AccessoriesBuilder(BaseSectionBuilder):
             research_context=json.dumps(context_for_prompt, indent=2)
         )
 
-        response = await gemini.generate_content_async(
-            prompt_parts=[prompt], response_schema=AccessoriesModel
-        )
+        # --- START: RESILIENCE REFACTOR ---
+        try:
+            # Delegate the AI call and validation to the invoker
+            response_model = await invoke_with_resilience(
+                ai_function=gemini.generate_content_async,
+                prompt=prompt,
+                response_schema=AccessoriesModel,
+            )
+            # The .model_dump() method converts the Pydantic model back into a dictionary
+            accessories_dict = response_model.model_dump()
+        except MaxRetriesExceededError:
+            # If all retries fail, create an empty (but valid) default model
+            self.logger.warning(
+                "Failed to generate accessories after all retries. Using empty default."
+            )
+            accessories_dict = AccessoriesModel().model_dump()
 
-        # --- DEFENSIVE CHECK ---
-        if (
-            response
-            and isinstance(response, dict)
-            and any(v for v in response.values())
-        ):
-            return {"accessories": response}
-
-        self.logger.warning("Failed to generate accessories. Using empty default.")
-        return {"accessories": {"Bags": [], "Footwear": [], "Jewelry": [], "Other": []}}
+        return {"accessories": accessories_dict}
+        # --- END: RESILIENCE REFACTOR ---
 
 
 class KeyPiecesBuilder(BaseSectionBuilder):
-    """Builds the detailed list of key pieces, including the full fallback logic."""
+    """Builds the detailed list of key pieces, with robust, resilient AI calls."""
 
     async def build(self, research_context: str, is_fallback: bool) -> Dict[str, Any]:
         self.logger.info("✨ Synthesizing detailed key pieces...")
         desired_mood_text = str(self.brief.get("desired_mood", []))
 
         if is_fallback:
-            return await self._build_fallback_pieces(desired_mood_text)
-        return await self._build_primary_pieces(research_context, desired_mood_text)
+            processed_pieces = await self._build_fallback_pieces(desired_mood_text)
+        else:
+            processed_pieces = await self._build_primary_pieces(
+                research_context, desired_mood_text
+            )
 
-    async def _build_fallback_pieces(self, desired_mood_text: str) -> Dict[str, Any]:
+        return {"detailed_key_pieces": processed_pieces}
+
+    async def _build_fallback_pieces(
+        self, desired_mood_text: str
+    ) -> List[Dict[str, Any]]:
         self.logger.info("Building key pieces from direct knowledge (fallback)...")
         base_context = (
             f"{json.dumps(self.brief, indent=2)}\n- DESIRED_MOOD: {desired_mood_text}"
@@ -268,15 +339,22 @@ class KeyPiecesBuilder(BaseSectionBuilder):
             key_piece_context=base_context
         )
 
-        names_response = await gemini.generate_content_async(
-            prompt_parts=[names_prompt], response_schema=KeyPieceNamesModel
-        )
-
-        # --- DEFENSIVE CHECK ---
-        piece_names = names_response.get("names", []) if names_response else []
-        if not piece_names:
-            self.logger.error("❌ Fallback failed to generate key piece names.")
-            return {"detailed_key_pieces": []}
+        # --- START: RESILIENCE REFACTOR (Step 1: Get Names) ---
+        try:
+            # First, resiliently get the list of names. This is a critical step.
+            names_model = await invoke_with_resilience(
+                ai_function=gemini.generate_content_async,
+                prompt=names_prompt,
+                response_schema=KeyPieceNamesModel,
+            )
+            piece_names = names_model.names
+        except MaxRetriesExceededError:
+            # If we can't even get the names, we cannot proceed.
+            self.logger.error(
+                "❌ Fallback failed to generate key piece names after all retries."
+            )
+            return []
+        # --- END: RESILIENCE REFACTOR (Step 1) ---
 
         processed_pieces: List[Dict] = []
         for name in piece_names:
@@ -285,23 +363,28 @@ class KeyPiecesBuilder(BaseSectionBuilder):
                 key_piece_context=detail_context
             )
 
-            piece_response = await gemini.generate_content_async(
-                prompt_parts=[detail_prompt], response_schema=KeyPieceDetail
-            )
-
-            # --- DEFENSIVE CHECK ---
-            if piece_response:
-                processed_pieces.append(piece_response)
-            else:
-                self.logger.warning(
-                    f"Failed to generate details for fallback key piece: {name}"
+            # --- START: RESILIENCE REFACTOR (Step 2: Get Details) ---
+            try:
+                # Resiliently get the details for each individual name.
+                piece_model = await invoke_with_resilience(
+                    ai_function=gemini.generate_content_async,
+                    prompt=detail_prompt,
+                    response_schema=KeyPieceDetail,
                 )
+                processed_pieces.append(piece_model.model_dump())
+            except MaxRetriesExceededError:
+                # If one piece fails, we log it and continue to the next.
+                self.logger.warning(
+                    f"Failed to generate details for fallback key piece: {name}. Skipping."
+                )
+                continue
+            # --- END: RESILIENCE REFACTOR (Step 2) ---
 
-        return {"detailed_key_pieces": processed_pieces}
+        return processed_pieces
 
     async def _build_primary_pieces(
         self, research_context: str, desired_mood_text: str
-    ) -> Dict[str, Any]:
+    ) -> List[Dict[str, Any]]:
         self.logger.info("Building key pieces from research context...")
         key_piece_pattern = re.compile(
             r"^(?:\*\*)?Key Piece \d+ Name:(?:\*\*)?(.*?)(?=^(?:\*\*)?Key Piece \d+ Name:|\Z)",
@@ -314,7 +397,7 @@ class KeyPiecesBuilder(BaseSectionBuilder):
 
         if not key_piece_sections:
             self.logger.error("❌ No 'Key Piece' sections found in research context.")
-            return {"detailed_key_pieces": []}
+            return []
 
         color_palette_text = self._extract_section(
             research_context, "COLLECTION_COLOR_PALETTE:", ["Key Piece 1 Name:"]
@@ -330,16 +413,21 @@ class KeyPiecesBuilder(BaseSectionBuilder):
                 key_piece_context=context_for_prompt
             )
 
-            piece_response = await gemini.generate_content_async(
-                prompt_parts=[prompt], response_schema=KeyPieceDetail
-            )
-
-            # --- DEFENSIVE CHECK ---
-            if piece_response:
-                processed_pieces.append(piece_response)
-            else:
-                self.logger.warning(
-                    f"Failed to generate details for primary key piece section {i+1}"
+            # --- START: RESILIENCE REFACTOR ---
+            try:
+                # Wrap the AI call inside the loop with our robust invoker.
+                piece_model = await invoke_with_resilience(
+                    ai_function=gemini.generate_content_async,
+                    prompt=prompt,
+                    response_schema=KeyPieceDetail,
                 )
+                processed_pieces.append(piece_model.model_dump())
+            except MaxRetriesExceededError:
+                # If one piece fails, we can log it and still process the others.
+                self.logger.warning(
+                    f"Failed to generate details for primary key piece section {i+1}. Skipping."
+                )
+                continue
+            # --- END: RESILIENCE REFACTOR ---
 
-        return {"detailed_key_pieces": processed_pieces}
+        return processed_pieces

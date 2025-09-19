@@ -33,7 +33,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # The dev tools (pip-tools, debugpy) are NOT included in the final image.
 COPY --from=builder /install /usr/local
 # --- END: CRITICAL SECURITY IMPROVEMENT ---
-
 COPY . .
 EXPOSE 9500
 CMD ["/usr/local/bin/uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "9500"]

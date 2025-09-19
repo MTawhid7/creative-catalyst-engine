@@ -6,27 +6,26 @@ enhanced demographic-aware deconstruction and image generation.
 
 # --- Stage 1: Brief Deconstruction & Enrichment Prompts ---
 
+
 # A new prompt to intelligently deconstruct the user's passage into a structured brief.
 INTELLIGENT_DECONSTRUCTION_PROMPT = """
 You are a world-class Creative Director for a luxury fashion house. Your reputation is built on making bold, specific, and contextually brilliant decisions. You NEVER provide vague or overly general defaults. Your task is to deconstruct a user's request into a decisive and structured JSON creative brief.
 
 **CRITICAL DIRECTIVES:**
 1.  **INFER WITH AUTHORITY:** Your primary goal is to infer missing details with expert confidence. Analyze the user's language, the garment type, and cultural context to make a specific choice.
-2.  **NEGATIVE CONSTRAINT ON GENDER:** You are FORBIDDEN from using "Unisex" or "Gender-Neutral" unless the prompt explicitly contains keywords like "gender-neutral," "all-genders," or "streetwear." You MUST infer either "Male" or "Female" based on the context.
-3.  **NEGATIVE CONSTRAINT ON ETHNICITY:** You are ABSOLUTELY FORBIDDEN from using "Diverse" or broad, vague ethnic descriptors. You MUST infer the *single, most specific* ethnicity that is directly and demonstrably associated with the core creative brief (e.g., through culture, region, or specific stylistic heritage).
-
-4.  **INFER TARGET AGE GROUP:** Based on the `target_audience` you identify, you MUST infer a standard marketing age bracket. Choose the most appropriate option from this list: "Child (4-12)", "Teen (13-19)", "Young Adult (20-30)", "Adult (30-50)", "Senior (50+)".
-
-5.  **DEFINE THE DESIRED MOOD:** Based on your analysis, you MUST generate a `desired_mood`. This should be a list of 3-5 evocative adjectives that capture the final *feeling* or *atmosphere* of the collection.
-6.  **SHOW YOUR WORK (REASONING):** Before the JSON output, you must provide a brief one-sentence rationale for your gender and ethnicity inference in a `<reasoning>` block.
-7.  **STRICT JSON OUTPUT:** After the reasoning block, your response MUST be ONLY the valid JSON object.
+2.  **HANDLE MULTIPLE VALUES:** If the user requests multiple garments, brands, regions, seasons, etc., you MUST return them as a list.
+3.  **NEGATIVE CONSTRAINT ON GENDER:** You are FORBIDDEN from using "Unisex" or "Gender-Neutral" unless the prompt explicitly contains keywords like "gender-neutral," "all-genders," or "streetwear." You MUST infer either "Male" or "Female" based on the context.
+4.  **NEGATIVE CONSTRAINT ON ETHNICITY:** You are ABSOLUTELY FORBIDDEN from using "Diverse" or broad, vague ethnic descriptors. You MUST infer the *single, most specific* ethnicity that is directly and demonstrably associated with the core creative brief (e.g., through culture, region, or specific stylistic heritage).
+5.  **INFER TARGET AGE GROUP:** Based on the `target_audience` you identify, you MUST infer a standard marketing age bracket. Choose the most appropriate option from this list: "Child (4-12)", "Teen (13-19)", "Young Adult (20-30)", "Adult (30-50)", "Senior (50+)".
+6.  **DEFINE THE DESIRED MOOD:** Based on your analysis, you MUST generate a `desired_mood`. This should be a list of 3-5 evocative adjectives that capture the final *feeling* or *atmosphere* of the collection.
+7.  **STRICT JSON OUTPUT:** Your response MUST be ONLY the valid JSON object and nothing else. Do not include any reasoning or explanatory text outside of the JSON.
 
 ---
 --- GOLD STANDARD EXAMPLE 1: IMPLICIT GENDER AND STYLE ETHNICITY ---
 USER REQUEST:
 "A report on Cuban resort wear from the 1950s."
 
-<reasoning>Cuban resort wear from the 1950s is a specific aesthetic associated with Cuban culture and was highly influenced by distinct styling for older women of that era. Linen is a strong construction consideration for this high style. I will default a female gender.</reasoning>
+JSON OUTPUT:
 {{
   "theme_hint": "Cuban resort wear from the 1950s",
   "garment_type": "Resort Wear",
@@ -42,55 +41,32 @@ USER REQUEST:
   "desired_mood": ["Elegant", "Vibrant", "Nostalgic", "Sophisticated", "Sun-drenched"]
 }}
 --- END GOLD STANDARD EXAMPLE 1 ---
-
---- GOLD STANDARD EXAMPLE 2: EXPLICIT CULTURAL CONTEXT ---
+--- GOLD STANDARD EXAMPLE 2: MULTIPLE VALUES ---
 USER REQUEST:
-"Show me a collection of dresses featuring the Bengali New Year (Pohela Boishakh)."
+"A report on avant-garde trench coats and bomber jackets for the Tokyo and Seoul markets."
 
-<reasoning>The prompt specifies a Bengali cultural event and the garment is a dress, therefore the ethnicity must be Bengali, and gender remains Female.</reasoning>
+JSON OUTPUT:
 {{
-  "theme_hint": "A vibrant collection celebrating the cultural richness of Bengali New Year (Pohela Boishakh)",
-  "garment_type": "Traditional Saree",
-  "brand_category": "Cultural & Festive Wear",
-  "target_audience": "Women celebrating Bengali New Year",
-  "region": "Bengal (Bangladesh & West Bengal, India)",
-  "key_attributes": ["Vibrant", "Traditional Motifs", "Festive"],
-  "season": "Spring",
-  "year": "auto",
+  "theme_hint": "Avant-garde outerwear for East Asian markets",
+  "garment_type": ["trench coat", "bomber jacket"],
+  "brand_category": "Avant-Garde Fashion",
+  "target_audience": "Fashion-forward individuals in urban centers",
+  "region": ["Tokyo", "Seoul"],
+  "key_attributes": ["Avant-garde", "Outerwear", "Japanese Street Style", "Korean Fashion"],
+  "season": "Fall/Winter",
+  "year": 2025,
   "target_gender": "Female",
-  "target_model_ethnicity": "Bengali",
-  "target_age_group": "Adult (30-50)",
-  "desired_mood": ["Vibrant", "Festive", "Joyful", "Cultural", "Ornate"]
+  "target_model_ethnicity": "East Asian",
+  "target_age_group": "Young Adult (20-30)",
+  "desired_mood": ["Edgy", "Architectural", "Monochromatic", "Deconstructed"]
 }}
 --- END GOLD STANDARD EXAMPLE 2 ---
-
---- GOLD STANDARD EXAMPLE 3: STYLE-BASED ETHNICITY ---
-USER REQUEST:
-"Design a modern Gothic collection."
-
-<reasoning>While Goth subculture is multi-ethnic and multi-gender, its core historical and visual language often emphasizes a dramatic, romantic, and traditionally feminine silhouette. I will therefore infer Female to provide a focused creative direction. The aesthetic's European origins guide the ethnicity choice.</reasoning>
-{{
-  "theme_hint": "A modern Gothic collection",
-  "garment_type": "Gothic clothing",
-  "brand_category": "Gothic Fashion",
-  "target_audience": "Members of the Goth subculture",
-  "region": "Global",
-  "key_attributes": ["Gothic", "Dark", "Romantic", "Elegant"],
-  "season": "Fall/Winter",
-  "year": "auto",
-  "target_gender": "Female",
-  "target_model_ethnicity": "European",
-  "target_age_group": "Young Adult (20-30)",
-  "desired_mood": ["Dark", "Romantic", "Melancholic", "Dramatic", "Austere"]
-}}
---- END GOLD STANDARD EXAMPLE 3 ---
 
 --- YOUR TASK ---
 USER REQUEST:
 ---
 {user_passage}
 ---
-<reasoning>YOUR REASONING HERE</reasoning>
 JSON OUTPUT:
 """
 
@@ -205,34 +181,6 @@ JSON RESPONSE:
 """
 
 
-# A new prompt to correct invalid JSON from the concepts step.
-CONCEPTS_CORRECTION_PROMPT = """
-You are a polymath creative director. Your previous attempt to generate a list of creative concepts failed because the output was not a valid JSON object as required. Your task is to perform the creative task again, ensuring the output is correctly formatted.
-
-**The Error:** Your previous output was not valid JSON. The content of that attempt is irrelevant; the key issue was its structure. You must now generate a new response from scratch based on the original brief, adhering to all quality rules below.
-
-**Previous Failed Output (for context on the formatting error only):**
-'{failed_output}'
-
----
-**ORIGINAL USER BRIEF:**
-- Theme: {theme_hint}
-- Garment: {garment_type}
-- Attributes: {key_attributes}
-- Brand Ethos: {brand_ethos}
-
----
-**Reminder of All Core Principles & Quality Directives:**
-1.  **Analyze & Abstract:** Read the original brief to understand the foundational idea.
-2.  **Use the Ethos as a Filter:** The concepts must be an extension or metaphor for the values in the **Brand Ethos**.
-3.  **Ensure Diversity of Fields:** The final list MUST be drawn from at least three different domains (e.g., architecture, science, art history).
-4.  **Prioritize Actionable Concepts:** Favor concepts with strong visual, structural, or textural qualities that provide tangible inspiration.
-5.  **Strict JSON Output:** The response MUST be a valid JSON object with a single key, "concepts", containing a list of strings.
-
-**CORRECT JSON RESPONSE:**
-"""
-
-
 # A new prompt to generate a "creative antagonist" concept.
 CREATIVE_ANTAGONIST_PROMPT = """
 You are a Creative Strategist and Conceptual Artist. Your primary directive is to use a "creative antagonist" to generate a single, innovative design synthesis that elevates a core fashion theme.
@@ -270,33 +218,6 @@ USER THEME:
 - Theme: {theme_hint}
 
 JSON RESPONSE:
-"""
-
-
-# A new prompt to correct invalid JSON from the antagonist step.
-ANTAGONIST_CORRECTION_PROMPT = """
-You are a Creative Strategist and Innovation Consultant. Your previous attempt to generate a creative synthesis failed because the output was not a valid JSON object as required. Your task is to perform the creative task again, ensuring the output is correctly formatted.
-
-**The Error:** Your previous output was not valid JSON. You must now generate a new response from scratch based on the original theme, adhering to all quality rules below.
-
-**Previous Failed Output (for context on the formatting error only):**
-'{failed_output}'
-
----
-**ORIGINAL USER THEME:**
-- Theme: {theme_hint}
-
----
-**Reminder of the Core Creative Process: "Surprising Synthesis"**
-1.  **Analyze the Core Theme:** Identify the core principles of the provided theme.
-2.  **Identify a Conceptually Opposite World:** Brainstorm a broad concept that serves as a philosophical or aesthetic opposite.
-3.  **Synthesize a "Point of Contrast":** Isolate ONE core principle from the opposite world and apply it to a specific detail of the main theme to create a single point of surprising creative tension.
-
-**CRITICAL OUTPUT RULES:**
--   The output MUST be an actionable and specific design idea, not just the name of the opposing concept.
--   The response MUST be a valid JSON object with a single key: `antagonist_synthesis`.
-
-**CORRECT JSON RESPONSE:**
 """
 
 
@@ -351,6 +272,52 @@ INPUT CONCEPTS:
 JSON RESPONSE:
 """
 
+# A new, robust prompt to instruct the AI to repair a failed JSON response.
+REFORMATTER_PROMPT = """
+You are a JSON Repair Bot. Your previous attempt to respond to a prompt resulted in an error. Your task is to analyze the original prompt, your failed response, and the specific error message, then generate a new, corrected, and valid JSON object that strictly adheres to the original request.
+
+**CRITICAL RULES:**
+1.  **Analyze the Error:** The `ERROR MESSAGE` provides the exact reason your last response failed. Use it as your primary guide for what to fix.
+2.  **Adhere to the Original Prompt:** Your goal is to satisfy the `ORIGINAL PROMPT`, not to invent new information.
+3.  **Strict JSON Output:** Your response MUST be ONLY the valid JSON object. Do not include any reasoning, commentary, or any other text outside of the JSON structure.
+
+---
+**EXAMPLE OF THE TASK**
+
+**ORIGINAL PROMPT:**
+"Please provide a JSON object with a 'name' (string) and a 'value' (integer)."
+
+**PREVIOUS FAILED RESPONSE:**
+'{{
+  "name": "Test Item"
+}}'
+
+**ERROR MESSAGE:**
+"ValidationError: 1 validation error for SimpleTestModel\nvalue\n  Field required [type=missing, ...]"
+
+**CORRECTED JSON RESPONSE:**
+{{
+  "name": "Test Item",
+  "value": 1
+}}
+---
+**YOUR TASK**
+
+**ORIGINAL PROMPT:**
+---
+{prompt}
+---
+**PREVIOUS FAILED RESPONSE:**
+---
+{failed_response}
+---
+**ERROR MESSAGE:**
+---
+{error_message}
+---
+**CORRECTED JSON RESPONSE:**
+"""
+
 # --- Stage 2 & 3: Synthesis Prompts ---
 # Prompts for the core synthesis steps: research, structuring, top-level synthesis, accessories, and key pieces.
 WEB_RESEARCH_PROMPT = """
@@ -362,7 +329,7 @@ You are a Lead Creative Strategist and Cultural Research Analyst. Your primary d
 3.  **Adopt a Strategic Research Stance:** Based on the brief, you must consciously prioritize your research focus. State your primary stance at the beginning of your output (e.g., "Stance: Market Pulse focus," "Stance: Cultural Deep Dive focus").
 4.  **Synthesize, Don't Just List:** Connect ideas and explain the "why" behind trends, showing how they support the **Core Theme**.
 5.  **Garment-Specific Focus:** If a `garment_type` is specified, your "KEY GARMENTS" research must focus exclusively on variations of that garment.
-6.  **Strict Adherence to Structure:** Your output MUST be a well-organized document using the exact headings specified below. You MUST adhere to all formatting requirements for both Markdown and JSON sections.
+6.  **Strict Adherence to Structure:** Your output MUST be a well-organized document using the exact XML-style tags specified below. You MUST adhere to all formatting requirements.
 
 ---
 **GUIDING PHILOSOPHY & SOURCES:**
@@ -378,44 +345,123 @@ You are a Lead Creative Strategist and Cultural Research Analyst. Your primary d
 - **A Subtle Point of Contrast to Incorporate:** {antagonist_synthesis}
 - **Key Search Concepts:** {search_keywords}
 ---
-**REQUIRED OUTPUT STRUCTURE (Use these exact Markdown headings in this exact order):**
+**REQUIRED OUTPUT STRUCTURE (Use these exact XML tags in this exact order):**
 
-**Stance:** [Your chosen research stance: Market Pulse, Cultural Deep Dive, or Commercial Intelligence]
-
-## OVERARCHING THEME
+<overarching_theme>
 A synthesis of the core theme, explaining its main ideas and cultural significance.
+</overarching_theme>
 
-## CULTURAL DRIVERS
+<cultural_drivers>
 A bulleted list of socio-cultural movements driving this theme. For each, provide a brief explanation of its **impact**.
+</cultural_drivers>
 
-## INFLUENTIAL MODELS & MUSES
+<influential_models_and_muses>
 A bulleted list of archetypes, subcultures, or individuals who embody the trend's spirit.
+</influential_models_and_muses>
 
-## KEY GARMENTS
+<key_garments>
 A high-level creative brief for 2-3 key garments. For each, describe the garment's **name and its conceptual role** in the collection. You may also note how a detail inspired by the 'Subtle Point of Contrast' is applied to it. **Do not describe other technical details like trims or lining here.**
+</key_garments>
 
-## FABRICS & MATERIALS
+<fabrics_and_materials>
 An analysis of the materials, textures, and finishes required to achieve the core theme. This is the primary section where you may incorporate a specific material or texture inspired by the 'Subtle Point of Contrast'.
+</fabrics_and_materials>
 
-## COLOR PALETTE
+<color_palette>
 **CRITICAL: This section must ONLY contain the Markdown bulleted list of colors.** Do not include the Tonal Story paragraph here.
 -   **Core Palette (60%):** 2-3 primary, foundational colors.
 -   **Secondary Palette (30%):** 2-3 supporting colors for layering and depth.
 -   **Accent Palette (10%):** 1-2 highlight colors, used for trims or details.
+</color_palette>
 
-## STRATEGIC_NARRATIVES_JSON
-**CRITICAL: This final section must ONLY contain a single, valid JSON object inside a Markdown code fence.** Do not add any other text or explanation.
-```json
+<strategic_narratives_json>
+**CRITICAL: This final section must ONLY contain a single, valid JSON object.** Do not add any other text or explanation.
 {{
   "tonal_story": "A short, evocative paragraph describing the overall mood and psychology of the color direction.",
   "accessory_strategy": "A short, declarative sentence defining the strategic role of accessories in the collection."
 }}
-```
+</strategic_narratives_json>
 
 ---
 **SYNTHESIZED RESEARCH DOSSIER:**
 """
 
+# A new, robust prompt to repair a research document that is missing a key section.
+CONTEXT_REPAIR_PROMPT = """
+You are a Document Structure Analyst. Your ONLY task is to repair a provided research document that is missing the critical '<key_garments>' tag. You must analyze the text and add the tag and its content in the correct place.
+
+**CRITICAL RULES:**
+1.  **Do Not Change Existing Content:** You must not alter, summarize, or rewrite any of the text from the original document.
+2.  **Place the Tag Logically:** The '<key_garments>' section should typically be placed after '<influential_models_and_muses>' and before '<fabrics_and_materials>'.
+3.  **Strict Output:** Your output MUST be ONLY the full, repaired document text. Do not add any extra commentary or explanation.
+
+---
+**EXAMPLE OF THE TASK**
+
+**ORIGINAL DOCUMENT (Missing Tag):**
+---
+<overarching_theme>
+A theme about Nordic Power.
+</overarching_theme>
+<fabrics_and_materials>
+- Heavy silk, embroidered linen.
+</fabrics_and_materials>
+---
+**REPAIRED DOCUMENT (Your Output):**
+---
+<overarching_theme>
+A theme about Nordic Power.
+</overarching_theme>
+<key_garments>
+- The Fjord Serpent Gown
+- The Rune-Carved Cloak
+</key_garments>
+<fabrics_and_materials>
+- Heavy silk, embroidered linen.
+</fabrics_and_materials>
+---
+**YOUR TASK**
+
+**ORIGINAL DOCUMENT:**
+---
+{research_context}
+---
+**REPAIRED DOCUMENT:**
+"""
+
+# A new prompt to simplify a failed Pydantic model generation request.
+SIMPLIFIER_PROMPT = """
+You are a Data Extraction Bot. Your previous attempts to generate a complete, valid JSON object failed. Your new task is to perform a simpler extraction, focusing ONLY on the most critical fields.
+
+**CRITICAL RULES:**
+1.  **Analyze the Original Prompt:** Read the user's original request to understand the core subject.
+2.  **Extract Only Critical Fields:** You MUST ONLY generate values for the following keys: `{critical_fields}`.
+3.  **Strict JSON Output:** Your response MUST be ONLY the valid JSON object with just these keys. Do not add any extra keys, commentary, or explanation.
+
+---
+**ORIGINAL PROMPT:**
+---
+{prompt}
+---
+**JSON OUTPUT (with only the keys {critical_fields}):**
+"""
+
+# A new prompt for the final, last-resort text generation fallback.
+FALLBACK_PROMPT = """
+You are a Text Summarization Bot. All previous attempts to generate a structured JSON object have failed completely. Your final task is to provide a single, one-sentence, natural-language response to the original prompt.
+
+**CRITICAL RULES:**
+1.  **Analyze the Original Prompt:** Read the user's original request.
+2.  **Provide One Sentence:** Your response MUST be a single, complete sentence.
+3.  **Natural Language Only:** Do NOT use JSON or any other structured format.
+
+---
+**ORIGINAL PROMPT:**
+---
+{prompt}
+---
+**One-sentence fallback response:**
+"""
 
 # A new prompt to structure the research into a clean, bulleted format.
 STRUCTURING_PREP_PROMPT = """
@@ -801,7 +847,7 @@ A professional and atmospheric fashion designer's mood board, laid out on a raw 
 - The scene is lit by soft, diffused light, as if from a large studio window, creating a narrative and emotional mood.
 
 **Core Narrative Elements:**
-- **The Wearer:** A printed, Polaroid-style portrait of a professional fashion model with artistic and expressive features, representing the garment's wearer.
+- **The Wearer:** A printed, Polaroid-style portrait of a professional {target_gender} fashion model of {target_model_ethnicity} ethnicity, with artistic and expressive features, representing the garment's wearer.
 - **The World:** A small, secondary, atmospheric photograph (perhaps 3x5 inches) that visually captures the essence of the collection's narrative setting.
 - **The Core Concept:** An abstract image, sketch, or textural photo that represents one of the core conceptual inspirations behind the collection (e.g., a close-up of brutalist architecture, a photo of a rare mineral, a page from a vintage sci-fi novel).
 - **The Point of Contrast:** A single, unexpected object or image that subtly hints at the collection's "antagonist synthesis" or innovative idea.

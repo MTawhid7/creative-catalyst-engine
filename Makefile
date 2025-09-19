@@ -13,13 +13,11 @@ COMPOSE_PROJECT_NAME ?= creativecatalystengine
 # This magic gets the current git branch name for use in git commands.
 CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 
-# This ensures that 'make' runs the command even if a file with the same name exists.
-# This list should contain EVERY command target in the file.
 .PHONY: help \
 	up down build build-clean \
 	restart restart-api restart-worker \
 	logs logs-api logs-worker \
-	shell test debug \
+	shell test debug run-client \
 	sync-main new-branch save sync-branch submit cleanup-branch \
 	deps clear-cache scan clean-docker clean-docker-full clean-build-cache \
 	release tag
@@ -51,6 +49,8 @@ help:
 	@echo "   test           Run the full test suite inside a fresh Docker container."
 	@echo "   debug          Start all services in interactive debugging mode for VS Code."
 	@echo ""
+	@echo "   run-client     Run the example API client to submit a job locally."
+	@echo ""
 	@echo "   Git Workflow:"
 	@echo "   sync-main      Sync your local 'main' branch with BOTH remotes."
 	@echo "   new-branch     Create a new feature branch from latest 'main' (e.g., make new-branch b=feat/new-thing)."
@@ -77,20 +77,20 @@ help:
 # ===================================================================
 
 up:
-	@echo "🚀 Starting all services..."
-	docker-compose up
+	@echo "🚀 Starting all 'app' services (API, worker, Redis, Chroma)..."
+	docker-compose --profile app up
 
 down:
 	@echo "🛑 Stopping and removing all services..."
-	docker-compose down
+	docker-compose --profile app down --remove-orphans
 
 build:
-	@echo "🏗️  Building Docker images..."
-	docker-compose build
+	@echo "🏗️  Building the application Docker image..."
+	docker-compose --profile app build
 
 build-clean:
-	@echo "🏗️  Performing a clean build, ignoring all caches..."
-	docker-compose build --no-cache
+	@echo "🏗️  Performing a clean build of the application image..."
+	docker-compose --profile app build --no-cache
 
 # ===================================================================
 #  DAILY DEVELOPMENT WORKFLOW
@@ -98,31 +98,35 @@ build-clean:
 
 restart-api:
 	@echo "🔄 Restarting the API service..."
-	docker-compose restart api
+	docker-compose --profile app restart api
 
 restart-worker:
 	@echo "🔄 Restarting the worker service..."
-	docker-compose restart worker
+	docker-compose --profile app restart worker
 
 logs-api:
 	@echo "📜 Tailing logs for the API service..."
-	docker-compose logs -f api
+	docker-compose --profile app logs -f api
 
 logs-worker:
 	@echo "📜 Tailing logs for the worker service..."
-	docker-compose logs -f worker
+	docker-compose --profile app logs -f worker
 
 shell:
 	@echo "🐚 Opening a shell inside the running worker container..."
-	docker-compose exec worker sh
+	docker-compose --profile app exec worker sh
 
 test:
-	@echo "🧪 Running the test suite..."
-	docker-compose run --rm worker pytest
+	@echo "🧪 Running unit and integration tests inside a clean container..."
+	docker-compose run --rm --entrypoint="" worker python -m pytest
 
 debug:
 	@echo "🐞 Starting services in debug mode for VS Code attachment..."
-	docker-compose -f docker-compose.yml -f docker-compose.debug.yml up --build
+	docker-compose --profile app -f docker-compose.yml -f docker-compose.debug.yml up --build
+
+run-client:
+	@echo "🚀 Running the example API client to submit a job..."
+	venv/bin/python -m api_client.example
 
 # ===================================================================
 #  GIT WORKFLOW
@@ -181,7 +185,7 @@ deps:
 
 clear-cache:
 	@echo "🔥 Clearing all application caches (Redis, Chroma, and files)..."
-	docker-compose run --rm clear-cache
+	docker-compose --profile tasks --profile app run --rm clear-cache
 
 scan: build
 	@echo "🛡️  Scanning final API image for vulnerabilities..."
@@ -208,4 +212,4 @@ release:
 
 tag:
 	@echo "🏷️  Tagging is a manual process to ensure high-quality release notes."
-	@echo "   Please see the 'Release & Tagging Workflow' section in WORKFLOW_GUIDE.md"
+	@echo "   Please see the 'Release & Tagging Workflow' section in WORKFLOW_GUIDE.md"```

@@ -1,14 +1,5 @@
 # catalyst/pipeline/processors/synthesis.py
 
-"""
-This module contains the processors for the core synthesis stage of the pipeline.
-
-These processors are designed as lean controllers that manage the flow of data
-into the synthesis strategies. The complex, multi-step logic of actually building
-the report is encapsulated in the `ReportAssembler` strategy, ensuring this module
-remains clean, readable, and focused on its role within the pipeline orchestration.
-"""
-
 import asyncio
 from catalyst.pipeline.base_processor import BaseProcessor
 from catalyst.context import RunContext
@@ -17,20 +8,49 @@ from ...prompts import prompt_library
 from ...utilities.config_loader import FORMATTED_SOURCES
 from ..synthesis_strategies.report_assembler import ReportAssembler
 
+# --- START: REFACTOR ---
+# Import the new settings
+from ... import settings
+
+# --- END: REFACTOR ---
+
 
 class WebResearchProcessor(BaseProcessor):
     """
     Pipeline Step 4: Instructs the LLM to perform a web search and return a
-    single, unstructured block of text summarizing its findings. Implements
-    a retry mechanism for transient errors or empty responses.
+    single, unstructured block of text summarizing its findings. Implements a
+    self-healing mechanism to ensure the output is well-structured.
     """
+
+    async def _validate_and_repair_context(self, research_context: str) -> str:
+        """Checks for a critical heading and asks the AI to repair the text if it's missing."""
+        if "<key_garments>" in research_context.lower():
+            self.logger.info(
+                "✅ Web research context contains the required '<key_garments>' tag."
+            )
+            return research_context
+
+        self.logger.warning(
+            "⚠️ Research context is missing '<key_garments>' tag. Attempting self-repair..."
+        )
+        repair_prompt = prompt_library.CONTEXT_REPAIR_PROMPT.format(
+            research_context=research_context
+        )
+        response = await gemini.generate_content_async(prompt_parts=[repair_prompt])
+        if response and response.get("text"):
+            self.logger.info("✅ Successfully repaired research context.")
+            return response["text"]
+
+        self.logger.error(
+            "❌ Failed to repair research context. Proceeding with original, flawed text."
+        )
+        return research_context
 
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info(
             "🌐 Starting web research using Gemini's native search capabilities..."
         )
         brief = context.enriched_brief
-
         prompt = prompt_library.WEB_RESEARCH_PROMPT.format(
             brand_ethos=context.brand_ethos or "No specific ethos provided.",
             curated_sources=FORMATTED_SOURCES,
@@ -44,42 +64,34 @@ class WebResearchProcessor(BaseProcessor):
             search_keywords=", ".join(brief.get("search_keywords", [])),
         )
 
-        # --- START OF DEFINITIVE FIX ---
-        # Implement a retry loop to handle transient API errors or empty responses
-        # before resorting to the full fallback path.
-        response = None
-        MAX_RETRIES = 3
-        RETRY_DELAY_SECONDS = 2
-
-        for attempt in range(MAX_RETRIES):
+        # --- START: REFACTOR ---
+        # Use the centralized retry count from the settings file
+        for attempt in range(settings.TEXT_PROCESSOR_MAX_RETRIES):
             self.logger.info(
-                f"Attempt {attempt + 1}/{MAX_RETRIES} to conduct web research..."
+                f"Attempt {attempt + 1}/{settings.TEXT_PROCESSOR_MAX_RETRIES} to conduct web research..."
             )
+            # --- END: REFACTOR ---
             api_response = await gemini.generate_content_async(prompt_parts=[prompt])
             if api_response and api_response.get("text"):
                 self.logger.info(
                     f"✅ Successfully received web research content on attempt {attempt + 1}."
                 )
-                response = api_response
-                break  # Exit the loop on success
-            else:
-                self.logger.warning(
-                    f"⚠️ Web research attempt {attempt + 1} returned no content. Retrying in {RETRY_DELAY_SECONDS}s..."
+                repaired_context = await self._validate_and_repair_context(
+                    api_response["text"]
                 )
-                if attempt < MAX_RETRIES - 1:
-                    await asyncio.sleep(RETRY_DELAY_SECONDS)
-        # --- END OF DEFINITIVE FIX ---
+                context.raw_research_context = repaired_context
+                return context
 
-        if response and response.get("text"):
-            self.logger.info(
-                f"✅ Success: Synthesized {len(response['text'])} characters of raw text from web research."
+            self.logger.warning(
+                f"⚠️ Web research attempt {attempt + 1} returned no content. Retrying..."
             )
-            context.raw_research_context = response["text"]
-        else:
-            self.logger.error(
-                "❌ Web research returned no content after all retry attempts. The fallback path will now be triggered."
-            )
-            context.raw_research_context = ""
+            if attempt < settings.TEXT_PROCESSOR_MAX_RETRIES - 1:
+                await asyncio.sleep(2)
+
+        self.logger.error(
+            "❌ Web research returned no content after all retry attempts. Fallback will be triggered."
+        )
+        context.raw_research_context = ""
         return context
 
 
@@ -111,18 +123,26 @@ class ContextStructuringProcessor(BaseProcessor):
             research_context=context.raw_research_context,
             garment_generation_instruction=instruction,
         )
-        response = await gemini.generate_content_async(prompt_parts=[prompt])
 
-        if response and response.get("text"):
-            self.logger.info(
-                f"✅ Success: Created pre-structured context outline ({len(response['text'])} characters)."
-            )
-            context.structured_research_context = response["text"]
-        else:
+        # --- START: REFACTOR ---
+        # Use the centralized retry count from the settings file
+        for attempt in range(settings.TEXT_PROCESSOR_MAX_RETRIES):
+            # --- END: REFACTOR ---
+            response = await gemini.generate_content_async(prompt_parts=[prompt])
+            if response and response.get("text"):
+                self.logger.info(
+                    f"✅ Success: Created pre-structured context outline ({len(response['text'])} characters)."
+                )
+                context.structured_research_context = response["text"]
+                return context
             self.logger.warning(
-                "⚠️ Pre-structuring step failed. The final synthesis may be less reliable."
+                f"⚠️ Pre-structuring step failed on attempt {attempt+1}. Retrying..."
             )
-            context.structured_research_context = context.raw_research_context
+
+        self.logger.error(
+            "❌ Pre-structuring failed after all retries. Using raw context as fallback."
+        )
+        context.structured_research_context = context.raw_research_context
         return context
 
 
@@ -132,6 +152,7 @@ class ReportSynthesisProcessor(BaseProcessor):
     report to the ReportAssembler, using the structured web research context.
     """
 
+    # ... (This class is unchanged as its dependencies are now resilient) ...
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info("⚙️ Starting primary report synthesis path...")
 
@@ -164,6 +185,7 @@ class DirectKnowledgeSynthesisProcessor(BaseProcessor):
     enriched brief and brand ethos.
     """
 
+    # ... (This class is unchanged as its dependencies are now resilient) ...
     async def process(self, context: RunContext) -> RunContext:
         self.logger.warning("⚙️ Activating direct knowledge fallback synthesis path.")
 

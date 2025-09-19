@@ -4,18 +4,27 @@ import os
 import requests
 import json
 from sseclient import SSEClient
+
+# --- START: THE DEFINITIVE FIX ---
+# Import the specific exception classes directly to prevent them from being mocked.
+from requests.exceptions import (
+    ConnectionError as RequestsConnectionError,
+    HTTPError,
+    ReadTimeout,
+)
 from .exceptions import (
-    ConnectionError,
+    APIConnectionError,
     JobSubmissionError,
     JobFailedError,
 )
+
+# --- END: THE DEFINITIVE FIX ---
 from typing import Generator, Dict, Any, Union
 
 # Best Practice: Use an environment variable for the API URL, with a sensible default.
 API_BASE_URL = os.getenv("CREATIVE_CATALYST_API_URL", "http://127.0.0.1:9500")
 
 
-# --- START: DEFINITIVE GENERATOR-BASED REFACTOR ---
 class CreativeCatalystClient:
     """A client for interacting with the Creative Catalyst Engine API."""
 
@@ -47,38 +56,28 @@ class CreativeCatalystClient:
         The final yielded object will contain the full report.
         """
         try:
-            # 1. Submit the Job to get a job ID.
             job_id = self._submit_job(passage)
             yield {"event": "job_submitted", "job_id": job_id}
 
-            # 2. Connect to the SSE streaming endpoint.
             stream_url = self._get_stream_url(job_id)
             print(f"📡 Connecting to event stream at {stream_url}...")
 
             response = requests.get(stream_url, stream=True, timeout=360)
             response.raise_for_status()
 
-            client = SSEClient(response.iter_content())  # type: ignore
+            client = SSEClient(response.iter_content()) # type: ignore
 
             for event in client.events():
                 data = json.loads(event.data)
-
                 if event.event == "progress":
-                    # Yield a progress update.
                     yield {"event": "progress", "status": data.get("status")}
-
                 elif event.event == "complete":
-                    # The final message was received; the job is done.
                     if data.get("status") == "complete":
-                        # Yield the final, complete report and stop.
                         yield {"event": "complete", "result": data.get("result", {})}
                         return
                     else:
-                        # The job finished with a 'failed' status.
                         raise JobFailedError(job_id, data.get("error", "Unknown error"))
-
                 elif event.event == "error":
-                    # The server sent an explicit error event (e.g., job not found).
                     raise JobSubmissionError(
                         data.get("detail", "Stream failed with an error event")
                     )
@@ -87,14 +86,15 @@ class CreativeCatalystClient:
                 "Stream ended unexpectedly without a 'complete' event."
             )
 
-        except requests.exceptions.ConnectionError as e:
-            raise ConnectionError(f"Could not connect to the API: {e}") from e
-        except requests.exceptions.HTTPError as e:
+        # --- START: THE DEFINITIVE FIX ---
+        # Catch the directly imported, real exception classes.
+        except RequestsConnectionError as e:
+            raise APIConnectionError(f"Could not connect to the API: {e}") from e
+        except HTTPError as e:
+            status_code = e.response.status_code if e.response else "unknown"
             raise JobSubmissionError(
-                f"API returned an HTTP error: {e.response.status_code}"
+                f"API returned an HTTP error: {status_code}"
             ) from e
-        except requests.exceptions.ReadTimeout:
-            raise ConnectionError("Connection to the event stream timed out.")
-
-
-# --- END: DEFINITIVE GENERATOR-BASED REFACTOR ---
+        except ReadTimeout as e:
+            raise APIConnectionError("Connection to the event stream timed out.") from e
+        # --- END: THE DEFINITIVE FIX ---

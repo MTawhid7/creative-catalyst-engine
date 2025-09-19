@@ -1,15 +1,19 @@
-# api_client/exceptions.py
+# In api_client/exceptions.py
 
 """Custom exceptions for the Creative Catalyst API client."""
 
 
+# --- START: THE DEFINITIVE FIX ---
+# The base exception MUST inherit from Python's built-in Exception class.
 class APIClientError(Exception):
     """Base exception for all client-related errors."""
 
     pass
 
+# --- END: THE DEFINITIVE FIX ---
 
-class ConnectionError(APIClientError):
+
+class APIConnectionError(APIClientError):
     """Raised when the client cannot connect to the API server."""
 
     pass

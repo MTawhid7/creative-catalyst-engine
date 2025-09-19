@@ -5,11 +5,16 @@ A dedicated, resilient client for all interactions with the Google Gemini API.
 This package defines the public-facing functions for the application.
 """
 
+import os
 import asyncio
 from typing import Optional, List, Dict, Any, Union
 
 from google.genai import types
 from pydantic import BaseModel
+
+# This is the architectural switch. It checks the environment variable at import time.
+# AFTER
+from .core import generate_content_core_async, generate_content_core_sync
 
 from ... import settings
 from ...utilities.logger import get_logger

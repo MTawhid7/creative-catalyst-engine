@@ -2,10 +2,11 @@
 
 """
 The internal core logic for making API calls to the Google Gemini service.
-This version is aligned with the modern google-genai SDK (2025) and hardened
-with production-grade resilience patterns.
+This version is refactored for a clean separation of concerns. Its sole
+responsibility is to handle the network communication and retry only on
+transient network errors. Content validation is delegated to the higher-level
+resilience invoker.
 """
-import json
 import asyncio
 import time
 from typing import Optional, List, Dict, Any, Union
@@ -41,38 +42,15 @@ def _prepare_generation_config(
     return types.GenerateContentConfig(**config_params)
 
 
-def _process_response(response: Any, has_schema: bool) -> Optional[Dict]:
-    """
-    Helper to process the raw response from the Gemini API.
-    Returns None if the response is empty or malformed.
-    """
-    if not hasattr(response, "text") or response.text is None:
-        logger.warning("API call returned an empty response object.")
-        return None
-
-    response_text = response.text.strip()
-    if not response_text:
-        logger.warning("API call returned empty text content.")
-        return None
-
-    if has_schema:
-        try:
-            if response_text.startswith("```json"):
-                response_text = response_text[7:-3].strip()
-            return json.loads(response_text)
-        except json.JSONDecodeError:
-            logger.error("Failed to decode JSON from response.", exc_info=True)
-            return None
-    else:
-        return {"text": response_text}
-
-
 async def generate_content_core_async(
     prompt_parts: List[Any],
     response_schema: Optional[Union[type[BaseModel], Dict[str, Any]]],
     tools: Optional[List[types.Tool]],
-) -> Optional[Dict]:
-    """The core ASYNCHRONOUS function that makes the API call with retry logic."""
+) -> Optional[Dict[str, Any]]:
+    """
+    The core ASYNCHRONOUS function that makes the API call. It includes a
+    retry loop for network-level errors only.
+    """
     if not client:
         logger.error("Cannot generate content: Gemini client is not configured.")
         return None
@@ -82,27 +60,29 @@ async def generate_content_core_async(
 
     for attempt in range(max_retries):
         try:
+            # Make the single, best-effort API call.
             response = await client.aio.models.generate_content(
                 model=settings.GEMINI_MODEL_NAME,
                 contents=prompt_parts,
                 config=generation_config,
             )
 
-            processed = _process_response(response, has_schema=bool(response_schema))
-            if processed:
-                return processed
-
-            raise RuntimeError("API call returned an empty response object.")
+            # --- START: RESILIENCE REFACTOR ---
+            # The client's job is NOT to validate content. It simply extracts
+            # the raw text and returns it. Even if the text is empty or not
+            # JSON, it is passed up to the resilience invoker to handle.
+            return {"text": response.text if hasattr(response, "text") else None}
+            # --- END: RESILIENCE REFACTOR ---
 
         except Exception as e:
             logger.warning(
-                f"Attempt {attempt+1}/{max_retries}: Async API call failed.",
+                f"Attempt {attempt + 1}/{max_retries}: Async API call failed.",
                 exc_info=True,
             )
+            # Use the simplified should_retry to check for network errors.
             if not should_retry(e) or attempt == max_retries - 1:
-                logger.error(
-                    f"API call failed permanently after {max_retries} attempts."
-                )
+                logger.error(f"API call failed permanently after {max_retries} attempts.")
+                # We do not raise here; we return None and let the invoker handle it.
                 return None
             await asyncio.sleep(calculate_backoff_delay(attempt))
     return None
@@ -112,14 +92,16 @@ def generate_content_core_sync(
     prompt_parts: List[Any],
     response_schema: Optional[Union[type[BaseModel], Dict[str, Any]]],
     tools: Optional[List[types.Tool]],
-) -> Optional[Dict]:
-    """The core SYNCHRONOUS function that makes the API call with retry logic."""
+) -> Optional[Dict[str, Any]]:
+    """
+    The core SYNCHRONOUS function that makes the API call with a retry
+    loop for network-level errors only.
+    """
     if not client:
         logger.error("Cannot generate content: Gemini client is not configured.")
         return None
 
     generation_config = _prepare_generation_config(response_schema, tools)
-    # --- BUG FIX: The 'max_retries' variable was missing here. ---
     max_retries = settings.GEMINI_MAX_RETRIES
 
     for attempt in range(max_retries):
@@ -130,21 +112,18 @@ def generate_content_core_sync(
                 config=generation_config,
             )
 
-            processed = _process_response(response, has_schema=bool(response_schema))
-            if processed:
-                return processed
-
-            raise RuntimeError("API call returned an empty response object.")
+            # --- START: RESILIENCE REFACTOR ---
+            # Same as the async version: just extract the raw text.
+            return {"text": response.text if hasattr(response, "text") else None}
+            # --- END: RESILIENCE REFACTOR ---
 
         except Exception as e:
             logger.warning(
-                f"Attempt {attempt+1}/{max_retries}: Sync API call failed.",
+                f"Attempt {attempt + 1}/{max_retries}: Sync API call failed.",
                 exc_info=True,
             )
             if not should_retry(e) or attempt == max_retries - 1:
-                logger.error(
-                    f"API call failed permanently after {max_retries} attempts."
-                )
+                logger.error(f"API call failed permanently after {max_retries} attempts.")
                 return None
             time.sleep(calculate_backoff_delay(attempt))
     return None

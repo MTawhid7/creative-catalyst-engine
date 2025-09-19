@@ -90,12 +90,19 @@ To stop the entire application, press `Ctrl+C` in the terminal, then run `make d
 
 ### Interacting with the Engine
 
-The recommended way to test the running service is with the provided API client.
+The recommended way to test the running service is with the provided API client, which provides real-time status updates using a Server-Sent Events (SSE) stream.
 
-1.  **Start the application** with `make up`.
+1.  **Start the application** with
+```
+make up
+```
 2.  **In a separate terminal,** activate your local virtual environment: `source venv/bin/activate`.
 3.  **Modify the test prompt** in `api_client/example.py`.
-4.  **Run the client:** `python -m api_client.example`.
+4.  **Run the client:**
+```
+make run-client
+```
+   You will see live progress updates as the worker runs through each stage of the pipeline.
 
 ### Modifying Code
 
@@ -196,7 +203,7 @@ This engine is built with a few core architectural principles in mind:
 
 
 ### Architecture Diagram
-The engine is architected as a modern, decoupled web service. The diagram below illustrates the full request lifecycle.
+The engine is architected as a modern, decoupled web service. The diagram below illustrates the full request lifecycle, which uses a Server-Sent Events (SSE) stream for real-time updates.
 
 <details>
 <summary>Click to view the Mermaid diagram source code</summary>
@@ -251,10 +258,8 @@ graph TD
     D_L1_Done -- 13b. Job Complete --> C
     C -- 14. Store Final Result --> C
 
-    A -- 15. Polls GET /v1/jobs/{id} --> B
-    B -- 16. Fetch Result --> C
-    C -- 17. Return Result --> B
-    B -- 18. Send Final Report --> A
+    A -- 15. Streams GET /v1/jobs/{id}/stream --> B
+    B -- 16. Streams Progress & Final Result --> A
 ```
 </details>
 
@@ -352,6 +357,46 @@ creative-catalyst-engine/
         ├── logger.py         # Configures the dual-format (console + JSON) application logger.
         └── log_formatter.py  # The custom class for color-coded console log formatting.
 │
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py
+│   │
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── test_cache.py
+│   │   ├── test_main.py
+│   │   └── test_worker.py
+│   │
+│   ├── api_client/
+│   │   ├── __init__.py
+│   │   └── test_client.py
+│   │
+│   ├── catalyst/
+│   │   ├── __init__.py
+│   │   ├── test_main_pipeline.py
+│   │   ├── test_orchestrator.py
+│   │   ├── caching/
+│   │   │   ├── test_cache_manager.py
+│   │   │   └── test_report_cache.py
+│   │   ├── pipeline/
+│   │   │   ├── processors/
+│   │   │   │   ├── test_briefing.py
+│   │   │   │   ├── test_reporting.py
+│   │   │   │   ├── test_synthesis_processors.py
+│   │   │   │   └── generation/
+│   │   │   │       └── test_nanobanana_generator.py
+│   │   │   ├── synthesis_strategies/
+│   │   │   │   ├── test_report_assembler.py
+│   │   │   │   └── test_section_builders.py
+│   │   │   └── prompt_engineering/
+│   │   │       └── test_prompt_generator.py
+│   │   └── resilience/
+│   │       └── test_invoker.py
+│   │
+│   ├── fixtures/
+│   │   └── expected_final_report.json
+│   │
+│   └── test_clear_cache.py
 ├── artifact_cache/         # Permanent storage for L1 cached artifacts (images, reports). Ignored by Git.
 ├── chroma_cache/           # Directory for the ChromaDB vector store data. Ignored by Git.
 ├── logs/                   # Contains the rotating JSON log files (e.g., catalyst_engine.log). Ignored by Git.
@@ -362,10 +407,10 @@ creative-catalyst-engine/
 
 ## 5. Troubleshooting
 
-| Symptom                                               | Probable Cause & Solution                                                                                                                                                                           |
-| :---------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`make up` fails with a container name conflict**    | A container from a previous run was not properly shut down. **Solution:** Run `make down` to remove the old containers, then run `make up` again.                                                   |
-| **Build fails with `No matching distribution found`** | A Python dependency in `requirements.txt` is incompatible with the Debian-based builder image. **Solution:** Research the problematic package for a compatible version or an alternative.           |
-| **500 Internal Server Error**                         | A background job in the ARQ worker failed. **Solution:** **1. Check your Sentry dashboard.** The full traceback and context will be there. **2. Check the container logs** with `make logs-worker`. |
-| **Images not loading (404 Not Found)**                | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing IP address of your computer that the client machine can reach (e.g., `http://192.168.1.100:9500`).              |
-| **Getting old/cached results**                        | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility: `make clear-cache`.                                                      |
+| Symptom                                               | Probable Cause & Solution                                                                                                                                                                              |
+| :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`make up` fails with a container name conflict**    | A container from a previous run was not properly shut down. **Solution:** Run `make down` to remove the old containers, then run `make up` again.                                                      |
+| **Tests fail in VS Code with "pytest Not Installed"** | VS Code is using the wrong Python interpreter. **Solution:** Open the Command Palette (`Cmd+Shift+P`), run **`Python: Select Interpreter`**, and choose the one associated with your project's `venv`. |
+| **500 Internal Server Error**                         | A background job in the ARQ worker failed. **Solution:** **1. Check your Sentry dashboard.** The full traceback and context will be there. **2. Check the container logs** with `make logs-worker`.    |
+| **Images not loading (404 Not Found)**                | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing IP address of your computer that the client machine can reach (e.g., `http://192.168.1.100:9500`).                 |
+| **Getting old/cached results**                        | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility: `make clear-cache`.                                                                              |                                            |

@@ -73,3 +73,10 @@ class KeyPieceNamesModel(BaseModel):
     """
 
     names: List[str] = Field(...)
+
+
+class AccessoryStrategyModel(BaseModel):
+    accessory_strategy: str = Field(
+        ...,
+        description="A short, declarative sentence defining the strategic role of accessories in the collection.",
+    )

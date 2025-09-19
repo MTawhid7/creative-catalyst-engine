@@ -12,7 +12,7 @@ from .exceptions import APIClientError
 # The client will send this text to the API.
 
 USER_PASSAGE = """
-Tribal dress for women from a historical timeline.
+Generate a trend report on the iconic Chanel tweed jacket, reimagined for a modern, professional woman, focusing on themes of empowered femininity and artisanal craftsmanship.
 """
 
 # ===================================================================

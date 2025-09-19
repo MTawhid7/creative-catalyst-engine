@@ -1,209 +1,103 @@
+# catalyst/models/trend_report.py
+
 """
 Pydantic Models for the Creative Catalyst Engine.
-This is the definitive, enhanced version for a professional-grade output,
-incorporating detailed specifications for fabric, pattern, and traceability.
+This is the definitive, enhanced version for a professional-grade output.
+This version has been made hyper-flexible to gracefully handle the natural
+variations in LLM responses, following an "Accept, then Normalize" strategy.
 """
 
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union, Any
 from pydantic import BaseModel, Field, ConfigDict
 
 strict_config = ConfigDict(extra="forbid")
 
 
-# --- NEW: Model for traceability and metadata ---
 class PromptMetadata(BaseModel):
     """Contains metadata about the generation request for traceability."""
 
     model_config = strict_config
-    run_id: str = Field(..., description="The unique ID for the generation run.")
-    user_passage: str = Field(..., description="The original, unmodified user input.")
+    run_id: str = Field(...)
+    user_passage: str = Field(...)
 
 
-# --- NEW: Model for detailed pattern specifications ---
 class PatternDetail(BaseModel):
     """Describes a print or pattern with technical and creative details."""
 
     model_config = strict_config
-    motif: str = Field(
-        ...,
-        description="The name or description of the pattern's repeating element (e.g., 'Paisley Swirls', 'Art Deco Geometric').",
-    )
-    placement: str = Field(
-        ...,
-        description="How the pattern is applied to the garment (e.g., 'All-over print', 'Engineered panel', 'Border trim').",
-    )
-    scale_cm: Optional[float] = Field(
-        None,
-        description="The approximate size in centimeters of one repeat of the motif.",
-    )
+    motif: str = Field(...)
+    placement: str = Field(...)
+    scale_cm: Optional[Union[float, str]] = Field(None)  # Can be "approx. 5cm"
 
 
-# --- ENHANCED: Fabric model with professional-grade details ---
 class FabricDetail(BaseModel):
     """Describes a fabric with technical and textural properties."""
 
     model_config = strict_config
-    material: str = Field(
-        ...,
-        description="The name of the fabric material (e.g., 'Recycled Nylon', 'Organic Cotton Twill').",
-    )
-    texture: str = Field(
-        ...,
-        description="The tactile surface texture of the fabric (e.g., 'Crinkled', 'Brushed', 'Slubby').",
-    )
-    sustainable: Optional[bool] = Field(
-        None, description="Whether the fabric is considered sustainable."
-    )
-    weight_gsm: Optional[int] = Field(
-        None,
-        description="The weight of the fabric in grams per square meter (e.g., 120 for a shirt, 350 for a coat).",
-    )
-    drape: Optional[str] = Field(
-        None, description="How the fabric hangs (e.g., 'Fluid', 'Structured', 'Stiff')."
-    )
-    finish: Optional[str] = Field(
-        None,
-        description="The surface finish of the fabric (e.g., 'Matte', 'Satin', 'Water-resistant').",
-    )
+    material: str = Field(...)
+    texture: str = Field(...)
+    sustainable: Optional[bool] = Field(None)
+    weight_gsm: Optional[Union[int, str]] = Field(None)  # Can be "120 gsm" or "120-150"
+    drape: Optional[str] = Field(None)
+    finish: Optional[str] = Field(None)
 
 
 class ColorDetail(BaseModel):
     """Describes a color with its name and technical codes."""
 
     model_config = strict_config
-    name: str = Field(
-        ..., description="The evocative name of the color (e.g., 'Glacial Blue')."
-    )
-    pantone_code: str = Field(
-        ..., description="The official Pantone code (e.g., '14-4122 TCX')."
-    )
-    hex_value: str = Field(
-        ..., description="The hex code for the color (e.g., '#A2C4D1')."
-    )
+    name: str = Field(...)
+    pantone_code: str = Field(...)
+    hex_value: str = Field(...)
 
 
-# --- ENHANCED: Key Piece model with new structured fields ---
 class KeyPieceDetail(BaseModel):
     """Describes a single core garment in the collection with deep detail."""
 
     model_config = strict_config
-    key_piece_name: str = Field(..., description="The descriptive name of the garment.")
-    description: str = Field(
-        ..., description="This item's role and significance in the collection."
-    )
-    inspired_by_designers: List[str] = Field(
-        ..., description="Real-world designers known for this aesthetic."
-    )
-    wearer_profile: str = Field(
-        ..., description="A short description of the person who would wear this piece."
-    )
-    patterns: List[PatternDetail] = Field(
-        default=[],
-        description="A list of specific prints or patterns used on the garment.",
-    )
-    fabrics: List[FabricDetail] = Field(
-        ..., description="A curated list of recommended fabrics for the piece."
-    )
-    colors: List[ColorDetail] = Field(
-        ..., description="A curated list of suitable colors for the piece."
-    )
-    silhouettes: List[str] = Field(
-        ..., description="Specific cuts and shapes that define the garment's form."
-    )
-    lining: Optional[str] = Field(
-        None,
-        description="Description of the garment's lining (e.g., 'Fully lined in silk', 'Unlined for breathability').",
-    )
-    details_trims: List[str] = Field(
-        ..., description="Specific design details, hardware, or trims."
-    )
-    suggested_pairings: List[str] = Field(
-        ..., description="Other items to style with this piece."
-    )
-    final_garment_image_url: Optional[str] = Field(
-        default=None,
-        description="The public URL for the final generated garment image, populated by the image generation pipeline.",
-    )
-    mood_board_image_url: Optional[str] = Field(
-        default=None,
-        description="The public URL for the final generated mood board image, populated by the image generation pipeline.",
-    )
-    final_garment_relative_path: Optional[str] = Field(
-        default=None,
-        description="The relative path to the generated garment image, used internally.",
-    )
-
-    mood_board_relative_path: Optional[str] = Field(
-        default=None,
-        description="The relative path to the generated mood board image, used internally.",
-    )
-
-    mood_board_prompt: Optional[str] = Field(
-        default=None,
-        description="The full, final prompt used to generate the mood board image.",
-    )
-    final_garment_prompt: Optional[str] = Field(
-        default=None,
-        description="The full, final prompt used to generate the final garment image.",
-    )
+    key_piece_name: str = Field(...)
+    description: str = Field(...)
+    # --- START: HYPER-FLEXIBILITY REFACTOR ---
+    # These fields can be returned as a single item or a list.
+    inspired_by_designers: Union[str, List[str]] = Field(default=[])
+    silhouettes: Union[str, List[str]] = Field(default=[])
+    details_trims: Union[str, List[str]] = Field(default=[])
+    suggested_pairings: Union[str, List[str]] = Field(default=[])
+    # --- END: HYPER-FLEXIBILITY REFACTOR ---
+    wearer_profile: str = Field(default="")
+    patterns: List[PatternDetail] = Field(default=[])
+    fabrics: List[FabricDetail] = Field(default=[])
+    colors: List[ColorDetail] = Field(default=[])
+    lining: Optional[str] = Field(None)
+    final_garment_image_url: Optional[str] = Field(default=None)
+    mood_board_image_url: Optional[str] = Field(default=None)
+    final_garment_relative_path: Optional[str] = Field(default=None)
+    mood_board_relative_path: Optional[str] = Field(default=None)
+    mood_board_prompt: Optional[str] = Field(default=None)
+    final_garment_prompt: Optional[str] = Field(default=None)
 
 
-# --- ENHANCED: Root model with new metadata and demographic fields ---
 class FashionTrendReport(BaseModel):
     """The root model for the entire fashion trend report."""
 
     model_config = strict_config
-    prompt_metadata: PromptMetadata = Field(
-        ..., description="Metadata about the original request for traceability."
-    )
-    season: str = Field(..., description="The target season (e.g., 'Fall/Winter').")
-    year: int = Field(..., description="The target year for the collection.")
-    region: Optional[str] = Field(
-        None, description="The geographical region for the trend report."
-    )
-    target_gender: str = Field(
-        ...,
-        description="The target gender for the model (e.g., 'Male', 'Female', 'Unisex').",
-    )
-    target_age_group: Optional[str] = Field(
-        None,
-        description="The target age group for the model (e.g., 'Young Adult (20-30)', 'Child (8-12)', 'Senior (65+)').",
-    )
-    target_model_ethnicity: str = Field(
-        ...,
-        description="The appropriate model ethnicity for the target region or theme (e.g., 'Bengali', 'Scottish', 'Diverse').",
-    )
-    desired_mood: Optional[List[str]] = Field(
-        default=[],
-        description="A list of 3-5 evocative adjectives that act as a 'creative compass'.",
-    )
-    narrative_setting_description: str = Field(
-        ...,
-        description="A detailed, atmospheric description of the ideal setting or environment that tells the story of the collection.",
-    )
-    overarching_theme: str = Field(
-        ..., description="The high-level, evocative theme of the collection."
-    )
-    antagonist_synthesis: Optional[str] = Field(
-        None,
-        description="The unique creative synthesis or point of contrast that defines the collection's innovative edge.",
-    )
-    color_palette_strategy: Optional[str] = Field(
-        None,
-        description="The 'Tonal Story' or high-level strategy behind the color choices.",
-    )
-    accessory_strategy: Optional[str] = Field(
-        None, description="The defined strategic role of accessories in the collection."
-    )
-    cultural_drivers: List[str] = Field(
-        ..., description="The socio-cultural influences driving the theme."
-    )
-    influential_models: List[str] = Field(
-        ..., description="Style icons or archetypes who embody the trend."
-    )
-    accessories: Dict[str, List[str]] = Field(
-        ..., description="Key accessories grouped by category."
-    )
-    detailed_key_pieces: List[KeyPieceDetail] = Field(
-        ..., description="A detailed breakdown of each of the core garments."
-    )
+    prompt_metadata: PromptMetadata = Field(...)
+    # --- START: THE FIX ---
+    # Make these fields flexible to match the StructuredBriefModel.
+    season: Union[str, List[str]] = Field(...)
+    year: Union[str, int, List[Union[str, int]]] = Field(...)
+    region: Optional[Union[str, List[str]]] = Field(None)
+    # --- END: THE FIX ---
+    target_gender: str = Field(...)
+    target_age_group: Optional[str] = Field(None)
+    target_model_ethnicity: str = Field(...)
+    desired_mood: Optional[List[str]] = Field(default=[])
+    narrative_setting_description: str = Field(...)
+    overarching_theme: str = Field(...)
+    antagonist_synthesis: Optional[str] = Field(None)
+    color_palette_strategy: Optional[str] = Field(None)
+    accessory_strategy: Optional[str] = Field(None)
+    cultural_drivers: Union[str, List[str]] = Field(default=[])
+    influential_models: Union[str, List[str]] = Field(default=[])
+    accessories: Dict[str, List[str]] = Field(default={})
+    detailed_key_pieces: List[KeyPieceDetail] = Field(default=[])

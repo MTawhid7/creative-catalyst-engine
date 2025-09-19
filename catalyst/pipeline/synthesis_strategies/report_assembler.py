@@ -125,16 +125,17 @@ class ReportAssembler:
         self.final_report_data["desired_mood"] = self.brief.get("desired_mood", [])
 
         demographic_keys = [
-            "season",
             "year",
             "region",
             "target_gender",
             "target_age_group",
             "target_model_ethnicity",
+            "season",
         ]
         for key in demographic_keys:
             self.final_report_data[key] = self.brief.get(key)
 
+        # The try block must contain the validation logic.
         try:
             validated_report = FashionTrendReport.model_validate(self.final_report_data)
             logger.info("✅ Success: Final report assembled and validated.")
