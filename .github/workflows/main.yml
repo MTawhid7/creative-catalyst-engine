@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      # --- THIS IS THE CRITICAL FIX THAT IS MISSING FROM YOUR FILE ---
+      # Explicitly set the Docker Compose project name to ensure consistent image naming.
+      COMPOSE_PROJECT_NAME: creativecatalystengine
+
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       DALLE_API_KEY: ${{ secrets.DALLE_API_KEY }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
@@ -40,19 +44,10 @@ jobs:
       - name: Run test suite
         run: make test
 
-      # --- START: THE DEFINITIVE FIX ---
-      # This step installs the Trivy tool directly onto the GitHub runner machine,
-      # then runs the same 'make scan' command you use locally. This is the most
-      # direct and reliable way to perform the scan.
       - name: Scan image for vulnerabilities
         run: |
-          # Install Trivy onto the Ubuntu runner
-          sudo apt-get install wget apt-transport-https gnupg lsb-release
+          sudo apt-get update && sudo apt-get install -y wget apt-transport-https gnupg lsb-release
           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install trivy
-
-          # Now, run the scan using our Makefile command
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update && sudo apt-get install -y trivy
           make scan
-      # --- END: THE DEFINITIVE FIX ---
