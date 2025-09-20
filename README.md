@@ -74,10 +74,8 @@ The entire application stack is orchestrated with simple `make` commands.
 2.  **Open a terminal** in the project's root directory (no `venv` needed).
 3.  **Build and Run the Services:**
     ```bash
-    # This command will build the images if they don't exist and then start all services.
     make up
-    ```
-    *   The first time you run this, the build process will be slow. Subsequent starts will be very fast.
+    ```    *   The first time you run this, the build process will be slow. Subsequent starts will be very fast.
 
 The application is ready when you see logs from all services, including:
 `Uvicorn running on http://0.0.0.0:9500` and `ARQ worker started. Ready to process creative jobs.`
@@ -92,23 +90,18 @@ To stop the entire application, press `Ctrl+C` in the terminal, then run `make d
 
 The recommended way to test the running service is with the provided API client, which provides real-time status updates using a Server-Sent Events (SSE) stream.
 
-1.  **Start the application** with
-```
-make up
-```
-2.  **In a separate terminal,** activate your local virtual environment: `source venv/bin/activate`.
-3.  **Modify the test prompt** in `api_client/example.py`.
-4.  **Run the client:**
-```
-make run-client
-```
-   You will see live progress updates as the worker runs through each stage of the pipeline.
+1.  **Start the application** with `make up`.
+2.  **In a separate terminal,** modify the test prompt in `api_client/example.py`.
+3.  **Run the client:**
+    ```bash
+    make run-client
+    ```
+    You will see live progress updates as the worker runs through each stage of the pipeline.
 
 ### Modifying Code
 
 The project is configured with a **live-sync volume**. When you save a change to a `.py` file, the change is instantly reflected inside the running Docker containers. The FastAPI server will automatically restart. To apply changes to the worker, you must manually restart it:
 ```bash
-# Run this in a separate terminal
 make restart-worker
 ```
 
@@ -150,10 +143,8 @@ Use `make` commands to execute one-off tasks inside a temporary container.
 For a cleaner view of the logs for a specific service, run one of the following commands in a separate terminal:
 
 ```bash
-# Follow the logs for only the worker container
 make logs-worker
-
-# Follow the logs for only the API container
+``````bash
 make logs-api
 ```
 
@@ -174,7 +165,7 @@ You can set breakpoints in VS Code and debug your code while it runs *inside the
     *   Click the green play button.
 
 4.  **Trigger the Code:**
-    Send a request to your API. Execution will pause at your breakpoint.
+    Send a request to your API using `make run-client`. Execution will pause at your breakpoint.
 
 ---
 
@@ -268,6 +259,7 @@ graph TD
 
 ```
 creative-catalyst-engine/
+├── .github/workflows/main.yml  # The CI/CD pipeline definition
 ├── .vscode/
 │   └── launch.json         # VS Code debugger configurations for attaching to Docker containers.
 ├── .env.example            # Template for environment variables.
@@ -413,4 +405,4 @@ creative-catalyst-engine/
 | **Tests fail in VS Code with "pytest Not Installed"** | VS Code is using the wrong Python interpreter. **Solution:** Open the Command Palette (`Cmd+Shift+P`), run **`Python: Select Interpreter`**, and choose the one associated with your project's `venv`. |
 | **500 Internal Server Error**                         | A background job in the ARQ worker failed. **Solution:** **1. Check your Sentry dashboard.** The full traceback and context will be there. **2. Check the container logs** with `make logs-worker`.    |
 | **Images not loading (404 Not Found)**                | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing IP address of your computer that the client machine can reach (e.g., `http://192.168.1.100:9500`).                 |
-| **Getting old/cached results**                        | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility: `make clear-cache`.                                                                              |                                            |
+| **Getting old/cached results**                        | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility: `make clear-cache`.                                                                              |
