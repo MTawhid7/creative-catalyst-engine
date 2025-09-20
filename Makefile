@@ -78,19 +78,19 @@ help:
 
 up:
 	@echo "🚀 Starting all 'app' services (API, worker, Redis, Chroma)..."
-	docker-compose --profile app up
+	docker compose --profile app up
 
 down:
 	@echo "🛑 Stopping and removing all services..."
-	docker-compose --profile app down --remove-orphans
+	docker compose --profile app down --remove-orphans
 
 build:
 	@echo "🏗️  Building the application Docker image..."
-	docker-compose --profile app build
+	docker compose --profile app build
 
 build-clean:
 	@echo "🏗️  Performing a clean build of the application image..."
-	docker-compose --profile app build --no-cache
+	docker compose --profile app build --no-cache
 
 # ===================================================================
 #  DAILY DEVELOPMENT WORKFLOW
@@ -98,31 +98,31 @@ build-clean:
 
 restart-api:
 	@echo "🔄 Restarting the API service..."
-	docker-compose --profile app restart api
+	docker compose --profile app restart api
 
 restart-worker:
 	@echo "🔄 Restarting the worker service..."
-	docker-compose --profile app restart worker
+	docker compose --profile app restart worker
 
 logs-api:
 	@echo "📜 Tailing logs for the API service..."
-	docker-compose --profile app logs -f api
+	docker compose --profile app logs -f api
 
 logs-worker:
 	@echo "📜 Tailing logs for the worker service..."
-	docker-compose --profile app logs -f worker
+	docker compose --profile app logs -f worker
 
 shell:
 	@echo "🐚 Opening a shell inside the running worker container..."
-	docker-compose --profile app exec worker sh
+	docker compose --profile app exec worker sh
 
 test:
 	@echo "🧪 Running unit and integration tests inside a clean container..."
-	docker-compose run --rm --entrypoint="" worker python -m pytest
+	docker compose run --rm --entrypoint="" tester python -m pytest
 
 debug:
 	@echo "🐞 Starting services in debug mode for VS Code attachment..."
-	docker-compose --profile app -f docker-compose.yml -f docker-compose.debug.yml up --build
+	docker compose --profile app -f docker-compose.yml -f docker-compose.debug.yml up --build
 
 run-client:
 	@echo "🚀 Running the example API client to submit a job..."
@@ -185,7 +185,7 @@ deps:
 
 clear-cache:
 	@echo "🔥 Clearing all application caches (Redis, Chroma, and files)..."
-	docker-compose --profile tasks --profile app run --rm clear-cache
+	docker compose --profile tasks --profile app run --rm clear-cache
 
 scan: build
 	@echo "🛡️  Scanning final API image for vulnerabilities..."

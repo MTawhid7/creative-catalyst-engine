@@ -1,38 +1,53 @@
 # Dockerfile
 
-# --- Stage 1: The "Builder" Stage ---
-FROM python:3.11-slim-bookworm AS builder
+# --- Stage 1: Base ---
+# This common base stage prepares the user and directories.
+FROM cgr.dev/chainguard/python:latest-dev AS base
 WORKDIR /app
+ENV PATH="/home/nonroot/.local/bin:${PATH}"
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends build-essential && \
-    rm -rf /var/lib/apt/lists/*
+# Switch to root to perform privileged operations
+USER root
+RUN apk update && apk add build-base python3-dev
+RUN mkdir /install && chown -R nonroot:nonroot /app /install
+# Switch back to the secure non-root user for all subsequent operations.
+USER nonroot
 
-# --- START: MODIFIED DEPENDENCY INSTALLATION ---
-# Copy BOTH requirements files.
-COPY requirements.in requirements.txt dev-requirements.in dev-requirements.txt ./
+# --- Stage 2: Development & Testing ---
+# This stage is specifically for running our tests.
+FROM base AS development
 
-# Install BOTH production and development dependencies in this temporary stage.
+# --- START: THE DEFINITIVE FIX ---
+# Use the --chown flag to ensure the copied files are owned by the non-root user.
+COPY --chown=nonroot:nonroot requirements.in requirements.txt dev-requirements.in dev-requirements.txt ./
+# --- END: THE DEFINITIVE FIX ---
+
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir --prefix="/install" -r requirements.txt -r dev-requirements.txt
-# --- END: MODIFIED DEPENDENCY INSTALLATION ---
+    pip install --no-cache-dir -r requirements.txt -r dev-requirements.txt
 
+# --- START: THE DEFINITIVE FIX ---
+# Also use --chown here for the application source code.
+COPY --chown=nonroot:nonroot . .
+# --- END: THE DEFINITIVE FIX ---
 
-# --- Stage 2: The "Final" Stage ---
-FROM gcr.io/distroless/python3-debian12
-WORKDIR /app
-ENV PATH="/usr/local/bin:${PATH}"
-ENV PYTHONPATH="/usr/local/lib/python3.11/site-packages"
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# --- Stage 3: Production ---
+# This is the final, lean image for running the application.
+FROM base AS production
 
-# --- START: CRITICAL SECURITY IMPROVEMENT ---
-# Copy ONLY the production dependencies from the builder stage.
-# The dev tools (pip-tools, debugpy) are NOT included in the final image.
-COPY --from=builder /install /usr/local
-# --- END: CRITICAL SECURITY IMPROVEMENT ---
-COPY . .
+# --- START: THE DEFINITIVE FIX ---
+COPY --chown=nonroot:nonroot requirements.txt ./
+# --- END: THE DEFINITIVE FIX ---
+
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# --- START: THE DEFINITIVE FIX ---
+COPY --chown=nonroot:nonroot . .
+# --- END: THE DEFINITIVE FIX ---
+
+# --- Final Image Selection (Implicit) ---
+FROM production
 EXPOSE 9500
-CMD ["/usr/local/bin/uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "9500"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "9500"]

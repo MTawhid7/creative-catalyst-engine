@@ -1,0 +1,55 @@
+# .github/workflows/main.yml
+
+name: Creative Catalyst CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      DALLE_API_KEY: ${{ secrets.DALLE_API_KEY }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      REDIS_URL: "redis://redis:6379/0"
+      CHROMA_SERVER_HOST: "chroma"
+      CHROMA_SERVER_PORT: "8000"
+      ASSET_BASE_URL: "http://api:9500"
+      ENABLE_IMAGE_GENERATION: "True"
+      IMAGE_GENERATION_MODEL: "nano-banana"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create .env file for build
+        run: |
+          echo "CHROMA_EXTERNAL_PORT=8000" > .env
+
+      - name: Build Docker images
+        run: make build
+
+      - name: Run test suite
+        run: make test
+
+      # --- START: THE DEFINITIVE FIX ---
+      # This single step correctly installs Trivy, caches its database,
+      # and runs a scan against our built image.
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'creativecatalystengine-api:latest'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
+      # --- END: THE DEFINITIVE FIX ---

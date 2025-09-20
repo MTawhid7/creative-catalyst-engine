@@ -18,7 +18,9 @@ services:
     profiles: ["app"]
 
   api:
-    build: .
+    build:
+      context: .
+      target: production
     container_name: creative-catalyst-api
     ports:
       - "9500:9500"
@@ -34,19 +36,53 @@ services:
     profiles: ["app"]
 
   worker:
-    build: .
+    build:
+      context: .
+      target: production
     container_name: creative-catalyst-worker
     command: /usr/local/bin/arq api.worker_settings.WorkerSettings
     volumes:
       - .:/app
     env_file:
       - .env
+    environment:
+      - GEMINI_API_KEY
+      - DALLE_API_KEY
+      - SENTRY_DSN
+      - ENABLE_IMAGE_GENERATION
+      - IMAGE_GENERATION_MODEL
+      - REDIS_URL
+      - ASSET_BASE_URL
+      - CREATIVE_CATALYST_API_URL
+      - CHROMA_SERVER_HOST
+      - CHROMA_SERVER_PORT
     depends_on:
       redis:
         condition: service_started
       chroma:
         condition: service_started
     profiles: ["app"]
+
+  tester:
+    # This service is built from the 'development' stage, which has pytest.
+    build:
+      context: .
+      target: development
+    command: sleep infinity # Keep it running if needed, though 'run' is one-off.
+    env_file:
+      - .env
+    environment:
+      - GEMINI_API_KEY
+      - DALLE_API_KEY
+      - SENTRY_DSN
+      - ENABLE_IMAGE_GENERATION
+      - IMAGE_GENERATION_MODEL
+      - REDIS_URL
+      - ASSET_BASE_URL
+      - CREATIVE_CATALYST_API_URL
+      - CHROMA_SERVER_HOST
+      - CHROMA_SERVER_PORT
+    profiles: ["test"]
 
   clear-cache:
     build: .

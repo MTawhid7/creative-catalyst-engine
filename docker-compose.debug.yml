@@ -1,17 +1,26 @@
 # docker-compose.debug.yml
-version: '3.8'
 
 services:
   api:
-    # Expose the debugpy port
+    # --- START: THE DEFINITIVE FIX ---
+    # Override the build target to use the 'development' stage,
+    # which contains debugpy and all other dev dependencies.
+    build:
+      context: .
+      target: development
+    # --- END: THE DEFINITIVE FIX ---
     ports:
       - "5678:5678"
-    # Override the command to start the service with the debugpy wrapper
-    command: python -m debugpy --listen 0.0.0.0:5678 -m uvicorn api.main:app --host 0.0.0.0 --port 9500
+    entrypoint: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client"]
+    command: ["-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "9500"]
 
   worker:
-    # Expose the debugpy port
+    # --- START: THE DEFINITIVE FIX ---
+    build:
+      context: .
+      target: development
+    # --- END: THE DEFINITIVE FIX ---
     ports:
       - "5679:5679"
-    # Override the command to start the service with the debugpy wrapper
-    command: python -m debugpy --listen 0.0.0.0:5679 -m arq api.worker_settings.WorkerSettings
+    entrypoint: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5679", "--wait-for-client"]
+    command: ["-m", "arq", "api.worker_settings.WorkerSettings"]

@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, patch
+import os  # <-- Import the 'os' module
 
 # Import the function we are testing
 from api.worker import create_creative_report
@@ -42,17 +43,14 @@ async def test_create_creative_report_cache_miss(
     URL injection, and caching the new result.
     """
     # ARRANGE
-    # Mock all dependencies
     mocker.patch(PUBLISH_STATUS_PATH)
     mock_cleanup = mocker.patch(CLEANUP_PATH)
     mock_get_cache = mocker.patch(GET_CACHE_PATH, return_value=None)
     mock_set_cache = mocker.patch(SET_CACHE_PATH)
     mock_run_pipeline = mocker.patch(RUN_PIPELINE_PATH)
 
-    # Configure the mock run_pipeline to populate the context with a report
     async def pipeline_side_effect(context):
         context.final_report = mock_final_report
-        # Simulate the finalization step renaming the directory
         context.results_dir = context.results_dir.parent / "final_dir_name"
         return context
 
@@ -62,19 +60,21 @@ async def test_create_creative_report_cache_miss(
     result = await create_creative_report(mock_arq_context, "a new prompt")
 
     # ASSERT
-    # 1. Verify the correct sequence of calls.
     mock_cleanup.assert_called_once()
     mock_get_cache.assert_called_once()
     mock_run_pipeline.assert_called_once()
     mock_set_cache.assert_called_once()
 
-    # 2. Verify the URL injection worked.
+    # --- START: THE DEFINITIVE FIX ---
+    # 2. Verify the URL injection by reading the same environment variable
+    #    that the application code uses. This makes the test robust.
+    base_url = os.getenv("ASSET_BASE_URL", "http://127.0.0.1:9500")
+    expected_url = f"{base_url}/results/final_dir_name/image.png"
+
     final_piece = result["final_report"]["detailed_key_pieces"][0]
     assert "final_garment_image_url" in final_piece
-    assert (
-        "http://127.0.0.1:9500/results/final_dir_name/image.png"
-        in final_piece["final_garment_image_url"]
-    )
+    assert final_piece["final_garment_image_url"] == expected_url
+    # --- END: THE DEFINITIVE FIX ---
 
 
 @pytest.mark.asyncio
@@ -95,12 +95,7 @@ async def test_create_creative_report_cache_hit(mocker, mock_arq_context):
     result = await create_creative_report(mock_arq_context, "a prompt that was cached")
 
     # ASSERT
-    # 1. Verify the result is exactly what the cache provided.
     assert result == cached_data
-
-    # 2. Verify that expensive operations were SKIPPED.
     mock_run_pipeline.assert_not_called()
     mock_set_cache.assert_not_called()
-
-    # 3. Verify cleanup still runs.
     mock_cleanup.assert_called_once()
