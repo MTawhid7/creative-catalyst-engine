@@ -13,8 +13,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # --- THIS IS THE CRITICAL FIX THAT IS MISSING FROM YOUR FILE ---
-      # Explicitly set the Docker Compose project name to ensure consistent image naming.
       COMPOSE_PROJECT_NAME: creativecatalystengine
 
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

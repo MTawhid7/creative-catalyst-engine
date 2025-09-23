@@ -23,11 +23,12 @@ services:
       target: production
     container_name: creative-catalyst-api
     ports:
-      - "9500:9500"
+      - "0.0.0.0:9500:9500"
     volumes:
       - .:/app
     env_file:
       - .env
+    command: ["-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "9500"]
     depends_on:
       redis:
         condition: service_started
@@ -40,7 +41,7 @@ services:
       context: .
       target: production
     container_name: creative-catalyst-worker
-    command: /usr/local/bin/arq api.worker_settings.WorkerSettings
+    command: ["-m", "arq", "api.worker_settings.WorkerSettings"]
     volumes:
       - .:/app
     env_file:
@@ -64,11 +65,10 @@ services:
     profiles: ["app"]
 
   tester:
-    # This service is built from the 'development' stage, which has pytest.
     build:
       context: .
       target: development
-    command: sleep infinity # Keep it running if needed, though 'run' is one-off.
+    command: sleep infinity
     env_file:
       - .env
     environment:

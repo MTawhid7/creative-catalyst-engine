@@ -2,24 +2,18 @@
 
 services:
   api:
-    # --- START: THE DEFINITIVE FIX ---
-    # Override the build target to use the 'development' stage,
-    # which contains debugpy and all other dev dependencies.
     build:
       context: .
       target: development
-    # --- END: THE DEFINITIVE FIX ---
     ports:
       - "5678:5678"
     entrypoint: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "--wait-for-client"]
     command: ["-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "9500"]
 
   worker:
-    # --- START: THE DEFINITIVE FIX ---
     build:
       context: .
       target: development
-    # --- END: THE DEFINITIVE FIX ---
     ports:
       - "5679:5679"
     entrypoint: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5679", "--wait-for-client"]
