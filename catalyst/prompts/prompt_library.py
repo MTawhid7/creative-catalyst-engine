@@ -367,12 +367,14 @@ A high-level creative brief for 2-3 key garments. For each, describe the garment
 An analysis of the materials, textures, and finishes required to achieve the core theme. This is the primary section where you may incorporate a specific material or texture inspired by the 'Subtle Point of Contrast'.
 </fabrics_and_materials>
 
-<color_palette>
-**CRITICAL: This section must ONLY contain the Markdown bulleted list of colors.** Do not include the Tonal Story paragraph here.
--   **Core Palette (60%):** 2-3 primary, foundational colors.
--   **Secondary Palette (30%):** 2-3 supporting colors for layering and depth.
--   **Accent Palette (10%):** 1-2 highlight colors, used for trims or details.
-</color_palette>
+<color_palette_json>
+**CRITICAL: This section must ONLY contain a single, valid JSON object.**
+{{
+  "core_palette": ["A list of 2-3 primary color names"],
+  "secondary_palette": ["A list of 2-3 supporting color names"],
+  "accent_palette": ["A list of 1-2 highlight color names"]
+}}
+</color_palette_json>
 
 <strategic_narratives_json>
 **CRITICAL: This final section must ONLY contain a single, valid JSON object.** Do not add any other text or explanation.
@@ -488,17 +490,17 @@ You are a Content Curation Specialist. Your task is to take a well-structured Ma
 - [Archetype 2 from the 'INFLUENTIAL MODELS & MUSES' section]
 
 **Color Palette Strategy:**
-- **Tonal Story:** [Extract the full Tonal Story paragraph from the 'COLOR PALETTE' section]
-- **Core:** [List the colors from the Core Palette]
-- **Secondary:** [List the colors from the Secondary Palette]
-- **Accent:** [List the colors from the Accent Palette]
+- **Tonal Story:** [Extract the full Tonal Story paragraph from the JSON in the '<strategic_narratives_json>' section]
+- **Core:** [List the colors from the 'core_palette' key in the '<color_palette_json>' section]
+- **Secondary:** [List the colors from the 'secondary_palette' key in the '<color_palette_json>' section]
+- **Accent:** [List the colors from the 'accent_palette' key in the '<color_palette_json>' section]
 
 **Accessory Strategy:**
 - **Strategic Role:** [Extract the full Strategic Role sentence from the 'ACCESSORIES' section]
 - **Key Pieces:** [List the key accessory items and their materials]
 
 **COLLECTION_COLOR_PALETTE:**
-- [Create a single, consolidated list containing ALL color names from the Core, Secondary, and Accent palettes above.]
+- [Create a single, consolidated list containing ALL color names from the 'core_palette', 'secondary_palette', and 'accent_palette' keys in the '<color_palette_json>' section.]
 
 **Key Piece 1 Name:** [Name of the first key garment from the 'KEY GARMENTS' section]
 - **Description:** [Detailed description from the 'KEY GARMENTS' section, which includes the antagonist_synthesis]

@@ -4,11 +4,9 @@ import hashlib
 import json
 from typing import Dict, List, Any, Optional, TYPE_CHECKING, Union
 
-# --- START: RESILIENCE REFACTOR ---
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from catalyst.resilience import invoke_with_resilience, MaxRetriesExceededError
 
-# --- END: RESILIENCE REFACTOR ---
 
 if TYPE_CHECKING:
     from arq.connections import ArqRedis
@@ -21,21 +19,55 @@ from . import prompts as api_prompts
 logger = get_logger(__name__)
 
 
-# --- START: RESILIENCE REFACTOR (New Model) ---
 # Define the expected structure for the L0 key entities.
 # The values can be a mix of types, so we use 'Any'.
 class L0KeyEntities(BaseModel):
-    brand: Optional[Union[str, List[str]]] = None
-    garment_type: Optional[Union[str, List[str]]] = None
-    theme: Optional[Union[str, List[str]]] = None
-    season: Optional[str] = None
-    year: Optional[Union[int, str, List[Union[int, str]]]] = None
-    target_audience: Optional[str] = None
-    region: Optional[Union[str, List[str]]] = None
+    # These fields are now guaranteed to be lists of strings or None.
+    brand: Optional[List[str]] = None
+    garment_type: Optional[List[str]] = None
+    theme: Optional[List[str]] = None
+    season: Optional[List[str]] = None
+    region: Optional[List[str]] = None
     key_attributes: Optional[List[str]] = Field(default=[])
+    year: Optional[List[Union[int, str]]] = None
+    target_audience: Optional[str] = None
+
+    # VALIDATOR 1: For fields that should be lists of strings.
+    @field_validator(
+        "brand",
+        "garment_type",
+        "theme",
+        "season",
+        "region",
+        "key_attributes",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_string_fields_to_list(cls, v: Any) -> Optional[List[str]]:
+        """If a single string is passed, wrap it in a list."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return [v] if v else None
+        return v
+
+    # VALIDATOR 2: A dedicated, more flexible validator just for the 'year' field.
+    @field_validator("year", mode="before")
+    @classmethod
+    def _normalize_year_to_list(cls, v: Any) -> Optional[List[Union[int, str]]]:
+        """
+        Accepts a single int, a single string, or a list, and ensures the
+        output is always a list.
+        """
+        if v is None:
+            return None
+        # If it's a single item (int or string), wrap it in a list.
+        if isinstance(v, (str, int)):
+            return [v] if v else None
+        # If it's already a list, pass it through.
+        return v
 
 
-# --- END: RESILIENCE REFACTOR (New Model) ---
 
 
 async def _generate_deterministic_key(user_passage: str) -> Optional[str]:
@@ -52,12 +84,10 @@ async def _generate_deterministic_key(user_passage: str) -> Optional[str]:
             response_schema=L0KeyEntities,
         )
 
-        # --- START: THE DEFINITIVE FIX ---
         # Use .model_dump() with exclude_unset=True. This will correctly
         # omit any fields that were not explicitly set by the AI's response,
         # such as the default 'key_attributes=[]'.
         entities = entities_model.model_dump(exclude_unset=True)
-        # --- END: THE DEFINITIVE FIX ---
 
         if not entities:
             logger.warning("L0 key generation did not extract any entities.")

@@ -10,7 +10,7 @@ variations in LLM responses, following an "Accept, then Normalize" strategy.
 from typing import List, Optional, Dict, Union, Any
 from pydantic import BaseModel, Field, ConfigDict
 
-strict_config = ConfigDict(extra="forbid")
+strict_config = ConfigDict(extra="ignore")
 
 
 class PromptMetadata(BaseModel):

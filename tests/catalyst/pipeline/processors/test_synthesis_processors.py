@@ -34,7 +34,7 @@ async def test_web_research_happy_path(mocker, run_context):
     """
     # ARRANGE
     mock_gemini = mocker.patch(GEMINI_CLIENT_PATH)
-    valid_research_text = "<overarching_theme>Some research.</overarching_theme><key_garments>A test jacket.</key_garments>"
+    valid_research_text = "<overarching_theme>Some research.</overarching_theme><key_garments>A test jacket.</key_garments><color_palette_json>{}</color_palette_json>"
     mock_gemini.return_value = {"text": valid_research_text}
 
     processor = WebResearchProcessor()
@@ -56,7 +56,7 @@ async def test_web_research_triggers_self_repair(mocker, run_context):
     # ARRANGE
     mock_gemini = mocker.patch(GEMINI_CLIENT_PATH)
     flawed_research = "<overarching_theme>This is missing the key garments section.</overarching_theme>"
-    repaired_research = "<overarching_theme>This is fixed.</overarching_theme><key_garments>A test jacket.</key_garments>"
+    repaired_research = "<overarching_theme>This is fixed.</overarching_theme><key_garments>A test jacket.</key_garments><color_palette_json>{}</color_palette_json>"
     mock_gemini.side_effect = [{"text": flawed_research}, {"text": repaired_research}]
 
     processor = WebResearchProcessor()
