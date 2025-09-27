@@ -4,12 +4,15 @@
 Handles the cleaning, processing, and validation of JSON schemas to ensure
 compatibility with the Google Gemini API's strict requirements.
 """
-from typing import Dict, Any, Optional, Union, List, Set
+from typing import Dict, Any, Optional, TypeVar, Union, List, Set
 from pydantic import BaseModel
 from ...utilities.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Define a TypeVar for Pydantic models. This is the correct way to create
+# generic functions that operate on any BaseModel subclass.
+PydanticModel = TypeVar("PydanticModel", bound=BaseModel)
 
 # --- START: THE DEFINITIVE, ARCHITECTURALLY CORRECT FIX ---
 

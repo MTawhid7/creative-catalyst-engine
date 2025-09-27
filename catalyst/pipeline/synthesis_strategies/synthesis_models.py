@@ -13,16 +13,21 @@ from ...models.trend_report import KeyPieceDetail
 resilient_config = ConfigDict(extra="ignore")
 
 
-# --- START: THE DEFINITIVE FIX (Using name/description) ---
+# Use json_schema_extra in the ConfigDict to provide metadata. This is a more robust
+# pattern that separates validation from schema documentation and satisfies strict type checkers.
 class NamedDescriptionModel(BaseModel):
-    """A generic, Gemini-compatible model for a name/description pair."""
-
-    model_config = resilient_config
-    name: str = Field(..., description="The concise name for the item.")
-    description: str = Field(..., description="The detailed description for the item.")
-
-
-# --- END: THE DEFINITIVE FIX ---
+    model_config = ConfigDict(
+        extra="ignore",
+        json_schema_extra={
+            "description": "A generic, Gemini-compatible model for a name/description pair."
+        },
+    )
+    name: str = Field(
+        ..., json_schema_extra={"description": "The concise name for the item."}
+    )
+    description: str = Field(
+        ..., json_schema_extra={"description": "The detailed description for the item."}
+    )
 
 
 # --- Research Dossier Model ---

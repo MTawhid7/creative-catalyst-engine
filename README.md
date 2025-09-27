@@ -279,9 +279,10 @@ creative-catalyst-engine/
 ├── README.md               # The high-level project documentation (the "User Manual").
 └── WORKFLOW_GUIDE.md       # The definitive guide to the team's Git workflow (the "Contributor's Guide").
 │
-├── ├── __init__.py
+├──  api/
+│   ├── __init__.py
 │   ├── cache.py
-│   ├── config.py           
+│   ├── config.py
 │   ├── main.py             # FastAPI app entry point, includes routers
 │   ├── models.py           # API-specific Pydantic models
 │   ├── prompts.py

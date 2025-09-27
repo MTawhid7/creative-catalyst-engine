@@ -12,6 +12,12 @@ import time
 from typing import Optional, List, Dict, Any, Union
 
 from google.genai import types
+
+# --- START: THE DEFINITIVE FIX ---
+# Import the necessary enums for safety settings
+from google.genai.types import HarmCategory, HarmBlockThreshold
+
+# --- END: THE DEFINITIVE FIX ---
 from pydantic import BaseModel
 
 from .client_instance import client
@@ -39,6 +45,21 @@ def _prepare_generation_config(
         )
     if tools:
         config_params["tools"] = tools
+
+    # --- START: THE DEFINITIVE FIX ---
+    # Add the BLOCK_NONE safety settings to all text generation calls to ensure
+    # consistent behavior with the image generation module.
+    config_params["safety_settings"] = [
+        types.SafetySetting(category=cat, threshold=HarmBlockThreshold.BLOCK_NONE)
+        for cat in [
+            HarmCategory.HARM_CATEGORY_HARASSMENT,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        ]
+    ]
+    # --- END: THE DEFINITIVE FIX ---
+
     return types.GenerateContentConfig(**config_params)
 
 
@@ -63,29 +84,21 @@ async def generate_content_core_async(
 
     for attempt in range(max_retries):
         try:
-            # Make the single, best-effort API call.
             response = await client.aio.models.generate_content(
                 model=final_model_name,
                 contents=prompt_parts,
                 config=generation_config,
             )
-
-            # --- START: RESILIENCE REFACTOR ---
-            # The client's job is NOT to validate content. It simply extracts
-            # the raw text and returns it. Even if the text is empty or not
-            # JSON, it is passed up to the resilience invoker to handle.
             return {"text": response.text if hasattr(response, "text") else None}
-            # --- END: RESILIENCE REFACTOR ---
-
         except Exception as e:
             logger.warning(
                 f"Attempt {attempt + 1}/{max_retries}: Async API call failed.",
                 exc_info=True,
             )
-            # Use the simplified should_retry to check for network errors.
             if not should_retry(e) or attempt == max_retries - 1:
-                logger.error(f"API call failed permanently after {max_retries} attempts.")
-                # We do not raise here; we return None and let the invoker handle it.
+                logger.error(
+                    f"API call failed permanently after {max_retries} attempts."
+                )
                 return None
             await asyncio.sleep(calculate_backoff_delay(attempt))
     return None
@@ -114,19 +127,16 @@ def generate_content_core_sync(
                 contents=prompt_parts,
                 config=generation_config,
             )
-
-            # --- START: RESILIENCE REFACTOR ---
-            # Same as the async version: just extract the raw text.
             return {"text": response.text if hasattr(response, "text") else None}
-            # --- END: RESILIENCE REFACTOR ---
-
         except Exception as e:
             logger.warning(
                 f"Attempt {attempt + 1}/{max_retries}: Sync API call failed.",
                 exc_info=True,
             )
             if not should_retry(e) or attempt == max_retries - 1:
-                logger.error(f"API call failed permanently after {max_retries} attempts.")
+                logger.error(
+                    f"API call failed permanently after {max_retries} attempts."
+                )
                 return None
             time.sleep(calculate_backoff_delay(attempt))
     return None
