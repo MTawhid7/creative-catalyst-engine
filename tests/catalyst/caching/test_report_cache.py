@@ -1,146 +1,163 @@
 # tests/catalyst/caching/test_report_cache.py
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock
-import importlib  # <-- Import the importlib library
+import json
+from unittest.mock import AsyncMock, MagicMock
 
-# Import the module we are testing
+# The module we are testing
 from catalyst.caching import report_cache
-
-# Define paths to the clients we need to mock
-GEMINI_EMBEDDING_PATH = "catalyst.caching.report_cache.gemini.generate_embedding_async"
-CHROMADB_CLIENT_PATH = "catalyst.caching.report_cache.chromadb.HttpClient"
-CACHE_SETTINGS_PATH = "catalyst.caching.report_cache.settings"
+from catalyst import settings
 
 
-@pytest.fixture(autouse=True)
-def mock_clients(mocker):
-    """
-    This autouse fixture mocks the external clients and then reloads the
-    report_cache module to ensure it initializes with the mocks in place.
-    """
-    mock_gemini = mocker.patch(GEMINI_EMBEDDING_PATH, return_value=[0.1, 0.2, 0.3])
+@pytest.fixture
+def mock_chroma_collection(mocker) -> MagicMock:
+    """A fixture to mock the ChromaDB collection object."""
+    mock_collection = MagicMock()
+    # We need to set the attribute on the module where it is used
+    mocker.patch.object(report_cache, "_report_collection", mock_collection)
+    return mock_collection
 
-    mock_chroma_collection = MagicMock()
-    mock_chroma_client = mocker.patch(CHROMADB_CLIENT_PATH)
-    mock_chroma_client.return_value.get_or_create_collection.return_value = (
-        mock_chroma_collection
+
+@pytest.fixture
+def mock_gemini_embedding(mocker) -> AsyncMock:
+    """A fixture to mock the Gemini embedding generation function."""
+    # This is an async function, so we must use AsyncMock
+    mock_embedding_func = mocker.patch(
+        "catalyst.caching.report_cache.gemini.generate_embedding_async",
+        new_callable=AsyncMock,
     )
-
-    mock_settings = mocker.patch(CACHE_SETTINGS_PATH)
-    mock_settings.CACHE_DISTANCE_THRESHOLD = 0.15
-
-    # --- START: THE CRITICAL FIX ---
-    # Reload the module under test. This forces its module-level code
-    # (like the ChromaDB client initialization) to re-run using our mocks.
-    importlib.reload(report_cache)
-    # --- END: THE CRITICAL FIX ---
-
-    return mock_gemini, mock_chroma_collection
+    return mock_embedding_func
 
 
 @pytest.mark.asyncio
-async def test_check_cache_hit_when_distance_is_low(mock_clients):
-    """
-    Tests a successful cache hit when a similar document is found
-    below the distance threshold.
-    """
-    # ARRANGE
-    _, mock_collection = mock_clients
+class TestReportCacheCheck:
+    """Comprehensive tests for the report_cache.check function."""
 
-    # --- START: THE FIX ---
-    # We change the mock distance to be clearly *less than* the default 0.10 threshold.
-    # This correctly tests the "<" logic in the application.
-    mock_collection.query.return_value = {
-        "documents": [["cached_payload"]],
-        "distances": [[0.09]],
-    }
-    # --- END: THE FIX ---
+    async def test_check_cache_hit(self, mock_chroma_collection, mock_gemini_embedding):
+        """Verify a successful cache hit when a close document is found."""
+        # Arrange
+        mock_gemini_embedding.return_value = [0.1, 0.2, 0.3]  # A mock vector
 
-    # ACT
-    result = await report_cache.check("test key")
+        # Simulate a ChromaDB query result for a close match
+        mock_chroma_collection.query.return_value = {
+            "documents": [["cached_payload_json_string"]],
+            "distances": [
+                [settings.CACHE_DISTANCE_THRESHOLD - 0.01]
+            ],  # Below threshold
+        }
 
-    # ASSERT
-    assert result == "cached_payload"
-    mock_collection.query.assert_called_once()
+        # Act
+        result = await report_cache.check("test_key")
+
+        # Assert
+        assert result == "cached_payload_json_string"
+        mock_gemini_embedding.assert_awaited_once_with("test_key")
+        mock_chroma_collection.query.assert_called_once()
+
+    async def test_check_cache_miss_distance_too_high(
+        self, mock_chroma_collection, mock_gemini_embedding
+    ):
+        """Verify a cache miss when the closest document is outside the threshold."""
+        # Arrange
+        mock_gemini_embedding.return_value = [0.1, 0.2, 0.3]
+        mock_chroma_collection.query.return_value = {
+            "documents": [["some_document"]],
+            "distances": [[settings.CACHE_DISTANCE_THRESHOLD + 0.1]],  # Above threshold
+        }
+
+        # Act
+        result = await report_cache.check("test_key")
+
+        # Assert
+        assert result is None
+
+    async def test_check_cache_miss_no_results(
+        self, mock_chroma_collection, mock_gemini_embedding
+    ):
+        """Verify a cache miss when ChromaDB returns no documents."""
+        # Arrange
+        mock_gemini_embedding.return_value = [0.1, 0.2, 0.3]
+        mock_chroma_collection.query.return_value = {
+            "documents": [[]],
+            "distances": [[]],
+        }
+
+        # Act
+        result = await report_cache.check("test_key")
+
+        # Assert
+        assert result is None
+
+    async def test_check_handles_embedding_failure(
+        self, mock_chroma_collection, mock_gemini_embedding
+    ):
+        """Verify the function returns None if embedding generation fails."""
+        # Arrange
+        mock_gemini_embedding.return_value = None  # Simulate failure
+
+        # Act
+        result = await report_cache.check("test_key")
+
+        # Assert
+        assert result is None
+        # The query should not have been called
+        mock_chroma_collection.query.assert_not_called()
+
+    async def test_check_handles_chromadb_failure(
+        self, mock_chroma_collection, mock_gemini_embedding
+    ):
+        """Verify the function returns None if the ChromaDB query raises an exception."""
+        # Arrange
+        mock_gemini_embedding.return_value = [0.1, 0.2, 0.3]
+        mock_chroma_collection.query.side_effect = Exception("Simulated DB error")
+
+        # Act
+        result = await report_cache.check("test_key")
+
+        # Assert
+        assert result is None
 
 
 @pytest.mark.asyncio
-async def test_check_cache_miss_when_distance_is_high(mock_clients):
-    """
-    Tests a cache miss when the closest document is still above
-    the distance threshold.
-    """
-    # ARRANGE
-    _, mock_collection = mock_clients
-    mock_collection.query.return_value = {
-        "documents": [["some_other_payload"]],
-        "distances": [[0.2]],
-    }
+class TestReportCacheAdd:
+    """Comprehensive tests for the report_cache.add function."""
 
-    # ACT
-    result = await report_cache.check("test key")
+    async def test_add_success(self, mock_chroma_collection, mock_gemini_embedding):
+        """Verify a successful add operation calls upsert with the correct data."""
+        # Arrange
+        brief_key = "my_semantic_key"
+        payload = {"report": "final_report_data"}
+        payload_json = json.dumps(payload)
+        mock_embedding = [0.3, 0.2, 0.1]
 
-    # ASSERT
-    assert result is None
-    mock_collection.query.assert_called_once()
+        mock_gemini_embedding.return_value = mock_embedding
 
+        # Act
+        await report_cache.add(brief_key, payload)
 
-@pytest.mark.asyncio
-async def test_check_cache_miss_when_no_documents_found(mock_clients):
-    """
-    Tests a cache miss when the query returns no results.
-    """
-    # ARRANGE
-    _, mock_collection = mock_clients
-    mock_collection.query.return_value = {"documents": [[]], "distances": [[]]}
+        # Assert
+        mock_gemini_embedding.assert_awaited_once_with(brief_key)
 
-    # ACT
-    result = await report_cache.check("test key")
+        # Check that upsert was called with the correct, structured arguments
+        mock_chroma_collection.upsert.assert_called_once()
+        call_args, call_kwargs = mock_chroma_collection.upsert.call_args
 
-    # ASSERT
-    assert result is None
+        assert isinstance(call_kwargs["ids"], list)
+        assert isinstance(call_kwargs["ids"][0], str)  # ID should be a SHA256 hash
+        assert call_kwargs["embeddings"] == [mock_embedding]
+        assert call_kwargs["documents"] == [payload_json]
+        assert call_kwargs["metadatas"] == [{"brief_key": brief_key}]
 
+    async def test_add_handles_embedding_failure(
+        self, mock_chroma_collection, mock_gemini_embedding
+    ):
+        """Verify that upsert is not called if embedding generation fails."""
+        # Arrange
+        mock_gemini_embedding.return_value = None  # Simulate failure
 
-@pytest.mark.asyncio
-async def test_check_returns_none_if_embedding_fails(mock_clients):
-    """
-    Tests that if the Gemini embedding call fails, the cache check
-    returns None gracefully.
-    """
-    # ARRANGE
-    mock_gemini, mock_collection = mock_clients
-    mock_gemini.return_value = None
+        # Act
+        await report_cache.add("some_key", {"data": "payload"})
 
-    # ACT
-    result = await report_cache.check("test key")
-
-    # ASSERT
-    assert result is None
-    mock_collection.query.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_add_to_cache_success(mock_clients):
-    """
-    Tests that the 'add' function correctly generates an embedding and
-    calls the collection's 'upsert' method with the right data.
-    """
-    # ARRANGE
-    mock_gemini, mock_collection = mock_clients
-    payload = {"report": "new data"}
-
-    # ACT
-    await report_cache.add("a new brief key", payload)
-
-    # ASSERT
-    mock_gemini.assert_called_once_with("a new brief key")
-    mock_collection.upsert.assert_called_once()
-
-    _, kwargs = mock_collection.upsert.call_args
-    assert "ids" in kwargs
-    assert "embeddings" in kwargs
-    assert "documents" in kwargs
-
-    assert kwargs["embeddings"][0] == [0.1, 0.2, 0.3]
-    assert '{"report": "new data"}' in kwargs["documents"][0]
+        # Assert
+        # The most important assertion: the database was not written to.
+        mock_chroma_collection.upsert.assert_not_called()

@@ -26,14 +26,20 @@ logger = get_logger(__name__)
 
 # --- Public-Facing Functions ---
 
+
 async def generate_content_async(
     prompt_parts: List[Any],
     response_schema: Optional[Union[type[BaseModel], Dict[str, Any]]] = None,
     tools: Optional[List[types.Tool]] = None,
+    model_name: Optional[str] = None,
 ) -> Optional[Dict]:
     """Asynchronously runs the API call using the native async method."""
-    logger.info("📝 Requesting content from model (native async)...")
-    return await generate_content_core_async(prompt_parts, response_schema, tools)
+    # --- START: THE DEFINITIVE FIX ---
+    # The model_name parameter must be passed down to the core function.
+    return await generate_content_core_async(
+        prompt_parts, response_schema, tools, model_name
+    )
+    # --- END: THE DEFINITIVE FIX ---
 
 
 def generate_content_sync(
@@ -42,7 +48,6 @@ def generate_content_sync(
     tools: Optional[List[types.Tool]] = None,
 ) -> Optional[Dict]:
     """Synchronously runs the API call."""
-    logger.info("📝 Requesting content from model (sync)...")
     return generate_content_core_sync(prompt_parts, response_schema, tools)
 
 
@@ -64,19 +69,19 @@ async def generate_embedding_async(
                 config=embedding_config,
             )
 
-            # --- START OF DEFINITIVE FIX ---
-            # The result.embeddings is a list. We must check if it's non-empty,
-            # then access the first element, and then get the 'values' attribute.
             if result and result.embeddings and len(result.embeddings) > 0:
                 embedding_object = result.embeddings[0]
                 if hasattr(embedding_object, "values") and embedding_object.values:
                     return embedding_object.values
-            # --- END OF DEFINITIVE FIX ---
 
-            logger.warning("⚠️ Embedding response was successful but contained no values.")
+            logger.warning(
+                "⚠️ Embedding response was successful but contained no values."
+            )
             return None
         except Exception as e:
-            logger.error(f"❌ Attempt {attempt+1}: Embedding generation failed", exc_info=True)
+            logger.error(
+                f"❌ Attempt {attempt+1}: Embedding generation failed", exc_info=True
+            )
             if not should_retry(e) or attempt == 2:
                 break
             await asyncio.sleep(calculate_backoff_delay(attempt))

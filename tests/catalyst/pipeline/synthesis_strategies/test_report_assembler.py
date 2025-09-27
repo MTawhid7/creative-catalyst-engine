@@ -1,126 +1,115 @@
 # tests/catalyst/pipeline/synthesis_strategies/test_report_assembler.py
 
 import pytest
-from unittest.mock import patch, AsyncMock
+from pathlib import Path
+from pydantic import ValidationError
 
 from catalyst.context import RunContext
 from catalyst.pipeline.synthesis_strategies.report_assembler import ReportAssembler
-
-# Define paths to all the builder classes we need to mock
-BUILDER_BASE_PATH = "catalyst.pipeline.synthesis_strategies.report_assembler"
-TOP_LEVEL_BUILDER_PATH = f"{BUILDER_BASE_PATH}.TopLevelFieldsBuilder"
-NARRATIVE_BUILDER_PATH = f"{BUILDER_BASE_PATH}.NarrativeSettingBuilder"
-STRATEGIES_BUILDER_PATH = f"{BUILDER_BASE_PATH}.StrategiesBuilder"
-ACCESSORIES_BUILDER_PATH = f"{BUILDER_BASE_PATH}.AccessoriesBuilder"
-KEY_PIECES_BUILDER_PATH = f"{BUILDER_BASE_PATH}.KeyPiecesBuilder"
+from catalyst.models.trend_report import FashionTrendReport, PromptMetadata
+from catalyst.resilience import MaxRetriesExceededError
 
 
 @pytest.fixture
-def mock_builders(mocker):
-    """Mocks all section builder classes and configures their build methods."""
-    builders = {
-        "top_level": mocker.patch(TOP_LEVEL_BUILDER_PATH).return_value,
-        "narrative": mocker.patch(NARRATIVE_BUILDER_PATH).return_value,
-        "strategies": mocker.patch(STRATEGIES_BUILDER_PATH).return_value,
-        "accessories": mocker.patch(ACCESSORIES_BUILDER_PATH).return_value,
-        "key_pieces": mocker.patch(KEY_PIECES_BUILDER_PATH).return_value,
-    }
-
-    # Configure the return values for the .build() method of each mock
-    builders["top_level"].build = AsyncMock(
-        return_value={"overarching_theme": "mock theme"}
-    )
-    builders["narrative"].build = AsyncMock(
-        return_value={"narrative_setting_description": "mock setting"}
-    )
-    builders["strategies"].build = AsyncMock(
-        return_value={"color_palette_strategy": "mock color strategy"}
-    )
-    builders["accessories"].build = AsyncMock(
-        return_value={"accessories": {"Bags": ["mock bag"]}}
-    )
-
-    # --- START: THE FIX ---
-    # Provide a valid KeyPieceDetail object that includes all required fields.
-    builders["key_pieces"].build = AsyncMock(
-        return_value={
-            "detailed_key_pieces": [
-                {
-                    "key_piece_name": "mock piece",
-                    "description": "A mock description.",
-                    # Other fields have defaults, so we only need to provide the required ones.
-                }
-            ]
-        }
-    )
-    # --- END: THE FIX ---
-
-    return builders
-
-
-@pytest.fixture
-def run_context(tmp_path):
-    """Provides a fresh RunContext for each test."""
-    context = RunContext(user_passage="test", results_dir=tmp_path)
+def run_context() -> RunContext:
+    """Provides a fresh RunContext with a pre-populated initial brief."""
+    context = RunContext(user_passage="test", results_dir=Path("dummy"))
     context.enriched_brief = {
-        "desired_mood": [],
-        "season": "test",
-        "year": "2025",
-        "region": "test",
-        "target_gender": "test",
-        "target_age_group": "test",
-        "target_model_ethnicity": "test",
+        "season": "Spring/Summer",
+        "year": 2025,
+        "region": "Global",
+        "target_gender": "Unisex",
+        "target_age_group": "25-40",
+        "target_model_ethnicity": "Any",
     }
-    context.structured_research_context = "some research context"
+    context.antagonist_synthesis = "A test synthesis"
     return context
 
 
-@pytest.mark.asyncio
-async def test_report_assembler_happy_path(mock_builders, run_context):
-    """
-    Tests that the assembler correctly calls all builders, merges their results,
-    and returns a valid, finalized report dictionary.
-    """
-    # ARRANGE
-    assembler = ReportAssembler(context=run_context)
-
-    # ACT
-    final_report = await assembler.assemble_report()
-
-    # ASSERT
-    # 1. Verify all builders' .build() methods were called once.
-    for name, builder in mock_builders.items():
-        builder.build.assert_called_once()
-
-    # 2. Verify the final report contains a merged set of keys from the mock builders.
-    assert final_report is not None
-    assert final_report["overarching_theme"] == "mock theme"
-    assert final_report["narrative_setting_description"] == "mock setting"
-    assert final_report["accessories"]["Bags"][0] == "mock bag"
-    assert final_report["detailed_key_pieces"][0]["key_piece_name"] == "mock piece"
-
-    # 3. Verify the assembler added its own metadata.
-    assert "prompt_metadata" in final_report
-    assert final_report["prompt_metadata"]["run_id"] == run_context.run_id
+@pytest.fixture
+def report_data_from_builders() -> dict:
+    """Simulates a valid, but incomplete, report dictionary from the builders."""
+    return {
+        "overarching_theme": "Test Theme",
+        "trend_narrative_synthesis": "A test narrative.",
+        "detailed_key_pieces": [],  # Must be present, even if empty
+    }
 
 
-@pytest.mark.asyncio
-async def test_report_assembler_returns_none_on_validation_error(
-    mock_builders, run_context
-):
-    """
-    Tests that if the merged data fails the final Pydantic validation,
-    the assembler gracefully returns None.
-    """
-    # ARRANGE
-    # Configure one of the builders to return incomplete data (missing a required field
-    # like 'overarching_theme'), which will cause the FashionTrendReport validation to fail.
-    mock_builders["top_level"].build.return_value = {"this_is_not_a_valid_key": "test"}
+class TestReportAssembler:
+    """Comprehensive tests for the ReportAssembler class."""
 
-    assembler = ReportAssembler(context=run_context)
+    def test_finalize_and_validate_report_success(
+        self, run_context, report_data_from_builders
+    ):
+        """
+        Verify that the primary path correctly backfills data from the brief,
+        adds metadata, and successfully validates the final report.
+        """
+        assembler = ReportAssembler(run_context)
+        final_report = assembler._finalize_and_validate_report(
+            report_data_from_builders
+        )
 
-    # ACT
-    final_report = await assembler.assemble_report()
+        assert final_report is not None
+        assert final_report["season"] == ["Spring/Summer"]
+        assert final_report["year"] == [2025]
 
-    # ASSERT
-    assert final_report is None
+    def test_finalize_and_validate_report_failure(self, run_context):
+        """
+        Verify that the function returns None if the final data fails validation
+        due to an unrecoverable type error.
+        """
+        # --- START: THE DEFINITIVE FIX ---
+        # This data is now truly invalid. The 'detailed_key_pieces' field is a string,
+        # but the FashionTrendReport model strictly requires a List. The assembler has
+        # no special logic to fix this, so Pydantic validation will fail.
+        invalid_data = {
+            "overarching_theme": "An incomplete theme",
+            "detailed_key_pieces": "this is a string, not a list",  # This will cause the failure
+        }
+        # --- END: THE DEFINITIVE FIX ---
+
+        assembler = ReportAssembler(run_context)
+        final_report = assembler._finalize_and_validate_report(invalid_data)
+
+        assert final_report is None
+
+    @pytest.mark.asyncio
+    async def test_assemble_from_fallback_async_success(self, run_context, mocker):
+        """
+        Verify that the fallback path correctly calls the AI and returns a
+        finalized report.
+        """
+        mock_ai_response = FashionTrendReport(
+            prompt_metadata=PromptMetadata(run_id="temp", user_passage="temp"),
+            overarching_theme="Fallback Theme",
+            season=["FW"],
+            year=[2026],
+            region=["Test"],
+            target_gender="Test",
+            target_age_group="Test",
+            target_model_ethnicity="Test",
+            antagonist_synthesis="Fallback synthesis",
+        )
+        mocker.patch(
+            "catalyst.pipeline.synthesis_strategies.report_assembler.invoke_with_resilience",
+            return_value=mock_ai_response,
+        )
+        assembler = ReportAssembler(run_context)
+        fallback_report = await assembler._assemble_from_fallback_async()
+        assert fallback_report is not None
+        assert fallback_report["overarching_theme"] == "Fallback Theme"
+
+    @pytest.mark.asyncio
+    async def test_assemble_from_fallback_async_failure(self, run_context, mocker):
+        """
+        Verify that the fallback path returns None if the AI call fails.
+        """
+        mocker.patch(
+            "catalyst.pipeline.synthesis_strategies.report_assembler.invoke_with_resilience",
+            side_effect=MaxRetriesExceededError(ValueError("AI failed")),
+        )
+        assembler = ReportAssembler(run_context)
+        fallback_report = await assembler._assemble_from_fallback_async()
+        assert fallback_report is None

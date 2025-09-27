@@ -15,55 +15,69 @@ from .base_generator import BaseImageGenerator
 from catalyst.context import RunContext
 from catalyst import settings
 
-# Constants for retry mechanism
-MAX_RETRIES = 3
-RETRY_DELAY_SECONDS = 5
-
 
 class NanoBananaGeneration(BaseImageGenerator):
     """
     A versatile image generation strategy using the Google Gemini API,
-    updated to use the native asynchronous client for optimal performance.
+    refactored for dependency injection, lazy client creation, and unified settings.
     """
 
-    def __init__(self):
+    def __init__(self, client=None):
+        """
+        Initializes the generator. An optional client can be injected for testing.
+        """
         super().__init__()
-        self.client = None
-        if not settings.GEMINI_API_KEY:
-            self.logger.critical(
-                "CRITICAL: GEMINI_API_KEY not set. Nano Banana generator is disabled."
-            )
-            return
+        self._client = client
+        self._initialized_client = None
 
-        try:
-            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
-            self.logger.info("✅ Google Gemini client configured successfully.")
-        except Exception as e:
-            self.logger.critical(
-                f"CRITICAL: Failed to configure Gemini client: {e}", exc_info=True
-            )
-            self.client = None
+    def _get_client(self):
+        """
+        Lazily initializes and returns the Gemini client.
+        """
+        if self._initialized_client:
+            return self._initialized_client
+        if self._client:
+            self._initialized_client = self._client
+            return self._client
+        if settings.GEMINI_API_KEY:
+            try:
+                self._initialized_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+                self.logger.info(
+                    "✅ Google Gemini client configured successfully for NanoBanana."
+                )
+                return self._initialized_client
+            except Exception as e:
+                self.logger.critical(
+                    f"CRITICAL: Failed to configure Gemini client: {e}", exc_info=True
+                )
+        self.logger.critical(
+            "CRITICAL: GEMINI_API_KEY not set. Nano Banana generator is disabled."
+        )
+        return None
 
     async def process(self, context: RunContext) -> RunContext:
         """Orchestrates the image generation process for each key piece in the trend report."""
-        if not self.client:
-            self.logger.error("Halting generation: Gemini client was not initialized.")
+        client = self._get_client()
+        if not client:
+            self.logger.error(
+                "Halting generation: Gemini client is not initialized or is disabled."
+            )
             return context
 
         self.logger.info("🎨 Activating Nano Banana (Gemini) generation strategy...")
         prompts_data = self._load_prompts_from_file(context)
-
         if not prompts_data:
-            self.logger.error("Could not load prompts. Halting generation.")
+            self.logger.warning("Could not load prompts. Halting image generation.")
             return context
 
         tasks = [
-            self._generate_and_save_image(prompt_text, garment_name, context, p_type)
+            self._generate_and_save_image(
+                prompt_text, garment_name, context, p_type, client
+            )
             for garment_name, prompts in prompts_data.items()
             for p_type, prompt_text in prompts.items()
             if prompt_text
         ]
-
         if not tasks:
             self.logger.warning("No valid image generation tasks were created.")
             return context
@@ -76,25 +90,27 @@ class NanoBananaGeneration(BaseImageGenerator):
         return context
 
     async def _generate_and_save_image(
-        self, prompt: str, garment_name: str, context: RunContext, prompt_type: str
+        self,
+        prompt: str,
+        garment_name: str,
+        context: RunContext,
+        prompt_type: str,
+        client,
     ):
         """Generates a single image with retries, saves it, and injects its relative path."""
-
         cleaned_prompt = " ".join(
             re.sub(r"\*\*.*?\*\*|^- ", "", prompt, flags=re.MULTILINE)
             .replace("\n", " ")
             .split()
         )
 
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(settings.RETRY_AI_CONTENT_ATTEMPTS):
             self.logger.info(
-                f"Generating image for: '{garment_name}' ({prompt_type}) - Attempt {attempt + 1}/{MAX_RETRIES}..."
+                f"Generating image for: '{garment_name}' ({prompt_type}) - Attempt {attempt + 1}/{settings.RETRY_AI_CONTENT_ATTEMPTS}..."
             )
             try:
-                if not self.client:
-                    self.logger.error("Gemini client is not available; aborting task.")
-                    return
-
+                # --- START: THE DEFINITIVE FIX ---
+                # Revert to the explicit, correct list of harm categories that the API accepts.
                 safety_settings = [
                     types.SafetySetting(
                         category=cat, threshold=HarmBlockThreshold.BLOCK_NONE
@@ -106,21 +122,19 @@ class NanoBananaGeneration(BaseImageGenerator):
                         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
                     ]
                 ]
+                # --- END: THE DEFINITIVE FIX ---
+
                 generation_config = types.GenerateContentConfig(
                     response_modalities=["TEXT", "IMAGE"],
                     safety_settings=safety_settings,
                     temperature=0.7,
                 )
 
-                # --- START OF DEFINITIVE FIX ---
-                # Use the native async method and the correct 'config' parameter.
-                # This eliminates the inefficient threading and fixes the logging context issue.
-                response = await self.client.aio.models.generate_content(
+                response = await client.aio.models.generate_content(
                     model="gemini-2.5-flash-image-preview",
                     contents=[cleaned_prompt],
                     config=generation_config,
                 )
-                # --- END OF DEFINITIVE FIX ---
 
                 if (
                     response.candidates
@@ -131,7 +145,6 @@ class NanoBananaGeneration(BaseImageGenerator):
                         if part.inline_data and part.inline_data.data:
                             image_bytes = part.inline_data.data
                             image = Image.open(io.BytesIO(image_bytes))
-
                             slug = "".join(
                                 c
                                 for c in garment_name.lower()
@@ -143,12 +156,10 @@ class NanoBananaGeneration(BaseImageGenerator):
                                 else f"{slug}.png"
                             )
                             image_path = Path(context.results_dir) / image_filename
-
                             image.save(image_path, "PNG")
                             self.logger.info(
                                 f"✅ Successfully saved image to '{image_path}'"
                             )
-
                             relative_path = (
                                 f"results/{context.results_dir.name}/{image_path.name}"
                             )
@@ -171,17 +182,18 @@ class NanoBananaGeneration(BaseImageGenerator):
                 self.logger.warning(
                     f"⚠️ Gemini API call for '{garment_name}' returned no image data on attempt {attempt + 1}."
                 )
+
             except Exception as e:
                 self.logger.error(
                     f"❌ Gemini API call failed for '{garment_name}' on attempt {attempt + 1}: {e}",
-                    exc_info=(attempt == MAX_RETRIES - 1),
+                    exc_info=(attempt == settings.RETRY_AI_CONTENT_ATTEMPTS - 1),
                 )
 
-            if attempt < MAX_RETRIES - 1:
-                await asyncio.sleep(RETRY_DELAY_SECONDS)
+            if attempt < settings.RETRY_AI_CONTENT_ATTEMPTS - 1:
+                await asyncio.sleep(settings.RETRY_BACKOFF_DELAY_SECONDS)
 
         self.logger.error(
-            f"❌ All {MAX_RETRIES} attempts to generate an image for '{garment_name}' failed."
+            f"❌ All {settings.RETRY_AI_CONTENT_ATTEMPTS} attempts to generate an image for '{garment_name}' failed."
         )
 
     def _load_prompts_from_file(self, context: RunContext) -> dict:

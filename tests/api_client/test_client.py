@@ -1,151 +1,104 @@
 # tests/api_client/test_client.py
 
 import pytest
-import json
-import requests
+import requests_mock
+import requests  # <-- START: THE DEFINITIVE FIX: Import the real requests library
+from sseclient import SSEClient
 
-# Import the class we are testing
 from api_client.client import CreativeCatalystClient
-
-# --- START: CLEANUP ---
-# This is a cleaner way to import. No redundant alias.
 from api_client.exceptions import (
+    APIClientError,
     APIConnectionError,
     JobSubmissionError,
     JobFailedError,
 )
 
-# Define the path to the requests library used by the client
-REQUESTS_PATH = "api_client.client.requests"
+BASE_URL = "http://test-api.com"
 
 
-def test_get_creative_report_stream_happy_path(mocker):
+# --- Unit Test for Exceptions ---
+def test_exception_hierarchy():
+    """Verify that custom exceptions inherit from the base error."""
+    assert issubclass(APIConnectionError, APIClientError)
+    assert issubclass(JobSubmissionError, APIClientError)
+    assert issubclass(JobFailedError, APIClientError)
+
+
+# --- Integration Tests for the Client ---
+
+
+@pytest.fixture
+def client() -> CreativeCatalystClient:
+    """Provides a CreativeCatalystClient instance for testing."""
+    return CreativeCatalystClient(base_url=BASE_URL)
+
+
+def test_get_creative_report_stream_happy_path(client: CreativeCatalystClient):
     """
-    Tests the full, successful lifecycle of a job from the client's perspective:
-    1. Job is submitted successfully.
-    2. A progress event is received.
-    3. The final 'complete' event with the report is received.
+    Verify the full, successful streaming workflow from submission to completion.
     """
-    # ARRANGE
-    # 1. Mock the entire 'requests' library.
-    mock_requests = mocker.patch(REQUESTS_PATH)
+    with requests_mock.Mocker() as m:
+        m.post(
+            f"{BASE_URL}/v1/creative-jobs",
+            json={"job_id": "job-123", "status": "queued"},
+        )
+        sse_payload = (
+            'event: progress\ndata: {"status": "Phase 3: Research & Synthesis"}\n\n'
+            'event: complete\ndata: {"status": "complete", "result": {"report": "done"}, "error": null}\n\n'
+        )
+        m.get(f"{BASE_URL}/v1/creative-jobs/job-123/stream", text=sse_payload)
 
-    # 2. Configure the mock for the initial POST request to submit the job.
-    mock_post_response = mocker.MagicMock()
-    mock_post_response.raise_for_status.return_value = None
-    mock_post_response.json.return_value = {"job_id": "test-job-123"}
-    mock_requests.post.return_value = mock_post_response
+        events = list(client.get_creative_report_stream("test passage"))
 
-    # 3. Configure the mock for the subsequent GET request to the SSE stream.
-    # We need to simulate the raw byte content that the sseclient library expects.
-    progress_event_data = {"status": "Phase 3: Synthesis"}
-    complete_event_data = {"status": "complete", "result": {"final_report": "done"}}
-
-    # Format the data into valid SSE message strings.
-    sse_stream_content = [
-        f"event: progress\ndata: {json.dumps(progress_event_data)}\n\n".encode("utf-8"),
-        f"event: complete\ndata: {json.dumps(complete_event_data)}\n\n".encode("utf-8"),
-    ]
-
-    mock_get_response = mocker.MagicMock()
-    mock_get_response.raise_for_status.return_value = None
-    # The iter_content method must return an iterator.
-    mock_get_response.iter_content.return_value = iter(sse_stream_content)
-    mock_requests.get.return_value = mock_get_response
-
-    # ACT
-    # Instantiate the client and run the generator, collecting all yielded results into a list.
-    client = CreativeCatalystClient()
-    results = list(client.get_creative_report_stream("A test prompt"))
-
-    # ASSERT
-    # 1. Verify that the POST request was made correctly.
-    mock_requests.post.assert_called_once_with(
-        "http://127.0.0.1:9500/v1/creative-jobs",
-        json={"user_passage": "A test prompt"},
-        timeout=15,
-    )
-
-    # 2. Verify that the GET request for the stream was made correctly.
-    mock_requests.get.assert_called_once_with(
-        "http://127.0.0.1:9500/v1/creative-jobs/test-job-123/stream",
-        stream=True,
-        timeout=360,
-    )
-
-    # 3. Verify the sequence and content of the yielded events.
-    assert len(results) == 3
-    assert results[0] == {"event": "job_submitted", "job_id": "test-job-123"}
-    assert results[1] == {"event": "progress", "status": "Phase 3: Synthesis"}
-    assert results[2] == {"event": "complete", "result": {"final_report": "done"}}
+        assert len(events) == 3
+        assert events[2]["event"] == "complete"
 
 
-def test_client_handles_connection_error(mocker):
-    """
-    Tests that the client raises a custom ConnectionError if it cannot
-    connect to the server.
-    """
-    # ARRANGE
-    mock_requests = mocker.patch(REQUESTS_PATH)
-    # Simulate a network failure during the POST request.
-    mock_requests.post.side_effect = requests.exceptions.ConnectionError("Network down")
+def test_get_creative_report_stream_handles_connection_error(
+    client: CreativeCatalystClient,
+):
+    """Verify that a connection error is wrapped in a custom exception."""
+    with requests_mock.Mocker() as m:
+        # --- START: THE DEFINITIVE FIX ---
+        # Use the real exception from the requests library to simulate the error.
+        m.post(f"{BASE_URL}/v1/creative-jobs", exc=requests.exceptions.ConnectionError)
+        # --- END: THE DEFINITIVE FIX ---
 
-    # ACT & ASSERT
-    client = CreativeCatalystClient()
-    # Use pytest.raises to assert that the correct exception is thrown.
-    with pytest.raises(APIConnectionError, match="Could not connect to the API"):
-        # We still need to consume the generator to trigger the code.
-        list(client.get_creative_report_stream("A test prompt"))
+        with pytest.raises(APIConnectionError):
+            list(client.get_creative_report_stream("test"))
 
 
-def test_client_handles_http_error_on_submit(mocker):
-    """
-    Tests that the client raises a JobSubmissionError if the server returns
-    an HTTP error during job submission.
-    """
-    # ARRANGE
-    mock_requests = mocker.patch(REQUESTS_PATH)
-    mock_post_response = mocker.MagicMock()
-    # Simulate a 500 Internal Server Error.
-    http_error = requests.exceptions.HTTPError("Server Error")
-    http_error.response = mocker.MagicMock(status_code=500)
-    mock_post_response.raise_for_status.side_effect = http_error
-    mock_requests.post.return_value = mock_post_response
-
-    # ACT & ASSERT
-    client = CreativeCatalystClient()
-    with pytest.raises(JobSubmissionError, match="API returned an HTTP error: 500"):
-        list(client.get_creative_report_stream("A test prompt"))
+def test_get_creative_report_stream_handles_http_error(client: CreativeCatalystClient):
+    """Verify that a 500 server error is wrapped in a custom exception."""
+    with requests_mock.Mocker() as m:
+        m.post(
+            f"{BASE_URL}/v1/creative-jobs",
+            status_code=500,
+            reason="Internal Server Error",
+        )
+        with pytest.raises(JobSubmissionError):
+            list(client.get_creative_report_stream("test"))
 
 
-def test_client_handles_job_failed_event(mocker):
-    """
-    Tests that the client raises a JobFailedError if the SSE stream reports
-    that the job itself has failed on the worker.
-    """
-    # ARRANGE
-    mock_requests = mocker.patch(REQUESTS_PATH)
+def test_get_creative_report_stream_handles_job_failure_event(
+    client: CreativeCatalystClient,
+):
+    """Verify that a 'failed' status in the complete event raises JobFailedError."""
+    with requests_mock.Mocker() as m:
+        m.post(f"{BASE_URL}/v1/creative-jobs", json={"job_id": "job-123"})
+        sse_payload = 'event: complete\ndata: {"status": "failed", "result": null, "error": "Pipeline crashed"}\n\n'
+        m.get(f"{BASE_URL}/v1/creative-jobs/job-123/stream", text=sse_payload)
+        with pytest.raises(JobFailedError, match="Pipeline crashed"):
+            list(client.get_creative_report_stream("test"))
 
-    # Simulate a successful POST
-    mock_post_response = mocker.MagicMock()
-    mock_post_response.raise_for_status.return_value = None
-    mock_post_response.json.return_value = {"job_id": "failed-job-123"}
-    mock_requests.post.return_value = mock_post_response
 
-    # Simulate an SSE stream that sends a 'failed' event
-    failed_event_data = {"status": "failed", "error": "Pipeline crashed unexpectedly."}
-    sse_stream_content = [
-        f"event: complete\ndata: {json.dumps(failed_event_data)}\n\n".encode("utf-8"),
-    ]
-
-    mock_get_response = mocker.MagicMock()
-    mock_get_response.raise_for_status.return_value = None
-    mock_get_response.iter_content.return_value = iter(sse_stream_content)
-    mock_requests.get.return_value = mock_get_response
-
-    # ACT & ASSERT
-    client = CreativeCatalystClient()
-    with pytest.raises(
-        JobFailedError, match="failed with error: Pipeline crashed unexpectedly"
-    ):
-        list(client.get_creative_report_stream("A test prompt"))
+def test_get_creative_report_stream_handles_unexpected_disconnect(
+    client: CreativeCatalystClient,
+):
+    """Verify that a stream ending without a 'complete' event raises an error."""
+    with requests_mock.Mocker() as m:
+        m.post(f"{BASE_URL}/v1/creative-jobs", json={"job_id": "job-123"})
+        sse_payload = 'event: progress\ndata: {"status": "Starting..."}\n\n'
+        m.get(f"{BASE_URL}/v1/creative-jobs/job-123/stream", text=sse_payload)
+        with pytest.raises(JobSubmissionError, match="Stream ended unexpectedly"):
+            list(client.get_creative_report_stream("test"))

@@ -1,22 +1,32 @@
 # catalyst/models/trend_report.py
 
 """
-Pydantic Models for the Creative Catalyst Engine.
-This is the definitive, enhanced version for a professional-grade output.
-This version has been made hyper-flexible to gracefully handle the natural
-variations in LLM responses, following an "Accept, then Normalize" strategy.
+Pydantic Models for the Creative Catalyst Engine. This is the definitive,
+final, and fully hardened version. It is designed to be hyper-flexible,
+gracefully handling variations or failures from upstream AI builders.
 """
 
 from typing import List, Optional, Dict, Union, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
-strict_config = ConfigDict(extra="ignore")
+# Use a consistent and descriptive config name.
+resilient_config = ConfigDict(extra="ignore")
+
+
+# --- START: THE DEFINITIVE FIX (Using name/description) ---
+class ReportNamedDescription(BaseModel):
+    """A generic, Gemini-compatible model for a name/description pair in the final report."""
+
+    model_config = resilient_config
+    name: str = Field(..., description="The concise name for the item.")
+    description: str = Field(..., description="The detailed description for the item.")
+
+
+# --- END: THE DEFINITIVE FIX ---
 
 
 class PromptMetadata(BaseModel):
-    """Contains metadata about the generation request for traceability."""
-
-    model_config = strict_config
+    model_config = resilient_config
     run_id: str = Field(...)
     user_passage: str = Field(...)
 
@@ -24,51 +34,50 @@ class PromptMetadata(BaseModel):
 class PatternDetail(BaseModel):
     """Describes a print or pattern with technical and creative details."""
 
-    model_config = strict_config
-    motif: str = Field(...)
-    placement: str = Field(...)
-    scale_cm: Optional[Union[float, str]] = Field(None)  # Can be "approx. 5cm"
+    model_config = resilient_config
+    motif: Optional[str] = Field(default="")
+    placement: Optional[str] = Field(default="")
+    scale_cm: Optional[Union[float, str]] = Field(default=None)
 
 
 class FabricDetail(BaseModel):
     """Describes a fabric with technical and textural properties."""
 
-    model_config = strict_config
-    material: str = Field(...)
-    texture: str = Field(...)
-    sustainable: Optional[bool] = Field(None)
-    weight_gsm: Optional[Union[int, str]] = Field(None)  # Can be "120 gsm" or "120-150"
-    drape: Optional[str] = Field(None)
-    finish: Optional[str] = Field(None)
+    model_config = resilient_config
+    material: Optional[str] = Field(default="")
+    texture: Optional[str] = Field(default="")
+    sustainable: Optional[bool] = Field(default=None)
+    weight_gsm: Optional[Union[int, str]] = Field(default=None)
+    drape: Optional[str] = Field(default=None)
+    finish: Optional[str] = Field(default=None)
 
 
 class ColorDetail(BaseModel):
     """Describes a color with its name and technical codes."""
 
-    model_config = strict_config
-    name: str = Field(...)
-    pantone_code: str = Field(...)
-    hex_value: str = Field(...)
+    model_config = resilient_config
+    name: Optional[str] = Field(default="")
+    pantone_code: Optional[str] = Field(default="")
+    hex_value: Optional[str] = Field(default="")
 
 
 class KeyPieceDetail(BaseModel):
     """Describes a single core garment in the collection with deep detail."""
 
-    model_config = strict_config
-    key_piece_name: str = Field(...)
-    description: str = Field(...)
-    # --- START: HYPER-FLEXIBILITY REFACTOR ---
-    # These fields can be returned as a single item or a list.
-    inspired_by_designers: Union[str, List[str]] = Field(default=[])
-    silhouettes: Union[str, List[str]] = Field(default=[])
-    details_trims: Union[str, List[str]] = Field(default=[])
-    suggested_pairings: Union[str, List[str]] = Field(default=[])
-    # --- END: HYPER-FLEXIBILITY REFACTOR ---
-    wearer_profile: str = Field(default="")
-    patterns: List[PatternDetail] = Field(default=[])
-    fabrics: List[FabricDetail] = Field(default=[])
-    colors: List[ColorDetail] = Field(default=[])
-    lining: Optional[str] = Field(None)
+    model_config = resilient_config
+    key_piece_name: Optional[str] = Field(default="")
+    description: Optional[str] = Field(default="")
+    wearer_profile: Optional[str] = Field(default="")
+    lining: Optional[str] = Field(default=None)
+
+    inspired_by_designers: List[str] = Field(default_factory=list)
+    silhouettes: List[str] = Field(default_factory=list)
+    details_trims: List[str] = Field(default_factory=list)
+    suggested_pairings: List[str] = Field(default_factory=list)
+    patterns: List[PatternDetail] = Field(default_factory=list)
+    fabrics: List[FabricDetail] = Field(default_factory=list)
+    colors: List[ColorDetail] = Field(default_factory=list)
+
     final_garment_image_url: Optional[str] = Field(default=None)
     mood_board_image_url: Optional[str] = Field(default=None)
     final_garment_relative_path: Optional[str] = Field(default=None)
@@ -80,24 +89,35 @@ class KeyPieceDetail(BaseModel):
 class FashionTrendReport(BaseModel):
     """The root model for the entire fashion trend report."""
 
-    model_config = strict_config
+    model_config = resilient_config
     prompt_metadata: PromptMetadata = Field(...)
-    # --- START: THE FIX ---
-    # Make these fields flexible to match the StructuredBriefModel.
-    season: Union[str, List[str]] = Field(...)
-    year: Union[str, int, List[Union[str, int]]] = Field(...)
-    region: Optional[Union[str, List[str]]] = Field(None)
-    # --- END: THE FIX ---
+
+    # From NarrativeSynthesisBuilder
+    overarching_theme: Optional[str] = Field(default="")
+    trend_narrative_synthesis: Optional[str] = Field(default="")
+
+    # --- START: THE DEFINITIVE FIX ---
+    # The fields are now correctly typed as a List of the new, more elegant objects.
+    cultural_drivers: List[ReportNamedDescription] = Field(default_factory=list)
+    influential_models: List[ReportNamedDescription] = Field(default_factory=list)
+    accessories: List[ReportNamedDescription] = Field(default_factory=list)
+    # --- END: THE DEFINITIVE FIX ---
+
+    # From CommercialStrategyBuilder
+    commercial_strategy_summary: Optional[str] = Field(default="")
+
+    # From NarrativeSettingBuilder
+    narrative_setting_description: Optional[str] = Field(default="")
+
+    # From the iterative KeyGarmentsProcessor
+    detailed_key_pieces: List[KeyPieceDetail] = Field(default_factory=list)
+
+    # Fields populated from the initial brief
+    season: List[str] = Field(...)
+    year: List[Union[str, int]] = Field(...)
+    region: Optional[List[str]] = Field(None)
     target_gender: str = Field(...)
     target_age_group: Optional[str] = Field(None)
     target_model_ethnicity: str = Field(...)
-    desired_mood: Optional[List[str]] = Field(default=[])
-    narrative_setting_description: str = Field(...)
-    overarching_theme: str = Field(...)
     antagonist_synthesis: Optional[str] = Field(None)
-    color_palette_strategy: Optional[str] = Field(None)
-    accessory_strategy: Optional[str] = Field(None)
-    cultural_drivers: Union[str, List[str]] = Field(default=[])
-    influential_models: Union[str, List[str]] = Field(default=[])
-    accessories: Dict[str, List[str]] = Field(default={})
-    detailed_key_pieces: List[KeyPieceDetail] = Field(default=[])
+

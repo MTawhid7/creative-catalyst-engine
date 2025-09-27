@@ -1,132 +1,146 @@
-# In tests/api/test_cache.py
+# tests/api/test_cache.py
 
 import pytest
-from unittest.mock import AsyncMock, patch
+import json
+import hashlib
+from unittest.mock import AsyncMock
 
-# Import the functions and models we are testing
 from api.cache import (
+    L0KeyEntities,
     _generate_deterministic_key,
     get_from_l0_cache,
-    L0KeyEntities,
+    set_in_l0_cache,
 )
+from api import config as api_config
 from catalyst.resilience import MaxRetriesExceededError
 
-# Define the path to the function we need to mock
-INVOKER_PATH = "api.cache.invoke_with_resilience"
+
+@pytest.fixture
+def mock_redis_client() -> AsyncMock:
+    """Provides a mock ARQ Redis client."""
+    return AsyncMock()
+
+
+class TestL0KeyEntitiesModel:
+    """Unit tests for the Pydantic model and its validators."""
+
+    # --- START: THE DEFINITIVE FIX ---
+    # We must test the validators by using model_validate, which simulates
+    # creating the model from raw data (like a JSON object).
+
+    def test_string_fields_are_normalized_to_list(self):
+        """Verify that single string values are wrapped in a list."""
+        data = {"brand": "Chanel", "garment_type": "Jacket"}
+        model = L0KeyEntities.model_validate(data)
+        assert model.brand == ["Chanel"]
+        assert model.garment_type == ["Jacket"]
+
+    def test_year_field_is_normalized_to_list(self):
+        """Verify that single int or string for 'year' is wrapped in a list."""
+        model_int = L0KeyEntities.model_validate({"year": 2025})
+        model_str = L0KeyEntities.model_validate({"year": "2025"})
+        assert model_int.year == [2025]
+        assert model_str.year == ["2025"]
+
+    def test_lists_are_passed_through(self):
+        """Verify that values that are already lists are not modified."""
+        data = {"brand": ["Chanel", "Dior"], "year": [2025, 2026]}
+        model = L0KeyEntities.model_validate(data)
+        assert model.brand == ["Chanel", "Dior"]
+        assert model.year == [2025, 2026]
+
+    # --- END: THE DEFINITIVE FIX ---
 
 
 @pytest.mark.asyncio
-async def test_generate_deterministic_key_happy_path(mocker):
-    """
-    Tests that the function correctly sorts keys and creates a stable string
-    from a standard AI response.
-    """
-    # ARRANGE
-    mock_invoker = mocker.patch(INVOKER_PATH)
-    mock_entities = L0KeyEntities(
-        theme=["futurism"],  # Now provide lists to match the updated model
-        brand=["Chanel"],
-        garment_type=["jacket"],
-    )
-    mock_invoker.return_value = mock_entities
+class TestGenerateDeterministicKey:
+    """Unit tests for the _generate_deterministic_key function."""
 
-    # ACT
-    result_key = await _generate_deterministic_key("a user prompt")
+    async def test_key_generation_success(self, mocker):
+        """Verify a stable, sorted key is generated from a successful AI response."""
+        # Arrange
+        mock_response_model = L0KeyEntities.model_validate(
+            {
+                "theme": ["Cyberpunk"],
+                "year": [2077, 2023],  # Unsorted
+                "brand": "Arasaka",
+            }
+        )
+        mocker.patch(
+            "api.cache.invoke_with_resilience", return_value=mock_response_model
+        )
 
-    # ASSERT
-    expected_key = "brand:['Chanel']|garment_type:['jacket']|theme:['futurism']"
-    assert result_key == expected_key
+        # Act
+        result_key = await _generate_deterministic_key("test passage")
 
+        # Assert
+        expected_key = "brand:['Arasaka']|theme:['Cyberpunk']|year:['2023', '2077']"
+        assert result_key == expected_key
 
-@pytest.mark.asyncio
-async def test_generate_deterministic_key_handles_lists(mocker):
-    """
-    Tests that the function correctly sorts the items *within* a list to
-    ensure the final key is deterministic.
-    """
-    # ARRANGE
-    mock_invoker = mocker.patch(INVOKER_PATH)
-    mock_entities = L0KeyEntities(key_attributes=["leather", "zippers", "asymmetric"])
-    mock_invoker.return_value = mock_entities
+    async def test_key_generation_handles_ai_failure(self, mocker):
+        """Verify it returns None if the AI call fails."""
+        mocker.patch(
+            "api.cache.invoke_with_resilience",
+            side_effect=MaxRetriesExceededError(ValueError("AI failed")),
+        )
+        result_key = await _generate_deterministic_key("test passage")
+        assert result_key is None
 
-    # ACT
-    result_key = await _generate_deterministic_key("a user prompt")
-
-    # ASSERT
-    expected_key = "key_attributes:['asymmetric', 'leather', 'zippers']"
-    assert result_key == expected_key
-
-
-@pytest.mark.asyncio
-async def test_generate_deterministic_key_handles_ai_failure(mocker):
-    """
-    Tests that if the AI call fails, the function gracefully returns None.
-    """
-    # ARRANGE
-    mock_invoker = mocker.patch(INVOKER_PATH)
-    mock_invoker.side_effect = MaxRetriesExceededError(
-        last_exception=ValueError("AI failed")
-    )
-
-    # ACT
-    result_key = await _generate_deterministic_key("a user prompt")
-
-    # ASSERT
-    assert result_key is None
+    async def test_key_generation_handles_no_entities(self, mocker):
+        """Verify it returns None if the AI returns an empty model."""
+        mocker.patch("api.cache.invoke_with_resilience", return_value=L0KeyEntities())
+        result_key = await _generate_deterministic_key("test passage")
+        assert result_key is None
 
 
 @pytest.mark.asyncio
-async def test_get_from_l0_cache_stops_if_key_gen_fails(mocker):
-    """
-    Tests the safety check in the wrapper: if key generation returns None,
-    we should not proceed to query Redis.
-    """
-    # ARRANGE
-    mocker.patch("api.cache._generate_deterministic_key", return_value=None)
-    mock_redis_client = AsyncMock()
+class TestL0CacheFunctions:
+    """Integration tests for the public get/set functions."""
 
-    # ACT
-    result = await get_from_l0_cache("any prompt", mock_redis_client)
+    @pytest.fixture
+    def mock_key_gen(self, mocker) -> AsyncMock:
+        """Mocks the internal key generation function."""
+        return mocker.patch(
+            "api.cache._generate_deterministic_key", new_callable=AsyncMock
+        )
 
-    # ASSERT
-    assert result is None
-    mock_redis_client.get.assert_not_called()
+    async def test_get_from_l0_cache_hit(self, mock_redis_client, mock_key_gen):
+        """Verify a cache hit correctly retrieves and parses data."""
+        mock_key_gen.return_value = "stable_key"
+        cached_payload = {"report": "data"}
+        mock_redis_client.get.return_value = json.dumps(cached_payload).encode("utf-8")
 
+        result = await get_from_l0_cache("test", mock_redis_client)
 
-# --- START: NEW TEST TO VALIDATE THE ROBUST MODEL ---
-def test_l0_key_entities_model_normalizes_inputs():
-    """
-    This is a direct unit test of the Pydantic model itself. It verifies
-    that the custom @field_validator correctly coerces single values into lists.
-    """
-    # ARRANGE
-    # This simulates a "messy" but predictable response from the AI
-    raw_ai_response = {
-        "brand": "Test Brand",
-        "year": 2025,
-        "key_attributes": "single_attribute",
-        "target_audience": "Professionals",  # This should remain a string
-        "theme": "",  # This should be treated as None
-    }
+        assert result == cached_payload
+        expected_hash = hashlib.sha256("stable_key".encode()).hexdigest()
+        mock_redis_client.get.assert_awaited_once_with(
+            f"{api_config.L0_CACHE_PREFIX}:{expected_hash}"
+        )
 
-    # ACT
-    # This action triggers the validators
-    instance = L0KeyEntities.model_validate(raw_ai_response)
+    async def test_get_from_l0_cache_miss(self, mock_redis_client, mock_key_gen):
+        """Verify a cache miss returns None."""
+        mock_key_gen.return_value = "stable_key"
+        mock_redis_client.get.return_value = None
+        result = await get_from_l0_cache("test", mock_redis_client)
+        assert result is None
 
-    # ASSERT
-    # Check that single values were correctly wrapped in lists
-    assert instance.brand == ["Test Brand"]
-    assert instance.year == [2025]
-    assert instance.key_attributes == ["single_attribute"]
+    async def test_set_in_l0_cache_success(self, mock_redis_client, mock_key_gen):
+        """Verify a successful set operation calls redis with correct arguments."""
+        mock_key_gen.return_value = "stable_key"
+        payload = {"report": "data"}
+        await set_in_l0_cache("test", payload, mock_redis_client)
+        expected_hash = hashlib.sha256("stable_key".encode()).hexdigest()
+        mock_redis_client.set.assert_awaited_once_with(
+            f"{api_config.L0_CACHE_PREFIX}:{expected_hash}",
+            json.dumps(payload),
+            ex=api_config.L0_CACHE_TTL_SECONDS,
+        )
 
-    # Check that fields not in the validator were untouched
-    assert instance.target_audience == "Professionals"
-
-    # Check that an empty string was correctly converted to None
-    assert instance.theme is None
-
-    # Check that fields not present in the input are still None (or their default)
-    assert instance.region is None
-
-
-# --- END: NEW TEST TO VALIDATE THE ROBUST MODEL ---
+    async def test_set_in_l0_cache_skips_if_key_gen_fails(
+        self, mock_redis_client, mock_key_gen
+    ):
+        """Verify redis.set is not called if key generation returns None."""
+        mock_key_gen.return_value = None
+        await set_in_l0_cache("test", {}, mock_redis_client)
+        mock_redis_client.set.assert_not_called()

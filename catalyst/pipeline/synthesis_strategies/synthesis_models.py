@@ -1,82 +1,107 @@
 # catalyst/pipeline/synthesis_strategies/synthesis_models.py
 
 """
-Defines the intermediate Pydantic data models used exclusively during the
-"divide and conquer" synthesis process within the ReportAssembler.
+Defines all intermediate Pydantic data models used during the synthesis phase.
+This definitive version is fully aligned with our simplified, robust architecture.
 """
 
-from typing import List, Dict
-from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field, ConfigDict
+from ...models.trend_report import KeyPieceDetail
+
+# This config will be reused by all models to ignore unexpected extra fields from the AI.
+resilient_config = ConfigDict(extra="ignore")
 
 
-# --- START: ADD NEW MODEL ---
-class ColorPaletteStrategyModel(BaseModel):
-    tonal_story: str = Field(
-        ...,
-        description="A short, evocative paragraph describing the overall mood and psychology of the color direction.",
-    )
+# --- START: THE DEFINITIVE FIX (Using name/description) ---
+class NamedDescriptionModel(BaseModel):
+    """A generic, Gemini-compatible model for a name/description pair."""
+
+    model_config = resilient_config
+    name: str = Field(..., description="The concise name for the item.")
+    description: str = Field(..., description="The detailed description for the item.")
 
 
-# --- END: ADD NEW MODEL ---
-
-# --- START OF DEFINITIVE FIX ---
-# Move the NarrativeSettingModel here to its correct, centralized location.
-class NarrativeSettingModel(BaseModel):
-    narrative_setting: str = Field(
-        ..., description="A single, atmospheric paragraph under 50 words."
-    )
+# --- END: THE DEFINITIVE FIX ---
 
 
-# --- END OF DEFINITIVE FIX ---
+# --- Research Dossier Model ---
 
 
-class OverarchingThemeModel(BaseModel):
-    """A model to structure the overarching theme of the report."""
+class ResearchDossierModel(BaseModel):
+    """
+    The definitive, structured output of the WebResearchProcessor. It is designed
+    to be simple and robust, using flat strings for its primary fields.
+    """
 
-    overarching_theme: str = Field(
-        ...,
-        description="A single, concise string summarizing the core theme of the collection.",
-    )
+    model_config = resilient_config
+    trend_narrative: Optional[str] = Field(default="")
+    visual_language_colors: Optional[str] = Field(default="")
+    visual_language_materials: Optional[str] = Field(default="")
+    visual_language_silhouettes: Optional[str] = Field(default="")
+    cultural_context_summary: Optional[str] = Field(default="")
+    market_manifestation_summary: Optional[str] = Field(default="")
+    commercial_strategy_summary: Optional[str] = Field(default="")
+    emerging_trends_summary: Optional[str] = Field(default="")
+
+
+# --- Builder Output Models ---
+
+
+class NarrativeSynthesisModel(BaseModel):
+    """The output of the NarrativeSynthesisBuilder."""
+
+    model_config = resilient_config
+    overarching_theme: Optional[str] = Field(default="")
+    trend_narrative_synthesis: Optional[str] = Field(default="")
 
 
 class CulturalDriversModel(BaseModel):
-    """A model to structure the list of cultural drivers."""
+    """The output of the CulturalDriversBuilder."""
 
-    cultural_drivers: List[str] = Field(
-        ...,
-        description="A list of strings, where each string is a cultural driver and its impact explanation.",
-    )
+    model_config = resilient_config
+    # --- START: THE DEFINITIVE FIX ---
+    # Changed to a list of the new, more elegant structured objects.
+    cultural_drivers: List[NamedDescriptionModel] = Field(default_factory=list)
+    # --- END: THE DEFINITIVE FIX ---
 
 
 class InfluentialModelsModel(BaseModel):
-    """A model to structure the list of influential models or archetypes."""
+    """The output of the InfluentialModelsBuilder."""
 
-    influential_models: List[str] = Field(
-        ...,
-        description="A list of timeless archetypes or subcultures that embody the trend.",
-    )
+    model_config = resilient_config
+    # --- START: THE DEFINITIVE FIX ---
+    # Changed to a list of the new, more elegant structured objects.
+    influential_models: List[NamedDescriptionModel] = Field(default_factory=list)
+    # --- END: THE DEFINITIVE FIX ---
+
+
+class CommercialStrategyModel(BaseModel):
+    """The output of the CommercialStrategyBuilder."""
+
+    model_config = resilient_config
+    commercial_strategy_summary: Optional[str] = Field(default="")
 
 
 class AccessoriesModel(BaseModel):
-    """A model for the inner dictionary of accessories."""
+    """The output of the AccessoriesBuilder."""
 
-    Bags: List[str] = Field(default=[], description="List of bag accessories.")
-    Footwear: List[str] = Field(default=[], description="List of footwear accessories.")
-    Jewelry: List[str] = Field(default=[], description="List of jewelry accessories.")
-    Other: List[str] = Field(default=[], description="List of other accessories.")
-
-
-class KeyPieceNamesModel(BaseModel):
-    """
-    A model to structure the list of creative names for the key garments,
-    used specifically in the direct knowledge fallback path.
-    """
-
-    names: List[str] = Field(...)
+    model_config = resilient_config
+    # --- START: THE DEFINITIVE FIX ---
+    # Changed to a list of the new, more elegant structured objects.
+    accessories: List[NamedDescriptionModel] = Field(default_factory=list)
+    # --- END: THE DEFINITIVE FIX ---
 
 
-class AccessoryStrategyModel(BaseModel):
-    accessory_strategy: str = Field(
-        ...,
-        description="A short, declarative sentence defining the strategic role of accessories in the collection.",
-    )
+class SingleGarmentModel(BaseModel):
+    """The output of the SingleGarmentBuilder, used iteratively."""
+
+    model_config = resilient_config
+    key_piece: KeyPieceDetail
+
+
+class NarrativeSettingModel(BaseModel):
+    """The output of the NarrativeSettingBuilder."""
+
+    model_config = resilient_config
+    narrative_setting_description: Optional[str] = Field(default="")

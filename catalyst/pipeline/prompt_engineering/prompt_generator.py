@@ -3,12 +3,13 @@
 """
 This module defines the PromptGenerator, a strategy class responsible for
 transforming a validated FashionTrendReport into a complete set of final,
-art-directed image prompts.
+art-directed image prompts. This version is enhanced to create cohesive,
+grammatically correct, and visually striking prompt language.
 """
 
 import json
 import random
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List
 
 from pydantic import BaseModel, Field
 
@@ -26,21 +27,9 @@ from ...utilities.logger import get_logger
 logger = get_logger(__name__)
 
 
-def _normalize_to_list(value: Union[str, List[str]]) -> List[str]:
-    """A helper to safely convert a 'str' or 'List[str]' into a 'List[str]'."""
-    if isinstance(value, str):
-        return [value] if value else []
-    return value
-
-
 class CreativeStyleGuideModel(BaseModel):
-    art_direction: str = Field(
-        ...,
-        description="A unified paragraph describing the photo style and model persona.",
-    )
-    negative_style_keywords: str = Field(
-        ..., description="A comma-separated list of keywords to avoid."
-    )
+    art_direction: str = Field(...)
+    negative_style_keywords: str = Field(...)
 
 
 DEFAULT_STYLE_GUIDE = CreativeStyleGuideModel(
@@ -51,134 +40,141 @@ DEFAULT_STYLE_GUIDE = CreativeStyleGuideModel(
 
 class PromptGenerator:
     """
-    Generates final image prompts from a structured trend report.
+    Generates final image prompts from a structured trend report with a focus
+    on creating cohesive, visually striking language.
     """
 
-    def __init__(self, report: FashionTrendReport):
-        """
-        Initializes the generator with the validated report.
-        """
+    def __init__(self, report: FashionTrendReport, research_dossier: Dict[str, Any]):
         self.report = report
+        self.research_dossier = research_dossier
         self.logger = get_logger(self.__class__.__name__)
 
     def _format_visual_fabric_details(self, fabrics: List[FabricDetail]) -> str:
-        # ... (this method is unchanged)
+        """Creates a descriptive, formatted list for the mood board."""
         lines = []
-        for f in fabrics[:3]:
-            details = [f.texture, f.material, f"{f.drape or 'moderate'} drape"]
-            lines.append(f"- {' / '.join(details)}")
+        for f in fabrics[:2]:  # Limit to the top 2 for clarity
+            parts = [f.texture, f.material]
+            desc = f"- **Fabric Swatch:** A tactile swatch of {' '.join(filter(None, parts))}, showcasing its {f.drape or 'moderate'} drape and {f.finish or 'matte'} finish."
+            lines.append(desc)
         return "\n  ".join(lines)
 
     def _format_visual_pattern_details(self, patterns: List[PatternDetail]) -> str:
-        # ... (this method is unchanged)
+        """Creates a descriptive, formatted list for the mood board."""
         if not patterns:
-            return "- Solid color blocks with a focus on texture."
+            return "- **Texture Focus:** A close-up on the fabric's natural weave and texture, emphasizing its raw beauty."
         lines = []
-        for p in patterns:
-            lines.append(f"- A print featuring '{p.motif}' as an {p.placement}.")
+        for p in patterns[:1]:  # Focus on the primary pattern
+            lines.append(
+                f"- **Pattern Detail:** A print sample featuring a '{p.motif}' motif, demonstrating its '{p.placement}' placement and scale."
+            )
         return "\n  ".join(lines)
 
     def _get_visual_fabric_description(self, piece: KeyPieceDetail) -> str:
-        # ... (this method is unchanged)
+        """Builds a cohesive sentence describing the garment's material."""
         if not piece.fabrics:
-            return "A high-quality, modern textile."
+            return "Crafted from a high-quality, modern textile with a focus on texture and form."
         main_fabric = piece.fabrics[0]
-        return f"Crafted from a {main_fabric.texture} {main_fabric.material} with a {main_fabric.drape or 'moderate'} drape and a {main_fabric.finish or 'matte'} finish."
-
-    def _get_visual_color_palette(self, piece: KeyPieceDetail) -> str:
-        # ... (this method is unchanged)
-        if not piece.colors:
-            return "A thematically appropriate color palette."
-        color_names = [c.name for c in piece.colors]
-        if len(color_names) > 2:
-            return f"A palette of {', '.join(color_names[:-1])}, with an accent of {color_names[-1]}."
-        return " and ".join(color_names)
-
-    def _get_visual_pattern_description(self, piece: KeyPieceDetail) -> str:
-        # ... (this method is unchanged)
-        if not piece.patterns:
-            return (
-                "The garment is a solid color, focusing on its texture and silhouette."
-            )
-        main_pattern = piece.patterns[0]
-        return f"Features a '{main_pattern.motif}' pattern, applied as a {main_pattern.placement}."
-
-    def _get_visual_details_description(self, piece: KeyPieceDetail) -> str:
-        # ... (this method is unchanged)
-        parts = []
-        if piece.lining:
-            parts.append(piece.lining)
-        if piece.details_trims:
-            parts.append(f"Key details include {', '.join(piece.details_trims[:3])}.")
-        return " ".join(parts) or "Constructed with clean, minimalist detailing."
-
-    async def _generate_creative_style_guide(self) -> CreativeStyleGuideModel:
-        """Calls the AI to translate report data into a concise style guide."""
-        self.logger.info("✍️ Generating Creative Style Guide from report data...")
-
-        # Normalize the potentially flexible list fields before using them.
-        influential_models_list = _normalize_to_list(self.report.influential_models)
-
-        prompt = prompt_library.CREATIVE_STYLE_GUIDE_PROMPT.format(
-            brand_ethos=self.report.prompt_metadata.user_passage,
-            overarching_theme=self.report.overarching_theme,
-            influential_models=", ".join(
-                influential_models_list
-            ),  # Use the normalized list
-            desired_mood=str(self.report.desired_mood or []),
+        return (
+            f"Crafted from a luxurious {main_fabric.texture or ''} {main_fabric.material or 'textile'}. "
+            f"The fabric has a {main_fabric.drape or 'moderate'} drape and a {main_fabric.finish or 'matte'} finish, "
+            "giving it a unique hand-feel and visual depth."
         )
 
+    def _get_visual_color_palette(self, piece: KeyPieceDetail) -> str:
+        """Builds a cohesive sentence describing the color palette."""
+        if not piece.colors:
+            return "A thematically appropriate and sophisticated color palette."
+        color_names = [c.name for c in piece.colors if c.name]
+        if not color_names:
+            return "A thematically appropriate and sophisticated color palette."
+        if len(color_names) == 1:
+            return f"The piece is rendered in a striking shade of {color_names[0]}."
+        if len(color_names) > 2:
+            return f"A rich color palette of {', '.join(color_names[:-1])}, with a key accent of {color_names[-1]}."
+        return f"A refined color palette of {color_names[0]} and {color_names[1]}."
+
+    def _get_visual_pattern_description(self, piece: KeyPieceDetail) -> str:
+        """Builds a cohesive sentence describing the garment's pattern."""
+        if not piece.patterns:
+            return "The garment is a solid color, focusing on its silhouette and the natural texture of the fabric."
+        main_pattern = piece.patterns[0]
+        return (
+            f"It features a '{main_pattern.motif or 'subtle'}' pattern, "
+            f"thoughtfully applied as a {main_pattern.placement or 'tonal accent'} to enhance the garment's form."
+        )
+
+    def _get_visual_details_description(self, piece: KeyPieceDetail) -> str:
+        """Builds a cohesive sentence describing key construction details."""
+        parts = []
+        if piece.details_trims:
+            parts.append(
+                f"Key construction details include {', '.join(piece.details_trims[:3])}."
+            )
+        if piece.lining:
+            parts.append(f"It is lined with {piece.lining} for a luxurious finish.")
+        return (
+            " ".join(parts)
+            or "Constructed with clean, minimalist detailing and an impeccable finish."
+        )
+
+
+    async def _generate_creative_style_guide(self) -> CreativeStyleGuideModel:
+        self.logger.info("✍️ Generating Creative Style Guide from final report data...")
+        influential_models_str = ", ".join(
+            [item.name for item in self.report.influential_models]
+        )
+        prompt_args = {
+            "research_dossier": json.dumps(self.research_dossier, indent=2),
+            "overarching_theme": self.report.overarching_theme,
+            "refined_mood": self.research_dossier.get("trend_narrative", ""),
+            "influential_models": influential_models_str,
+            "brand_ethos": self.report.prompt_metadata.user_passage,
+            "style_guide_schema": json.dumps(
+                CreativeStyleGuideModel.model_json_schema(), indent=2
+            ),
+        }
         try:
             style_guide_model = await invoke_with_resilience(
                 ai_function=gemini.generate_content_async,
-                prompt=prompt,
+                prompt=prompt_library.CREATIVE_STYLE_GUIDE_PROMPT.format(**prompt_args),
                 response_schema=CreativeStyleGuideModel,
             )
             self.logger.info("✅ Success: Creative Style Guide generated.")
             return style_guide_model
         except MaxRetriesExceededError:
-            self.logger.warning(
-                "⚠️ AI call for style guide failed after all retries. Using fallback."
-            )
+            self.logger.warning("⚠️ AI call for style guide failed. Using fallback.")
             return DEFAULT_STYLE_GUIDE
 
     async def generate_prompts(self) -> Dict[str, Any]:
-        """
-        The main public method to generate all prompts using the new,
-        more sophisticated and structured templates.
-        """
         all_prompts = {}
-        # The method now returns a Pydantic model object directly.
         style_guide_model = await self._generate_creative_style_guide()
 
-        all_accessories = [
-            item for sublist in self.report.accessories.values() for item in sublist
-        ]
-
-        cultural_drivers_list = _normalize_to_list(self.report.cultural_drivers)
-
+        all_accessory_names = [item.name for item in self.report.accessories]
+        cultural_drivers_list = [item.name for item in self.report.cultural_drivers]
         core_concept_inspiration = (
-            random.choice(self.report.cultural_drivers)
-            if self.report.cultural_drivers
+            random.choice(cultural_drivers_list)
+            if cultural_drivers_list
             else "modern minimalist art"
         )
 
         if not self.report.detailed_key_pieces:
             self.logger.warning(
-                "No detailed key pieces found in the report. Cannot generate any image prompts."
+                "No detailed key pieces found. Cannot generate image prompts."
             )
             return {}
 
         for piece in self.report.detailed_key_pieces:
-            # Normalize the list fields for each key piece before using them.
-            details_trims_list = _normalize_to_list(piece.details_trims)
-            suggested_pairings_list = _normalize_to_list(piece.suggested_pairings)
-
-            sampled_accessories = (
-                random.sample(all_accessories, min(len(all_accessories), 3))
-                if all_accessories
-                else ["a statement handbag", "elegant sunglasses"]
+            sampled_accessory_names = (
+                random.sample(all_accessory_names, min(len(all_accessory_names), 2))
+                if all_accessory_names
+                else []
             )
+            key_accessories_str = (
+                ", ".join(sampled_accessory_names)
+                or "a statement handbag and elegant sunglasses"
+            )
+            color_names_for_prompt = [c.name for c in piece.colors if c.name]
+
             piece_prompts = {
                 "mood_board": prompt_library.MOOD_BOARD_PROMPT_TEMPLATE.format(
                     key_piece_name=piece.key_piece_name,
@@ -189,18 +185,16 @@ class PromptGenerator:
                     formatted_fabric_details=self._format_visual_fabric_details(
                         piece.fabrics
                     ),
-                    color_names=", ".join([c.name for c in piece.colors]),
+                    color_names=", ".join(color_names_for_prompt),
                     formatted_pattern_details=self._format_visual_pattern_details(
                         piece.patterns
                     ),
-                    details_trims=", ".join(details_trims_list),
-                    key_accessories=", ".join(sampled_accessories),
+                    details_trims=", ".join(piece.details_trims),
+                    key_accessories=key_accessories_str,
                     target_gender=self.report.target_gender,
                     target_model_ethnicity=self.report.target_model_ethnicity,
                 ),
                 "final_garment": prompt_library.FINAL_GARMENT_PROMPT_TEMPLATE.format(
-                    # --- FIX 3: Use Correct Attribute Access ---
-                    # Access data using attributes, not .get(), for type safety.
                     art_direction=style_guide_model.art_direction,
                     negative_style_keywords=style_guide_model.negative_style_keywords,
                     key_piece_name=piece.key_piece_name,
@@ -216,12 +210,12 @@ class PromptGenerator:
                         piece
                     ),
                     narrative_setting=self.report.narrative_setting_description,
-                    styling_description=" and ".join(suggested_pairings_list[:2])
-                    or "the piece is styled to feel authentic",
+                    styling_description=" and ".join(piece.suggested_pairings[:2])
+                    or "the piece is styled to feel authentic and personally curated",
                     target_gender=self.report.target_gender,
                     target_model_ethnicity=self.report.target_model_ethnicity,
                 ),
             }
-            all_prompts[piece.key_piece_name] = piece_prompts
+            all_prompts[piece.key_piece_name or "untitled"] = piece_prompts
 
         return all_prompts

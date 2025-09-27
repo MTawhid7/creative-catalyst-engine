@@ -1,128 +1,182 @@
 # tests/catalyst/resilience/test_invoker.py
 
-import pytest
 import json
-from unittest.mock import AsyncMock
+import pytest
+from pydantic import BaseModel, Field, ValidationError
+from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from catalyst.clients import gemini
+from catalyst.resilience.invoker import (
+    _sanitize_ai_response,
+    _normalize_lists_recursively,
+    invoke_with_resilience,
+)
+from catalyst.resilience.exceptions import MaxRetriesExceededError
 
-from catalyst.resilience import invoke_with_resilience, MaxRetriesExceededError
-from catalyst import settings
+# --- Test Models for Validation ---
 
-# --- START: THE FIX ---
-# Define a simple Pydantic model for our tests to validate against.
-# By adding a default value to `value`, we make it non-required,
-# which allows the simple fallback logic to work correctly.
-class SimpleTestModel(BaseModel):
+
+class SimpleItem(BaseModel):
     name: str
-    value: int = 0  # <-- THE CRITICAL CHANGE IS HERE
-    description: str = Field(default="A default description.")
-# --- END: THE FIX ---
+    value: int
 
 
-@pytest.mark.asyncio
-async def test_invoker_happy_path_succeeds_on_first_try(mocker):
-    """
-    Tests the ideal scenario where the AI function returns a valid JSON
-    response on the very first attempt.
-    """
-    # ARRANGE
-    mock_ai_function = AsyncMock()
-    valid_json_string = '{"name": "Test Item", "value": 123}'
-    mock_ai_function.return_value = {"text": valid_json_string}
+class NestedModel(BaseModel):
+    items: List[SimpleItem]
+    tags: Optional[List[str]] = None
+    metadata: Optional[dict] = None
 
-    # ACT
-    result = await invoke_with_resilience(
-        ai_function=mock_ai_function,
-        prompt="A test prompt",
-        response_schema=SimpleTestModel
+
+class TopLevelModel(BaseModel):
+    report_name: str
+    nested_data: NestedModel
+
+
+# --- Rigorous Unit Tests for Helper Functions ---
+
+
+class TestSanitizationPipelineUnit:
+    """Unit tests for the individual sanitization helper functions using pytest.mark.parametrize."""
+
+    @pytest.mark.parametrize(
+        "input_data, expected_output",
+        [
+            # Happy path: no change
+            ({"key": ["value1", "value2"]}, {"key": ["value1", "value2"]}),
+            # Basic stringified list
+            ({"key": '["value1", "value2"]'}, {"key": ["value1", "value2"]}),
+            # Basic stringified object
+            ({"key": '{"subkey": "subvalue"}'}, {"key": {"subkey": "subvalue"}}),
+            # Nested stringified list
+            (
+                {"data": [{"nested_key": '["a", "b"]'}]},
+                {"data": [{"nested_key": ["a", "b"]}]},
+            ),
+            # Empty stringified list and object
+            (
+                {"empty_list": "[]", "empty_obj": "{}"},
+                {"empty_list": [], "empty_obj": {}},
+            ),
+            # Invalid JSON string should be ignored
+            ({"key": "[invalid json"}, {"key": "[invalid json"}),
+            # Data with None should be preserved
+            ({"key": None}, {"key": None}),
+        ],
     )
+    def test_sanitize_ai_response(self, input_data, expected_output):
+        """Test _sanitize_ai_response with various edge cases."""
+        assert _sanitize_ai_response(input_data) == expected_output
 
-    # ASSERT
-    mock_ai_function.assert_called_once()
-    assert isinstance(result, SimpleTestModel)
-    assert result.name == "Test Item"
-    assert result.value == 123
-
-@pytest.mark.asyncio
-async def test_invoker_uses_reformatter_on_second_try(mocker):
-    """
-    Tests the Layer 2 resilience: the invoker should reformat the prompt
-    and succeed on the second try if the first one fails validation.
-    """
-    # ARRANGE
-    mock_ai_function = AsyncMock()
-    mock_ai_function.side_effect = [
-        {"text": '{"name": "Test Item", "value": "this is not an int"}'},
-        {"text": '{"name": "Test Item", "value": 456}'}
-    ]
-
-    mocker.patch("catalyst.resilience.invoker.settings.RESILIENCE_MAX_RETRIES", 1)
-
-    # ACT
-    result = await invoke_with_resilience(
-        ai_function=mock_ai_function,
-        prompt="A test prompt",
-        response_schema=SimpleTestModel,
-        max_retries=1
+    @pytest.mark.parametrize(
+        "input_data, expected_output",
+        [
+            # Basic case: wrap single item in list
+            (
+                {"items": {"name": "test", "value": 1}},
+                {"items": [{"name": "test", "value": 1}]},
+            ),
+            # Basic case: wrap single string in list
+            ({"items": [], "tags": "important"}, {"items": [], "tags": ["important"]}),
+            # Should not change an already correct list
+            (
+                {"items": [{"name": "test", "value": 1}]},
+                {"items": [{"name": "test", "value": 1}]},
+            ),
+            # Should not change an empty list
+            ({"items": []}, {"items": []}),
+            # Should handle None value correctly
+            ({"items": [], "tags": None}, {"items": [], "tags": None}),
+        ],
     )
+    def test_normalize_lists_recursively(self, input_data, expected_output):
+        """Test _normalize_lists_recursively with various edge cases."""
+        assert _normalize_lists_recursively(input_data, NestedModel) == expected_output
 
-    # ASSERT
-    assert mock_ai_function.call_count == 2
-    assert isinstance(result, SimpleTestModel)
-    assert result.value == 456
 
-@pytest.mark.asyncio
-async def test_invoker_uses_fallback_after_all_retries_fail(mocker):
-    """
-    Tests Layer 4 resilience: if all retries fail, the invoker should
-    trigger its internal fallback mechanism to generate a safe default.
-    """
-    # ARRANGE
-    mock_main_ai_func = AsyncMock(return_value={"text": "completely invalid response"})
+# --- Realistic Integration Tests for the Main Invoker Function ---
 
-    mock_fallback_ai_func = mocker.patch("catalyst.resilience.invoker.gemini.generate_content_async")
-    mock_fallback_ai_func.side_effect = [
-        None,
-        {"text": "A fallback name"}
-    ]
-
-    mocker.patch("catalyst.resilience.invoker.settings.RESILIENCE_MAX_RETRIES", 1)
-
-    # ACT
-    result = await invoke_with_resilience(
-        ai_function=mock_main_ai_func,
-        prompt="A test prompt",
-        response_schema=SimpleTestModel,
-        max_retries=1
-    )
-
-    # ASSERT
-    assert mock_main_ai_func.call_count == 2
-    assert mock_fallback_ai_func.call_count == 2
-
-    assert isinstance(result, SimpleTestModel)
-    assert result.name == "A fallback name"
-    # With the default value in the model, this assertion is now correct.
-    assert result.value == 0
 
 @pytest.mark.asyncio
-async def test_invoker_raises_max_retries_if_fallbacks_fail(mocker):
+class TestInvokeWithResilienceIntegration:
     """
-    Tests the final failure case: if all retries and all internal fallback
-    layers fail, the invoker should raise MaxRetriesExceededError.
+    More realistic integration tests for invoke_with_resilience.
+    These tests mock the actual Google GenAI client to verify the integration.
     """
-    # ARRANGE
-    mock_main_ai_func = AsyncMock(return_value=None)
-    mock_fallback_ai_func = mocker.patch("catalyst.resilience.invoker.gemini.generate_content_async", return_value=None)
 
-    mocker.patch("catalyst.resilience.invoker.settings.RESILIENCE_MAX_RETRIES", 1)
+    async def test_happy_path_with_valid_data(self, mocker):
+        """Test that a perfect response from the AI client passes through successfully."""
+        valid_data = {
+            "report_name": "Test Report",
+            "nested_data": {
+                "items": [{"name": "item1", "value": 100}],
+                "tags": ["tag1"],
+            },
+        }
+        response_text = json.dumps(valid_data)
 
-    # ACT & ASSERT
-    with pytest.raises(MaxRetriesExceededError):
-        await invoke_with_resilience(
-            ai_function=mock_main_ai_func,
-            prompt="A test prompt",
-            response_schema=SimpleTestModel,
-            max_retries=1
+        # Mock the actual Google GenAI client's response object structure
+        mock_response = mocker.Mock()
+        mock_response.text = response_text
+        mocker.patch(
+            "catalyst.clients.gemini.core.client.aio.models.generate_content",
+            return_value=mock_response,
         )
+
+        result = await invoke_with_resilience(
+            ai_function=gemini.generate_content_async,
+            prompt="test prompt",
+            response_schema=TopLevelModel,
+        )
+        assert isinstance(result, TopLevelModel)
+        assert result.report_name == "Test Report"
+
+    async def test_sanitization_path_fixes_common_ai_errors(self, mocker):
+        """Test that a response with common AI errors is fixed by the sanitization pipeline."""
+        dirty_data = {
+            "report_name": "Dirty Report",
+            "nested_data": {
+                "items": {"name": "item1", "value": 100},  # Single item
+                "tags": '["tag1", "tag2"]',  # Stringified list
+            },
+        }
+        response_text = json.dumps(dirty_data)
+
+        mock_response = mocker.Mock()
+        mock_response.text = response_text
+        mocker.patch(
+            "catalyst.clients.gemini.core.client.aio.models.generate_content",
+            return_value=mock_response,
+        )
+
+        result = await invoke_with_resilience(
+            ai_function=gemini.generate_content_async,
+            prompt="test prompt",
+            response_schema=TopLevelModel,
+        )
+        assert isinstance(result, TopLevelModel)
+        assert result.report_name == "Dirty Report"
+        assert isinstance(result.nested_data.items, list)
+        assert result.nested_data.tags == ["tag1", "tag2"]
+
+    async def test_failure_path_with_unrecoverable_error(self, mocker):
+        """Test that an unfixable response (e.g., missing required field) raises an error."""
+        invalid_data = {
+            "report_name": "Invalid Report",
+            "nested_data": {"tags": ["tag1"]},  # 'items' field is missing
+        }
+        response_text = json.dumps(invalid_data)
+
+        mock_response = mocker.Mock()
+        mock_response.text = response_text
+        mocker.patch(
+            "catalyst.clients.gemini.core.client.aio.models.generate_content",
+            return_value=mock_response,
+        )
+
+        with pytest.raises(MaxRetriesExceededError) as exc_info:
+            await invoke_with_resilience(
+                ai_function=gemini.generate_content_async,
+                prompt="test prompt",
+                response_schema=TopLevelModel,
+            )
+        assert isinstance(exc_info.value.last_exception, ValidationError)

@@ -2,93 +2,140 @@
 
 import pytest
 import json
+import asyncio  # <-- FIX 1: Import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
 
 from catalyst.context import RunContext
-from catalyst.models.trend_report import FashionTrendReport
 from catalyst.pipeline.processors.reporting import FinalOutputGeneratorProcessor
-
-# Path to the PromptGenerator class we need to mock
-PROMPT_GENERATOR_PATH = "catalyst.pipeline.processors.reporting.PromptGenerator"
+from catalyst.models.trend_report import (
+    FashionTrendReport,
+    PromptMetadata,
+    KeyPieceDetail,
+)
 
 
 @pytest.fixture
-def full_trend_report() -> FashionTrendReport:
-    """Loads a realistic trend report from the fixtures directory."""
-    report_path = (
-        Path(__file__).parent.parent.parent.parent
-        / "fixtures"
-        / "expected_final_report.json"
+def valid_run_context(tmp_path: Path) -> RunContext:
+    """Provides a RunContext with a valid, populated final_report."""
+    report_model = FashionTrendReport(
+        prompt_metadata=PromptMetadata(run_id="test-run", user_passage="test"),
+        detailed_key_pieces=[
+            KeyPieceDetail(key_piece_name="The Quantum Weave Jacket"),
+            KeyPieceDetail(key_piece_name="The Chronos Trouser"),
+        ],
+        season=["FW"],
+        year=[2025],
+        region=["Global"],
+        target_gender="Unisex",
+        target_age_group="25-40",
+        target_model_ethnicity="Any",
+        antagonist_synthesis="test",
     )
-    with open(report_path, "r") as f:
-        data = json.load(f)
-    return FashionTrendReport.model_validate(data)
-
-
-@pytest.fixture
-def run_context(tmp_path: Path, full_trend_report: FashionTrendReport) -> RunContext:
-    """Provides a fresh RunContext with a populated final_report."""
-    context = RunContext(user_passage="A test passage", results_dir=tmp_path)
-    context.final_report = full_trend_report.model_dump(mode="json")
+    context = RunContext(user_passage="test", results_dir=tmp_path)
+    context.final_report = report_model.model_dump(mode="json")
+    context.structured_research_context = {"trend_narrative": "A test narrative."}
     return context
 
 
 @pytest.mark.asyncio
-async def test_final_output_generator_happy_path(mocker, run_context):
-    """
-    Tests that the processor successfully generates prompts, injects them,
-    and saves the final report and prompts JSON files.
-    """
-    # ARRANGE
-    # Mock all dependencies BEFORE the action.
-    mock_prompt_generator_class = mocker.patch(PROMPT_GENERATOR_PATH)
-    mock_prompt_generator_instance = MagicMock()
-    mock_prompt_generator_instance.generate_prompts = AsyncMock(
-        return_value={
-            "The Heritage Drape Blazer": {
-                "mood_board": "mood board prompt",
-                "final_garment": "final garment prompt",
+class TestFinalOutputGeneratorProcessor:
+    """Comprehensive tests for the FinalOutputGeneratorProcessor."""
+
+    async def test_process_happy_path(self, valid_run_context: RunContext, mocker):
+        """
+        Verify that on a successful run, prompts are generated, injected,
+        and both the report and prompts files are saved correctly.
+        """
+        # Arrange: Mock the PromptGenerator and its output
+        mock_prompts = {
+            "The Quantum Weave Jacket": {
+                "mood_board": "mood_board_prompt_jacket",
+                "final_garment": "final_garment_prompt_jacket",
             }
         }
-    )
-    mock_prompt_generator_class.return_value = mock_prompt_generator_instance
 
-    # Mock the built-in 'open' function to monitor file saves.
-    open_mock = mocker.patch("builtins.open", mocker.mock_open())
+        # --- START: THE DEFINITIVE FIX ---
+        # To mock an async method, we must return an awaitable (a Future).
+        future = asyncio.Future()
+        future.set_result(mock_prompts)
+        mock_prompt_generator_instance = mocker.Mock()
+        mock_prompt_generator_instance.generate_prompts.return_value = future
+        # --- END: THE DEFINITIVE FIX ---
 
-    processor = FinalOutputGeneratorProcessor()
+        mocker.patch(
+            "catalyst.pipeline.processors.reporting.PromptGenerator",
+            return_value=mock_prompt_generator_instance,
+        )
 
-    # ACT
-    # Call the processor only once.
-    context = await processor.process(run_context)
+        processor = FinalOutputGeneratorProcessor()
 
-    # ASSERT
-    # 1. Verify prompt generation and injection.
-    mock_prompt_generator_instance.generate_prompts.assert_called_once()
-    first_piece = context.final_report["detailed_key_pieces"][0]
-    assert first_piece["mood_board_prompt"] == "mood board prompt"
+        # Act
+        context = await processor.process(valid_run_context)
 
-    # 2. Verify that two files were saved.
-    assert open_mock.call_count == 2
-    call_args_list = open_mock.call_args_list
-    filenames = [call.args[0].name for call in call_args_list]
-    assert "generated_prompts.json" in filenames
-    assert "itemized_fashion_trends.json" in filenames
+        # Assert: Check that the files were created
+        results_dir = context.results_dir
+        report_path = results_dir / "itemized_fashion_trends.json"
+        prompts_path = results_dir / "generated_prompts.json"
 
+        assert report_path.exists()
+        assert prompts_path.exists()
 
-@pytest.mark.asyncio
-async def test_final_output_generator_raises_error_on_empty_report(run_context):
-    """
-    Tests that the processor raises a ValueError if the final_report in the
-    context is empty, which is a critical failure.
-    """
-    # ARRANGE
-    run_context.final_report = {}
-    processor = FinalOutputGeneratorProcessor()
+        # Assert: Check the content of the prompts file
+        with open(prompts_path, "r") as f:
+            saved_prompts = json.load(f)
+        assert saved_prompts == mock_prompts
 
-    # ACT & ASSERT
-    with pytest.raises(
-        ValueError, match="Cannot generate outputs without a final report."
+        # Assert: Check that the prompts were correctly injected into the final report
+        with open(report_path, "r") as f:
+            saved_report = json.load(f)
+
+        jacket_piece = saved_report["detailed_key_pieces"][0]
+        trouser_piece = saved_report["detailed_key_pieces"][1]
+
+        assert jacket_piece["key_piece_name"] == "The Quantum Weave Jacket"
+        assert jacket_piece["mood_board_prompt"] == "mood_board_prompt_jacket"
+        assert jacket_piece["final_garment_prompt"] == "final_garment_prompt_jacket"
+
+        assert trouser_piece["mood_board_prompt"] is None
+        assert trouser_piece["final_garment_prompt"] is None
+
+    async def test_process_raises_error_on_empty_report(self, tmp_path: Path):
+        """
+        Verify that the processor fails fast if the context's final_report is empty.
+        """
+        context = RunContext(user_passage="test", results_dir=tmp_path)
+        context.final_report = {}
+        processor = FinalOutputGeneratorProcessor()
+
+        with pytest.raises(
+            ValueError, match="Cannot generate outputs without a final report."
+        ):
+            await processor.process(context)
+
+    async def test_process_handles_prompt_generation_failure_gracefully(
+        self, valid_run_context: RunContext, mocker
     ):
-        await processor.process(run_context)
+        """
+        Verify that if prompt generation fails, the main report is still saved.
+        """
+        # Arrange: Mock the PromptGenerator to raise an exception
+        mocker.patch(
+            "catalyst.pipeline.processors.reporting.PromptGenerator.generate_prompts",
+            side_effect=Exception("Simulated prompt generation failure"),
+        )
+        processor = FinalOutputGeneratorProcessor()
+
+        # Act
+        context = await processor.process(valid_run_context)
+
+        # Assert
+        results_dir = context.results_dir
+        report_path = results_dir / "itemized_fashion_trends.json"
+        prompts_path = results_dir / "generated_prompts.json"
+
+        assert report_path.exists()
+        assert not prompts_path.exists()
+
+        with open(report_path, "r") as f:
+            saved_report = json.load(f)
+        assert saved_report["detailed_key_pieces"][0]["mood_board_prompt"] is None

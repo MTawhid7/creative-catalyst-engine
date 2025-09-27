@@ -20,7 +20,7 @@ Built on a robust, modern stack of **FastAPI, ARQ, Redis, and ChromaDB**, the en
   - [2. Day-to-Day Workflow](#2-day-to-day-workflow)
     - [Interacting with the Engine](#interacting-with-the-engine)
     - [Modifying Code](#modifying-code)
-    - [Managing Dependencies](#managing-dependencies)
+    - [Managing Dependencies \& Environments](#managing-dependencies--environments)
     - [Running Scripts \& Tests](#running-scripts--tests)
   - [3. Debugging](#3-debugging)
     - [Method 1: Real-Time Log Tailing](#method-1-real-time-log-tailing)
@@ -42,7 +42,7 @@ This project is fully containerized. The primary workflow uses a `Makefile` to s
 
 *   **Docker Desktop:** The primary requirement for running the application.
 *   **Make:** A standard command-line tool, available by default on macOS and Linux.
-*   **Python 3.11+:** Required *only* for managing dependencies and running the `api_client` locally.
+*   **Python 3.11+:** Required *only* for managing dependencies and IDE integration.
 
 ### First-Time Setup
 
@@ -75,7 +75,8 @@ The entire application stack is orchestrated with simple `make` commands.
 3.  **Build and Run the Services:**
     ```bash
     make up
-    ```    *   The first time you run this, the build process will be slow. Subsequent starts will be very fast.
+    ```
+    *   The first time you run this, the build process will be slow. Subsequent starts will be very fast.
 
 The application is ready when you see logs from all services, including:
 `Uvicorn running on http://0.0.0.0:9500` and `ARQ worker started. Ready to process creative jobs.`
@@ -88,7 +89,7 @@ To stop the entire application, press `Ctrl+C` in the terminal, then run `make d
 
 ### Interacting with the Engine
 
-The recommended way to test the running service is with the provided API client, which provides real-time status updates using a Server-Sent Events (SSE) stream.
+The recommended way to test the running service is with the provided API client.
 
 1.  **Start the application** with `make up`.
 2.  **In a separate terminal,** modify the test prompt in `api_client/example.py`.
@@ -105,34 +106,33 @@ The project is configured with a **live-sync volume**. When you save a change to
 make restart-worker
 ```
 
-### Managing Dependencies
+### Managing Dependencies & Environments
 
-This project uses `pip-tools` for robust, deterministic dependency management.
+This project uses `pip-tools` for robust, deterministic dependency management across both the local and Docker environments.
 
 *   **To add or change a dependency:** Edit the high-level `requirements.in` or `dev-requirements.in` file.
-*   **To update the lock files:**
+
+*   **To update the lockfiles (`.txt`):**
     1.  Activate your local virtual environment: `source venv/bin/activate`
     2.  Run the compile command: `make deps`
-    3.  Commit both the `.in` and `.txt` files to Git.
-    4.  Rebuild your Docker image: `make build`
+
+*   **To sync your local `venv` for VS Code:** After updating dependencies, sync your local environment to match the lockfiles. This is crucial for the VS Code Test Explorer and IntelliSense.
+    ```bash
+    make sync-venv
+    ```
+
+*   **To update the Docker test environment:** After updating dependencies, you must rebuild the Docker images.
+    ```bash
+    make build
+    ```
 
 ### Running Scripts & Tests
 
 Use `make` commands to execute one-off tasks inside a temporary container.
 
-*   **To Clear All Caches:**
-    ```bash
-    make clear-cache
-    ```
-*   **To Run the Test Suite:**
-    ```bash
-    make test
-    ```
-*   **To Open a Shell Inside the Worker:**
-    This is incredibly useful for debugging.
-    ```bash
-    make shell
-    ```
+*   **To Clear All Caches:** `make clear-cache`
+*   **To Run the Full Test Suite:** `make test`
+*   **To Open a Shell Inside the Worker:** `make shell`
 
 ---
 
@@ -144,7 +144,8 @@ For a cleaner view of the logs for a specific service, run one of the following 
 
 ```bash
 make logs-worker
-``````bash
+```
+```bash
 make logs-api
 ```
 
@@ -154,6 +155,7 @@ You can set breakpoints in VS Code and debug your code while it runs *inside the
 
 1.  **Launch in Debug Mode:**
     Start the application using the dedicated debug command.
+
     ```bash
     make debug
     ```
@@ -172,12 +174,11 @@ You can set breakpoints in VS Code and debug your code while it runs *inside the
 ## 4. Architecture Deep Dive
 
 ### Guiding Principles
-This engine is built with a few core architectural principles in mind:
 
-*   **Separation of Concerns:** The **Service Layer** (`api/`) is strictly decoupled from the **Core Engine** (`catalyst/`). The API handles web requests and jobs, while the engine focuses purely on generating fashion intelligence.
-*   **Strategy-Based Logic:** Complex, multi-step operations are encapsulated in dedicated "builder" classes, promoting SOLID principles and making the core pipeline readable and maintainable.
-*   **Resilience by Design:** The pipeline features granular, stage-aware exception handling, a fallback synthesis path, and integrated error tracking with Sentry to ensure high availability.
-*   **Production-Ready by Design:** The entire application is containerized, ensuring a consistent and reproducible environment from local development to production. Key behaviors are controlled via environment variables, not hardcoded values.
+*   **Separation of Concerns:** The **Service Layer** (`api/`) is strictly decoupled from the **Core Engine** (`catalyst/`).
+*   **Strategy-Based Logic:** Complex operations are encapsulated in dedicated "builder" classes.
+*   **Deterministic Resilience:** The system is designed to be resilient not by asking an AI to fix its own errors, but by using a robust, code-based sanitization pipeline to proactively clean and validate AI responses.
+*   **Production-Ready by Design:** The entire application is containerized and managed via environment variables.
 
 
 ### Key Features
@@ -278,14 +279,20 @@ creative-catalyst-engine/
 ├── README.md               # The high-level project documentation (the "User Manual").
 └── WORKFLOW_GUIDE.md       # The definitive guide to the team's Git workflow (the "Contributor's Guide").
 │
-├── api/                    # The Service Layer: Handles web requests, jobs, and observability.
-│   ├── __init__.py
-│   ├── main.py             # The FastAPI application, including Sentry initialization and ARQ job submission/streaming logic.
-│   ├── worker.py           # Contains the main ARQ task function (`create_creative_report`).
-│   ├── worker_settings.py  # The configuration file for the ARQ worker, including Sentry initialization.
-│   ├── cache.py            # Async-native logic for the L0 (high-speed intent) Redis cache.
-│   ├── config.py           # API-layer specific configurations (e.g., Redis cache prefix).
-│   └── prompts.py          # Prompts used exclusively by the API layer (e.g., for L0 key generation).
+├── ├── __init__.py
+│   ├── cache.py
+│   ├── config.py           
+│   ├── main.py             # FastAPI app entry point, includes routers
+│   ├── models.py           # API-specific Pydantic models
+│   ├── prompts.py
+│   ├── routes/
+│   │   ├── __init__.py
+│   │   └── jobs.py         # Job submission and streaming endpoints
+│   ├── services/
+│   │   ├── __init__.py
+│   │   └── streaming.py    # Core SSE streaming logic
+│   ├── worker.py
+│   └── worker_settings.py
 │
 ├── api_client/             # A standalone Python client for interacting with the API.
 │   ├── __init__.py
@@ -293,65 +300,63 @@ creative-catalyst-engine/
 │   ├── exceptions.py       # Custom exceptions for the client.
 │   └── example.py          # A simple script demonstrating how to use the client.
 │
-└── catalyst/               # The Core Engine: All business logic for the creative pipeline.
-    ├── __init__.py
-    ├── main.py             # Core `run_pipeline` function; the main entry point for the engine.
-    ├── settings.py         # Central configuration for the engine (file paths, model names, resilience settings).
-    ├── context.py          # Defines the `RunContext` class, the data object passed through the pipeline.
-    │
-    ├── caching/            # L1 Semantic Cache logic.
-    │   ├── __init__.py
-    │   ├── cache_manager.py # High-level interface for the L1 cache.
-    │   └── report_cache.py  # ChromaDB client logic for connecting to the central Chroma server.
-    │
-    ├── clients/            # Clients for external services.
-    │   └── gemini/
-    │       ├── __init__.py
-    │       ├── client_instance.py
-    │       ├── core.py         # The hardened, resilient core logic for making Gemini API calls.
-    │       ├── resilience.py   # Helpers for retry logic and backoff delays.
-    │       └── schema.py
-    │
-    ├── models/
-    │   └── trend_report.py   # Pydantic models for the final, structured `FashionTrendReport`.
-    │
-    ├── pipeline/           # The core multi-stage processing pipeline.
-    │   ├── __init__.py
-    │   ├── orchestrator.py   # The `PipelineOrchestrator` that manages the execution flow.
-    │   ├── base_processor.py
-    │   │
-    │   ├── processors/       # The main controllers for each stage of the pipeline.
-    │   │   ├── __init__.py
-    │   │   ├── briefing.py
-    │   │   ├── synthesis.py
-    │   │   ├── reporting.py
-    │   │   └── generation/
-    │   │       ├── __init__.py
-    │   │       ├── base_generator.py # Now inherits from BaseProcessor.
-    │   │       └── nanobanana_generator.py
-    │   │
-    │   ├── prompt_engineering/
-    │   │   └── prompt_generator.py
-    │   │
-    │   └── synthesis_strategies/ # The modular, "divide and conquer" logic for report assembly.
-    │       ├── __init__.py
-    │       ├── report_assembler.py   # Orchestrates the concurrent execution of builders.
-    │       ├── section_builders.py   # The hardened, defensive builder classes.
-    │       └── synthesis_models.py
-    │
-    ├── prompts/
-    │   └── prompt_library.py # The master library of all creative and synthesis prompts.
-    │
-    └── utilities/            # Shared helper functions.
-        ├── __init__.py
-        ├── config_loader.py
-        ├── json_parser.py
-        ├── logger.py         # Configures the dual-format (console + JSON) application logger.
-        └── log_formatter.py  # The custom class for color-coded console log formatting.
+├── catalyst/               # The Core Engine: All business logic for the creative pipeline.
+│   ├── __init__.py
+│   ├── main.py             # Core `run_pipeline` function; the main entry point for the engine.
+│   ├── settings.py         # Central configuration for the engine (file paths, model names, resilience settings).
+│   ├── context.py          # Defines the `RunContext` class, the data object passed through the pipeline.
+│   │
+│   ├── caching/            # L1 Semantic Cache logic.
+│   │   ├── __init__.py
+│   │   ├── cache_manager.py # High-level interface for the L1 cache.
+│   │   └── report_cache.py  # ChromaDB client logic for connecting to the central Chroma server.
+│   │
+│   ├── clients/            # Clients for external services.
+│   │   └── gemini/
+│   │       ├── __init__.py
+│   │       ├── client_instance.py
+│   │       ├── core.py         # The hardened, resilient core logic for making Gemini API calls.
+│   │       ├── resilience.py   # Helpers for retry logic and backoff delays.
+│   │       └── schema.py
+│   │
+│   ├── models/
+│   │   └── trend_report.py   # Pydantic models for the final, structured `FashionTrendReport`.
+│   │
+│   ├── pipeline/           # The core multi-stage processing pipeline.
+│   │   ├── __init__.py
+│   │   ├── orchestrator.py   # The `PipelineOrchestrator` that manages the execution flow.
+│   │   ├── base_processor.py
+│   │   │
+│   │   ├── processors/       # The main controllers for each stage of the pipeline.
+│   │   │   ├── __init__.py
+│   │   │   ├── briefing.py
+│   │   │   ├── synthesis.py
+│   │   │   ├── reporting.py
+│   │   │   └── generation/
+│   │   │       ├── __init__.py
+│   │   │       ├── base_generator.py # Now inherits from BaseProcessor.
+│   │   │       └── nanobanana_generator.py
+│   │   │
+│   │   ├── prompt_engineering/
+│   │   │   └── prompt_generator.py
+│   │   │
+│   │   └── synthesis_strategies/ # The modular, "divide and conquer" logic for report assembly.
+│   │       ├── __init__.py
+│   │       ├── report_assembler.py   # Orchestrates the concurrent execution of builders.
+│   │       ├── section_builders.py   # The hardened, defensive builder classes.
+│   │       └── synthesis_models.py
+│   │
+│   ├── prompts/
+│   │   └── prompt_library.py # The master library of all creative and synthesis prompts.
+│   │
+│   └── utilities/            # Shared helper functions.
+│       ├── __init__.py
+│       ├── config_loader.py
+│       ├── logger.py         # Configures the dual-format (console + JSON) application logger.
+│       └── log_formatter.py  # The custom class for color-coded console log formatting.
 │
 ├── tests/
 │   ├── __init__.py
-│   ├── conftest.py
 │   │
 │   ├── api/
 │   │   ├── __init__.py
@@ -363,32 +368,40 @@ creative-catalyst-engine/
 │   │   ├── __init__.py
 │   │   └── test_client.py
 │   │
-│   ├── catalyst/
-│   │   ├── __init__.py
-│   │   ├── test_main_pipeline.py
-│   │   ├── test_orchestrator.py
-│   │   ├── caching/
-│   │   │   ├── test_cache_manager.py
-│   │   │   └── test_report_cache.py
-│   │   ├── pipeline/
-│   │   │   ├── processors/
-│   │   │   │   ├── test_briefing.py
-│   │   │   │   ├── test_reporting.py
-│   │   │   │   ├── test_synthesis_processors.py
-│   │   │   │   └── generation/
-│   │   │   │       └── test_nanobanana_generator.py
-│   │   │   ├── synthesis_strategies/
-│   │   │   │   ├── test_report_assembler.py
-│   │   │   │   └── test_section_builders.py
-│   │   │   └── prompt_engineering/
-│   │   │       └── test_prompt_generator.py
-│   │   └── resilience/
-│   │       └── test_invoker.py
-│   │
-│   ├── fixtures/
-│   │   └── expected_final_report.json
-│   │
-│   └── test_clear_cache.py
+│   └── catalyst/
+│       ├── __init__.py
+│       ├── test_main_pipeline.py
+│       ├── caching/
+│       │   ├── __init__.py
+│       │   ├── test_cache_manager.py
+│       │   └── test_report_cache.py
+│       ├── clients/
+│       │   ├── __init__.py
+│       │   └── gemini/
+│       │       ├── __init__.py
+│       │       ├── test_core.py
+│       │       ├── test_resilience.py
+│       │       ├── test_schema.py
+│       │       └── test_prompt_generator.py
+│       ├── pipeline/
+│       │   ├── processors/
+│       │   │   ├── __init__.py
+│       │   │   ├── test_briefing.py
+│       │   │   ├── test_reporting.py
+│       │   │   ├── test_synthesis.py
+│       │   │   └── generation/
+│       │   │       ├── __init__.py
+│       │   │       └── test_nanobanana_generator.py
+│       │   ├── synthesis_strategies/
+│       │   │   ├── __init__.py
+│       │   │   ├── test_report_assembler.py
+│       │   │   └── test_section_builders.py
+│       │   └── prompt_engineering/
+│       │       └── test_prompt_generator.py
+│       └── resilience/
+│           └── test_invoker.py
+│
+│
 ├── artifact_cache/         # Permanent storage for L1 cached artifacts (images, reports). Ignored by Git.
 ├── chroma_cache/           # Directory for the ChromaDB vector store data. Ignored by Git.
 ├── logs/                   # Contains the rotating JSON log files (e.g., catalyst_engine.log). Ignored by Git.
@@ -399,10 +412,11 @@ creative-catalyst-engine/
 
 ## 5. Troubleshooting
 
-| Symptom                                               | Probable Cause & Solution                                                                                                                                                                              |
-| :---------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`make up` fails with a container name conflict**    | A container from a previous run was not properly shut down. **Solution:** Run `make down` to remove the old containers, then run `make up` again.                                                      |
-| **Tests fail in VS Code with "pytest Not Installed"** | VS Code is using the wrong Python interpreter. **Solution:** Open the Command Palette (`Cmd+Shift+P`), run **`Python: Select Interpreter`**, and choose the one associated with your project's `venv`. |
-| **500 Internal Server Error**                         | A background job in the ARQ worker failed. **Solution:** **1. Check your Sentry dashboard.** The full traceback and context will be there. **2. Check the container logs** with `make logs-worker`.    |
-| **Images not loading (404 Not Found)**                | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing IP address of your computer that the client machine can reach (e.g., `http://192.168.1.100:9500`).                 |
-| **Getting old/cached results**                        | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility: `make clear-cache`.                                                                              |
+| Symptom                                                                                 | Probable Cause & Solution                                                                                                                                                                                                                                                                        |
+| :-------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`make up` fails with a container name conflict**                                      | A container from a previous run was not properly shut down. **Solution:** Run `make down` to remove the old containers, then run `make up` again.                                                                                                                                                |
+| **Tests fail in VS Code with "pytest Not Installed" or "Import could not be resolved"** | Your local `venv` is out of sync with the project's dependencies. **Solution:** **1. Activate your environment:** `source venv/bin/activate`. **2. Run the sync command:** `make sync-venv`. **3. Reload VS Code:** Open the Command Palette (`Cmd+Shift+P`) and run `Developer: Reload Window`. |
+| **`make test` fails but local tests pass (or vice-versa)**                              | The Docker test environment is out of sync. This happens after you change dependencies in `dev-requirements.in`. **Solution:** Run a clean build to update the image: `make build-clean`.                                                                                                        |
+| **500 Internal Server Error**                                                           | A background job in the ARQ worker failed. **Solution:** **1. Check your Sentry dashboard.** The full traceback and context will be there. **2. Check the container logs** with `make logs-worker`.                                                                                              |
+| **Images not loading (404 Not Found)**                                                  | The `ASSET_BASE_URL` in your `.env` file is incorrect. It must be the public-facing IP address of your computer.                                                                                                                                                                                 |
+| **Getting old/cached results**                                                          | The L0 (Redis) or L1 (Chroma) caches are active. **Solution:** Run the master cache clearing utility: `make clear-cache`.                                                                                                                                                                        |

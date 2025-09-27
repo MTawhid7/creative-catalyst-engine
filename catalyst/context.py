@@ -35,8 +35,13 @@ class RunContext:
         self.enriched_brief: Dict = {}
         self.brand_ethos: str = ""
         self.antagonist_synthesis: str = ""
-        self.raw_research_context: str = ""
-        self.structured_research_context: str = ""
+
+        # --- START: THE DEFINITIVE FIX ---
+        # The structured_research_context is now correctly typed as a dictionary.
+        # Its default value is changed from an empty string to an empty dictionary.
+        self.structured_research_context: Dict[str, Any] = {}
+        # --- END: THE DEFINITIVE FIX ---
+
         self.final_report: Dict = {}
 
         # --- START: GRANULAR STATUS TRACKING FIELDS ---
@@ -66,6 +71,26 @@ class RunContext:
             # The default=str is a safeguard for objects that are not JSON serializable
             json.dump(self.artifacts, f, indent=2, default=str)
 
+    def save_dossier_artifact(self):
+        """
+        Saves the structured research dossier to its own dedicated JSON file
+        for easier debugging and quality analysis.
+        """
+        # Only proceed if the dossier exists and is a non-empty dictionary
+        if not self.structured_research_context or not isinstance(
+            self.structured_research_context, dict
+        ):
+            return
+
+        self.results_dir.mkdir(parents=True, exist_ok=True)
+        dossier_path = self.results_dir / "research_dossier.json"
+        try:
+            with open(dossier_path, "w", encoding="utf-8") as f:
+                json.dump(self.structured_research_context, f, indent=2)
+        except Exception as e:
+            # This should not be a critical failure that stops the pipeline
+            print(f"Warning: Failed to save research dossier artifact: {e}")
+
     def to_dict(self) -> Dict[str, Any]:
         """Converts the primary data fields of the context to a dictionary for logging."""
         return {
@@ -74,7 +99,6 @@ class RunContext:
             "enriched_brief": self.enriched_brief,
             "brand_ethos": self.brand_ethos,
             "antagonist_synthesis": self.antagonist_synthesis,
-            "raw_research_context_length": len(self.raw_research_context),
             "structured_research_context_length": len(self.structured_research_context),
             "final_report_keys": (
                 list(self.final_report.keys()) if self.final_report else []

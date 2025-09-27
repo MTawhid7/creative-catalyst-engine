@@ -37,7 +37,11 @@ def _create_semantic_key(brief: Dict) -> str:
         value = brief.get(key)
         if value:
             if isinstance(value, list):
-                key_parts.append(f"{key}: {', '.join(sorted(value))}")
+                # --- START: THE DEFINITIVE FIX ---
+                # Convert all items to strings before sorting and joining.
+                # This robustly handles mixed lists like [2024, '2025s'].
+                key_parts.append(f"{key}: {', '.join(sorted(map(str, value)))}")
+                # --- END: THE DEFINITIVE FIX ---
             else:
                 key_parts.append(f"{key}: {str(value)}")
     return " | ".join(key_parts)

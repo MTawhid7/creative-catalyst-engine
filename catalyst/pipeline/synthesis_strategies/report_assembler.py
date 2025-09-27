@@ -1,16 +1,6 @@
 # catalyst/pipeline/synthesis_strategies/report_assembler.py
 
-"""
-This module defines the ReportAssembler, a strategy class that orchestrates
-the multi-step, schema-driven process of constructing the final fashion trend report
-by delegating tasks to specialized builder classes.
-
-This version has been optimized to run independent builder tasks concurrently and
-routes the correct version of the research context (raw vs. structured) to the
-appropriate builder.
-"""
-
-import asyncio
+import json
 from typing import Dict, Optional, Any
 
 from pydantic import ValidationError
@@ -18,131 +8,93 @@ from pydantic import ValidationError
 from ...context import RunContext
 from ...models.trend_report import FashionTrendReport, PromptMetadata
 from ...utilities.logger import get_logger
-from .section_builders import (
-    TopLevelFieldsBuilder,
-    NarrativeSettingBuilder,
-    StrategiesBuilder,
-    AccessoriesBuilder,
-    KeyPiecesBuilder,
-)
+from ...clients import gemini
+from ...prompts import prompt_library
+from ...resilience import invoke_with_resilience, MaxRetriesExceededError
 
 logger = get_logger(__name__)
 
 
 class ReportAssembler:
     """
-    Orchestrates the step-by-step assembly of the final report by managing
-    a sequence of specialized builder strategies with optimized, concurrent execution.
+    A utility class that handles the finalization and validation of the report,
+    as well as the direct-knowledge fallback synthesis path.
     """
 
     def __init__(self, context: RunContext):
         self.context = context
         self.brief = context.enriched_brief
-        self.final_report_data: Dict[str, Any] = {}
 
-    async def assemble_report(self) -> Optional[Dict[str, Any]]:
+    async def _assemble_from_fallback_async(self) -> Optional[Dict[str, Any]]:
         """
-        Executes the full, multi-step report assembly process by invoking
-        each builder in concurrent batches based on their data dependencies.
+        Handles the fallback path: generating a complete report model using the
+        AI's direct knowledge when the primary research/synthesis path fails.
         """
-        is_fallback = not self.context.structured_research_context
-        structured_research_context = self.context.structured_research_context or ""
-        raw_research_context = self.context.raw_research_context or ""
-
-        # --- Batch 1: Execute all builders with no inter-dependencies ---
-        logger.info("🚀 Launching first concurrent batch of synthesis tasks...")
-
-        top_level_builder = TopLevelFieldsBuilder(self.context)
-        strategies_builder = StrategiesBuilder(self.context)
-        key_pieces_builder = KeyPiecesBuilder(self.context)
-
-        tasks_batch_1 = [
-            top_level_builder.build(structured_research_context, is_fallback),
-            # --- THE KEY CHANGE IS HERE ---
-            # StrategiesBuilder needs the RAW context to find the JSON block.
-            strategies_builder.build(raw_research_context, is_fallback),
-            # --- END OF KEY CHANGE ---
-            key_pieces_builder.build(structured_research_context, is_fallback),
-        ]
-
-        results_batch_1 = await asyncio.gather(*tasks_batch_1)
-
-        top_level_data, strategies_data, key_pieces_data = results_batch_1
-
-        self.final_report_data.update(top_level_data)
-        self.final_report_data.update(strategies_data)
-        self.final_report_data.update(key_pieces_data)
-        logger.info("✅ First batch of synthesis tasks complete.")
-
-        # --- Batch 2: Execute builders that depend on the results of Batch 1 ---
-        logger.info(
-            "🚀 Launching second concurrent batch of dependent synthesis tasks..."
+        logger.warning("⚙️ Activating direct knowledge fallback synthesis path.")
+        prompt = prompt_library.FALLBACK_SYNTHESIS_PROMPT.format(
+            enriched_brief=json.dumps(self.brief), brand_ethos=self.context.brand_ethos
         )
+        try:
+            # Note: The fallback could also be upgraded to use the "pro" model for quality.
+            report_model = await invoke_with_resilience(
+                ai_function=gemini.generate_content_async,
+                prompt=prompt,
+                response_schema=FashionTrendReport,
+            )
+            report_data = report_model.model_dump(mode="json")
+            return self._finalize_and_validate_report(
+                report_data, needs_validation=False
+            )
+        except MaxRetriesExceededError:
+            logger.critical(
+                "❌ CRITICAL: The direct knowledge fallback synthesis also failed."
+            )
+            return None
 
-        narrative_builder = NarrativeSettingBuilder(
-            self.context,
-            theme=self.final_report_data.get("overarching_theme", ""),
-            drivers=self.final_report_data.get("cultural_drivers", []),
-        )
-
-        accessories_builder = AccessoriesBuilder(
-            self.context,
-            theme=self.final_report_data.get("overarching_theme", ""),
-            mood=self.brief.get("desired_mood", []),
-            drivers=self.final_report_data.get("cultural_drivers", []),
-            models=self.final_report_data.get("influential_models", []),
-            strategy=self.final_report_data.get(
-                "accessory_strategy", "Accessories should complete the look."
-            ),
-        )
-
-        tasks_batch_2 = [
-            narrative_builder.build(structured_research_context, is_fallback),
-            accessories_builder.build(raw_research_context, is_fallback),
-        ]
-
-        results_batch_2 = await asyncio.gather(*tasks_batch_2)
-
-        narrative_data, accessories_data = results_batch_2
-
-        self.final_report_data.update(narrative_data)
-        self.final_report_data.update(accessories_data)
-        logger.info("✅ Second batch of synthesis tasks complete.")
-
-        # --- Final Assembly and Validation ---
-        logger.info("✨ Assembling and validating final report...")
-        return self._finalize_and_validate_report()
-
-    def _finalize_and_validate_report(self) -> Optional[Dict[str, Any]]:
-        """Adds final metadata and performs Pydantic validation."""
-
-        self.final_report_data["prompt_metadata"] = PromptMetadata(
+    def _finalize_and_validate_report(
+        self, report_data: Dict[str, Any], needs_validation: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Adds final metadata and performs Pydantic validation. This is the single,
+        unified exit point for all report creation paths.
+        """
+        report_data["prompt_metadata"] = PromptMetadata(
             run_id=self.context.run_id, user_passage=self.context.user_passage
         ).model_dump(mode="json")
-        self.final_report_data["antagonist_synthesis"] = (
-            self.context.antagonist_synthesis
-        )
-        self.final_report_data["desired_mood"] = self.brief.get("desired_mood", [])
+        report_data["antagonist_synthesis"] = self.context.antagonist_synthesis
 
-        demographic_keys = [
+        brief_keys_to_copy = [
+            "season",
             "year",
             "region",
             "target_gender",
             "target_age_group",
             "target_model_ethnicity",
-            "season",
+            "antagonist_synthesis",
         ]
-        for key in demographic_keys:
-            self.final_report_data[key] = self.brief.get(key)
+        for key in brief_keys_to_copy:
+            if key not in report_data or not report_data[key]:
+                report_data[key] = self.brief.get(key)
 
-        # The try block must contain the validation logic.
-        try:
-            validated_report = FashionTrendReport.model_validate(self.final_report_data)
-            logger.info("✅ Success: Final report assembled and validated.")
-            return validated_report.model_dump(mode="json")
-        except ValidationError as e:
-            logger.critical(
-                f"❌ The final assembled report failed validation: {e}",
-                extra={"report_data": self.final_report_data},
+        # --- START: THE DEFINITIVE FIX ---
+        # Explicitly normalize the fields that might be single values before validation.
+        # This is more robust and clearer than a Pydantic validator for this specific task.
+        for key in ["season", "year", "region"]:
+            if key in report_data and not isinstance(report_data[key], list):
+                report_data[key] = [report_data[key]]
+        # --- END: THE DEFINITIVE FIX ---
+
+        if needs_validation:
+            logger.info("Validating the final assembled report from builders...")
+            try:
+                validated_report = FashionTrendReport.model_validate(report_data)
+                logger.info("✅ Success: Final report assembled and validated.")
+                return validated_report.model_dump(mode="json")
+            except ValidationError as e:
+                logger.critical(f"❌ The final assembled report failed validation: {e}")
+                return None
+        else:
+            logger.info(
+                "✅ Success: Final report assembled (pre-validated from fallback)."
             )
-            return None
+            return report_data

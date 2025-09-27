@@ -46,6 +46,7 @@ async def generate_content_core_async(
     prompt_parts: List[Any],
     response_schema: Optional[Union[type[BaseModel], Dict[str, Any]]],
     tools: Optional[List[types.Tool]],
+    model_name: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     The core ASYNCHRONOUS function that makes the API call. It includes a
@@ -56,13 +57,15 @@ async def generate_content_core_async(
         return None
 
     generation_config = _prepare_generation_config(response_schema, tools)
-    max_retries = settings.GEMINI_MAX_RETRIES
+    max_retries = settings.RETRY_NETWORK_ATTEMPTS
+    final_model_name = model_name or settings.GEMINI_MODEL_NAME
+    logger.info(f"Requesting content from model '{final_model_name}' (native async)...")
 
     for attempt in range(max_retries):
         try:
             # Make the single, best-effort API call.
             response = await client.aio.models.generate_content(
-                model=settings.GEMINI_MODEL_NAME,
+                model=final_model_name,
                 contents=prompt_parts,
                 config=generation_config,
             )
@@ -102,7 +105,7 @@ def generate_content_core_sync(
         return None
 
     generation_config = _prepare_generation_config(response_schema, tools)
-    max_retries = settings.GEMINI_MAX_RETRIES
+    max_retries = settings.RETRY_NETWORK_ATTEMPTS
 
     for attempt in range(max_retries):
         try:

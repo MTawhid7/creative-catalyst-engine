@@ -12,7 +12,7 @@ from .exceptions import APIClientError
 # The client will send this text to the API.
 
 USER_PASSAGE = """
-Generate a trend report on the iconic Chanel tweed jacket, reimagined for a modern, professional woman, focusing on themes of empowered femininity and artisanal craftsmanship.
+Identify the key swimwear trends (e.g., cut-outs, high-waisted bikinis, one-shoulder one-pieces) from popular e-commerce sites like ASOS and Revolve.
 """
 
 # ===================================================================

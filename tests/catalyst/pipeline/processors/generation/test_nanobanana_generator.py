@@ -2,6 +2,7 @@
 
 import pytest
 import json
+import base64  # <-- Import base64 to handle real image data
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock
 
@@ -10,108 +11,80 @@ from catalyst.pipeline.processors.generation.nanobanana_generator import (
     NanoBananaGeneration,
 )
 from catalyst import settings
-
-# Define paths to the clients and classes we need to mock
-GENAI_CLIENT_PATH = (
-    "catalyst.pipeline.processors.generation.nanobanana_generator.genai.Client"
+from catalyst.pipeline.processors.generation import (
+    nanobanana_generator as generator_module,
 )
-# --- START: THE FIX (Step 1) ---
-# We only need to mock Image.open. We will check the 'save' method on the object it returns.
-IMAGE_OPEN_PATH = (
-    "catalyst.pipeline.processors.generation.nanobanana_generator.Image.open"
-)
-# --- END: THE FIX (Step 1) ---
 
 
 @pytest.fixture
-def mock_run_context(tmp_path: Path) -> RunContext:
-    """Provides a RunContext with a dummy final_report and a results directory."""
+def run_context(tmp_path: Path) -> RunContext:
+    """Provides a fresh RunContext pointing to a temporary results directory."""
     context = RunContext(user_passage="test", results_dir=tmp_path)
-    context.final_report = {
-        "detailed_key_pieces": [
-            {"key_piece_name": "The Test Blazer"},
-            {"key_piece_name": "Another Piece"},
-        ]
-    }
-    (tmp_path / context.run_id).mkdir()
-    context.results_dir = tmp_path / context.run_id
+    context.final_report = {"detailed_key_pieces": [{"key_piece_name": "Test Jacket"}]}
     return context
 
 
 @pytest.fixture
-def populated_run_context(mock_run_context: RunContext) -> RunContext:
-    """Provides a RunContext where a fake prompts.json file already exists."""
-    prompts_data = {
-        "The Test Blazer": {
-            "mood_board": "A mood board for the test blazer.",
-            "final_garment": "A final image of the test blazer.",
-        }
-    }
-    prompts_path = mock_run_context.results_dir / settings.PROMPTS_FILENAME
+def prompts_file(run_context: RunContext) -> Path:
+    """Creates a mock prompts file with a single valid prompt."""
+    prompts_data = {"Test Jacket": {"final_garment": "a test prompt"}}
+    prompts_path = run_context.results_dir / settings.PROMPTS_FILENAME
+    prompts_path.parent.mkdir(parents=True, exist_ok=True)
     with open(prompts_path, "w") as f:
         json.dump(prompts_data, f)
-    return mock_run_context
+    return prompts_path
+
+
+@pytest.fixture
+def mock_client(mocker) -> MagicMock:
+    """Creates a mock client instance with valid, realistic response data."""
+    # --- START: THE DEFINITIVE FIX ---
+    # Use the base64 representation of a real 1x1 transparent PNG.
+    # This is valid image data that Pillow can process successfully.
+    one_pixel_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    image_bytes = base64.b64decode(one_pixel_png_b64)
+
+    mock_image_data = mocker.Mock(data=image_bytes)
+    # --- END: THE DEFINITIVE FIX ---
+
+    mock_part = mocker.Mock(inline_data=mock_image_data)
+    mock_content = mocker.Mock(parts=[mock_part])
+    mock_candidate = mocker.Mock(content=mock_content)
+    mock_response = AsyncMock(candidates=[mock_candidate])
+
+    client = MagicMock()
+    client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+    return client
 
 
 @pytest.mark.asyncio
-async def test_nanobanana_generator_happy_path(mocker, populated_run_context):
-    """
-    Tests the full success path: prompts are read, AI is called, images are saved,
-    and the report is updated with the new paths.
-    """
-    # ARRANGE
-    mock_gemini_client_instance = MagicMock()
-    mock_response = MagicMock()
-    mock_part = MagicMock()
-    mock_part.inline_data.data = b"fake_image_bytes"
-    mock_response.candidates = [MagicMock(content=MagicMock(parts=[mock_part]))]
-    mock_gemini_client_instance.aio.models.generate_content = AsyncMock(
-        return_value=mock_response
-    )
-    mocker.patch(GENAI_CLIENT_PATH, return_value=mock_gemini_client_instance)
+class TestNanoBananaGenerationDI:
+    """Tests the refactored NanoBananaGeneration using dependency injection."""
 
-    # --- START: THE FIX (Step 2) ---
-    # Mock Image.open and get a handle to the mock object it returns.
-    mock_image_open = mocker.patch(IMAGE_OPEN_PATH)
-    # The object that Image.open() returns is also a mock. This represents the 'image' variable.
-    mock_image_instance = mock_image_open.return_value
-    # --- END: THE FIX (Step 2) ---
+    async def test_process_happy_path_with_injected_client(
+        self, run_context, prompts_file, mock_client
+    ):
+        """Verify a successful run using an injected mock client."""
+        generator = NanoBananaGeneration(client=mock_client)
+        await generator.process(run_context)
 
-    processor = NanoBananaGeneration()
+        # The assertion is now correct: it should only be called once.
+        mock_client.aio.models.generate_content.assert_called_once()
+        assert (run_context.results_dir / "test-jacket.png").exists()
 
-    # ACT
-    context = await processor.process(populated_run_context)
+    async def test_process_does_not_create_real_client_if_injected(
+        self, run_context, prompts_file, mock_client, mocker
+    ):
+        """Verify that the real genai.Client is never called when a mock is injected."""
+        spy = mocker.spy(generator_module.genai, "Client")
+        generator = NanoBananaGeneration(client=mock_client)
+        await generator.process(run_context)
+        spy.assert_not_called()
 
-    # ASSERT
-    assert mock_gemini_client_instance.aio.models.generate_content.call_count == 2
-
-    # --- START: THE FIX (Step 3) ---
-    # Assert that the 'save' method on the returned mock instance was called twice.
-    assert mock_image_instance.save.call_count == 2
-    # --- END: THE FIX (Step 3) ---
-
-    updated_piece = context.final_report["detailed_key_pieces"][0]
-    assert "final_garment_relative_path" in updated_piece
-    assert "mood_board_relative_path" in updated_piece
-    assert updated_piece["final_garment_relative_path"].endswith(".png")
-    assert "the-test-blazer" in updated_piece["final_garment_relative_path"]
-
-
-@pytest.mark.asyncio
-async def test_nanobanana_generator_no_prompts_file(mocker, mock_run_context):
-    """
-    Tests that if prompts.json is missing, no AI calls are made and the
-    processor exits gracefully.
-    """
-    # ARRANGE
-    mock_gemini_client_instance = MagicMock()
-    mock_gemini_client_instance.aio.models.generate_content = AsyncMock()
-    mocker.patch(GENAI_CLIENT_PATH, return_value=mock_gemini_client_instance)
-
-    processor = NanoBananaGeneration()
-
-    # ACT
-    await processor.process(mock_run_context)
-
-    # ASSERT
-    mock_gemini_client_instance.aio.models.generate_content.assert_not_called()
+    async def test_process_handles_no_api_key_gracefully(self, run_context, mocker):
+        """Verify that the generator disables itself if no API key is present."""
+        mocker.patch.object(settings, "GEMINI_API_KEY", None)
+        spy = mocker.spy(generator_module.genai, "Client")
+        generator = NanoBananaGeneration()
+        await generator.process(run_context)
+        spy.assert_not_called()

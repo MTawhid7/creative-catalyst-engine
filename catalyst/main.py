@@ -84,6 +84,9 @@ async def run_pipeline(context: RunContext) -> RunContext:
         logger.critical(
             "❌ PIPELINE FAILED with an unrecoverable error.", exc_info=True
         )
+        # The original exception must be re-raised to signal a true failure
+        # to the calling worker and the test suite.
+        raise
 
     logger.info("      CREATIVE PROCESS FINISHED for Run ID: %s", context.run_id)
     logger.info("=========================================================")

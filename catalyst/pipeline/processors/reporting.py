@@ -69,7 +69,10 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                 "🎨 Report data validated. Initializing prompt generation strategy..."
             )
 
-            prompt_generator = PromptGenerator(report=validated_report)
+            prompt_generator = PromptGenerator(
+                report=validated_report,
+                research_dossier=context.structured_research_context,
+            )
             prompts_data = await prompt_generator.generate_prompts()
 
             self.logger.info("💉 Injecting image prompts into the final report...")

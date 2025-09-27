@@ -17,7 +17,7 @@ CURRENT_BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 	up down build build-clean \
 	restart restart-api restart-worker \
 	logs logs-api logs-worker \
-	shell test debug run-client \
+	shell test sync-venv debug run-client \
 	sync-main new-branch save sync-branch submit cleanup-branch \
 	deps clear-cache scan clean-docker clean-docker-full clean-build-cache \
 	release tag
@@ -47,6 +47,7 @@ help:
 	@echo "   logs-worker    Tail the logs for only the worker service."
 	@echo "   shell          Open an interactive shell inside the running worker container."
 	@echo "   test           Run the full test suite inside a fresh Docker container."
+	@echo "   sync-venv     Sync your local virtual environment with the lockfiles."
 	@echo "   debug          Start all services in interactive debugging mode for VS Code."
 	@echo ""
 	@echo "   run-client     Run the example API client to submit a job locally."
@@ -120,6 +121,12 @@ test:
 	@echo "🧪 Running unit and integration tests inside a clean container..."
 	docker compose run --rm --entrypoint="" tester python -m pytest
 
+sync-venv:
+	@echo "🔄 Syncing your local virtual environment with the lockfiles..."
+	@echo "   (Ensure your local virtual environment is active: 'source venv/bin/activate')"
+	pip-sync requirements.txt dev-requirements.txt
+	@echo "✅ Local venv is now in sync."
+
 debug:
 	@echo "🐞 Starting services in debug mode for VS Code attachment..."
 	docker compose --profile app -f docker-compose.yml -f docker-compose.debug.yml up --build
@@ -182,6 +189,8 @@ deps:
 	@echo "   (Ensure your local virtual environment is active)"
 	pip-compile --strip-extras requirements.in
 	pip-compile --strip-extras dev-requirements.in
+	@echo "✅ Lockfiles generated. Installing development dependencies into local venv..."
+	pip-sync requirements.txt dev-requirements.txt
 
 clear-cache:
 	@echo "🔥 Clearing all application caches (Redis, Chroma, and files)..."

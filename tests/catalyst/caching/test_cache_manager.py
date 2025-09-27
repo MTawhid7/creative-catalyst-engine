@@ -3,117 +3,114 @@
 import pytest
 from unittest.mock import AsyncMock
 
-# Import the module we are testing
 from catalyst.caching import cache_manager
 
-# Define the full path to the module we need to mock
-REPORT_CACHE_MOCK_PATH = "catalyst.caching.cache_manager.report_cache"
+
+# --- Unit Tests for the Semantic Key Generation ---
 
 
-@pytest.fixture
-def mock_brief():
-    """Provides a consistent, sample enriched_brief dictionary for testing."""
-    return {
-        "theme_hint": "Cyberpunk Formalwear",
-        "garment_type": "Blazer",
-        "season": "Fall/Winter",
-        "year": 2025,
-        "key_attributes": ["Tailored", "Asymmetric"],
-        # This field should be ignored by the key generator
-        "desired_mood": ["Dark", "Sophisticated"],
-    }
+class TestCreateSemanticKey:
+    """
+    Unit tests for the internal _create_semantic_key function.
+    Its output must be 100% deterministic.
+    """
+
+    @pytest.mark.parametrize(
+        "brief, expected_key",
+        [
+            (
+                # Happy path: a full, well-formed brief
+                {
+                    "theme_hint": "Cyberpunk Noir",
+                    "garment_type": ["Trench Coat", "Boots"],
+                    "brand_category": "Streetwear",
+                    "target_audience": "Tech enthusiasts",
+                    "region": "Neo-Tokyo",
+                    "key_attributes": ["Reflective", "Asymmetrical"],
+                    "season": "Fall/Winter",
+                    "year": [2077],
+                },
+                "brand_category: Streetwear | garment_type: Boots, Trench Coat | key_attributes: Asymmetrical, Reflective | region: Neo-Tokyo | season: Fall/Winter | target_audience: Tech enthusiasts | theme_hint: Cyberpunk Noir | year: 2077",
+            ),
+            (
+                # Edge Case: Missing some keys
+                {
+                    "theme_hint": "Aquatic Serenity",
+                    "garment_type": ["Flowing Gown"],
+                    "season": "Spring/Summer",
+                },
+                "garment_type: Flowing Gown | season: Spring/Summer | theme_hint: Aquatic Serenity",
+            ),
+            (
+                # Edge Case: Mixed types in a list (int and str)
+                {
+                    "theme_hint": "Temporal Fusion",
+                    "year": [2025, "2026"],
+                },
+                "theme_hint: Temporal Fusion | year: 2025, 2026",
+            ),
+            (
+                # Edge Case: Empty brief
+                {},
+                "",
+            ),
+        ],
+    )
+    def test_semantic_key_creation(self, brief, expected_key):
+        """Verify that the semantic key is stable, sorted, and handles various inputs."""
+        assert cache_manager._create_semantic_key(brief) == expected_key
+
+
+# --- Integration Tests for the Cache Manager's Public Functions ---
 
 
 @pytest.mark.asyncio
-async def test_check_report_cache_hit(mocker, mock_brief):
+class TestCacheManagerIntegration:
     """
-    Tests that if the underlying report_cache finds a document,
-    the cache_manager returns it.
+    Integration tests for the cache_manager's async functions.
+    These tests mock the lower-level report_cache module to isolate the manager.
     """
-    # ARRANGE
-    # Mock the entire report_cache module.
-    mock_report_cache = mocker.patch(REPORT_CACHE_MOCK_PATH)
-    mock_report_cache.check = AsyncMock(return_value='{"report": "found"}')
 
-    # ACT
-    result = await cache_manager.check_report_cache_async(mock_brief)
+    async def test_check_report_cache_async(self, mocker):
+        """
+        Verify that check_report_cache_async generates a key and calls the
+        report_cache.check method with it.
+        """
+        # Arrange
+        mock_brief = {"theme_hint": "Test Theme"}
+        expected_key = "theme_hint: Test Theme"
 
-    # ASSERT
-    # 1. Assert that the underlying check function was called.
-    mock_report_cache.check.assert_called_once()
-    # 2. Assert that the result from the cache was returned.
-    assert result == '{"report": "found"}'
+        # Mock the dependency
+        mock_check = mocker.patch(
+            "catalyst.caching.cache_manager.report_cache.check",
+            new_callable=AsyncMock,
+            return_value="cached_payload",
+        )
 
+        # Act
+        result = await cache_manager.check_report_cache_async(mock_brief)
 
-@pytest.mark.asyncio
-async def test_check_report_cache_miss(mocker, mock_brief):
-    """
-    Tests that if the underlying report_cache returns None,
-    the cache_manager also returns None.
-    """
-    # ARRANGE
-    mock_report_cache = mocker.patch(REPORT_CACHE_MOCK_PATH)
-    mock_report_cache.check = AsyncMock(return_value=None)
+        # Assert
+        assert result == "cached_payload"
+        mock_check.assert_awaited_once_with(expected_key)
 
-    # ACT
-    result = await cache_manager.check_report_cache_async(mock_brief)
+    async def test_add_to_report_cache_async(self, mocker):
+        """
+        Verify that add_to_report_cache_async generates a key and calls the
+        report_cache.add method with the correct key and payload.
+        """
+        # Arrange
+        mock_brief = {"theme_hint": "Test Theme"}
+        mock_payload = {"data": "some_report_data"}
+        expected_key = "theme_hint: Test Theme"
 
-    # ASSERT
-    mock_report_cache.check.assert_called_once()
-    assert result is None
+        # Mock the dependency
+        mock_add = mocker.patch(
+            "catalyst.caching.cache_manager.report_cache.add", new_callable=AsyncMock
+        )
 
+        # Act
+        await cache_manager.add_to_report_cache_async(mock_brief, mock_payload)
 
-@pytest.mark.asyncio
-async def test_add_to_report_cache(mocker, mock_brief):
-    """
-    Tests that add_to_report_cache_async correctly calls the underlying
-    report_cache.add function with the right key and payload.
-    """
-    # ARRANGE
-    mock_report_cache = mocker.patch(REPORT_CACHE_MOCK_PATH)
-    mock_report_cache.add = AsyncMock()
-
-    payload = {"final_report": "some data"}
-
-    # ACT
-    await cache_manager.add_to_report_cache_async(mock_brief, payload)
-
-    # ASSERT
-    # 1. Assert that the underlying add function was called.
-    mock_report_cache.add.assert_called_once()
-    # 2. Check the arguments it was called with.
-    args, kwargs = mock_report_cache.add.call_args
-
-    # The first argument should be the generated semantic key
-    expected_key = "garment_type: Blazer | key_attributes: Asymmetric, Tailored | season: Fall/Winter | theme_hint: Cyberpunk Formalwear | year: 2025"
-    assert args[0] == expected_key
-
-    # The second argument should be the payload
-    assert args[1] == payload
-
-
-def test_create_semantic_key_is_deterministic(mock_brief):
-    """
-    Unit tests the _create_semantic_key helper to ensure it's deterministic,
-    meaning the order of keys in the input dictionary does not affect the output.
-    """
-    # ARRANGE
-    # Create a second brief with the same data but a different key order.
-    brief_shuffled = {
-        "season": "Fall/Winter",
-        "year": 2025,
-        "garment_type": "Blazer",
-        "key_attributes": ["Tailored", "Asymmetric"],
-        "theme_hint": "Cyberpunk Formalwear",
-    }
-
-    # ACT
-    key1 = cache_manager._create_semantic_key(mock_brief)
-    key2 = cache_manager._create_semantic_key(brief_shuffled)
-
-    # ASSERT
-    # The keys must be identical, proving the sorting logic works.
-    assert key1 == key2
-    assert (
-        "desired_mood" not in key1
-    )  # Also ensure non-deterministic keys are excluded.
+        # Assert
+        mock_add.assert_awaited_once_with(expected_key, mock_payload)

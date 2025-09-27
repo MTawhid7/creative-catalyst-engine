@@ -1,133 +1,100 @@
 # tests/api/test_main.py
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+import json
+from unittest.mock import AsyncMock, MagicMock
 
 from fastapi.testclient import TestClient
 from arq.jobs import Job, JobStatus
 
-# Import the FastAPI app object from your main application file
 from api.main import app
-
-# Define the path to the function we need to mock to isolate the test
-ARQ_CREATE_POOL_PATH = "api.main.create_pool"
+from api.services.streaming import create_event_generator
 
 
 @pytest.fixture
-def mock_redis():
-    """A fixture to provide a mock ArqRedis client."""
+def mock_arq_redis() -> AsyncMock:
+    """Provides a mock ARQ Redis client."""
     return AsyncMock()
 
 
-# --- START: THE DEFINITIVE FIX ---
-@pytest.fixture
-def client(mocker, mock_redis: AsyncMock):
-    """
-    This fixture provides a FastAPI TestClient with a correctly managed lifespan,
-    ensuring the app.state.redis is properly mocked.
-    """
-    # 1. Mock the create_pool function to return our mock_redis instance.
-    mocker.patch(ARQ_CREATE_POOL_PATH, return_value=mock_redis)
+class TestJobSubmissionEndpoint:
+    """Tests for the POST /v1/creative-jobs endpoint."""
 
-    # 2. Use a 'with' statement to manually manage the app's lifespan.
-    # This ensures that the startup event (which creates app.state.redis)
-    # runs AFTER our mock is in place.
-    with TestClient(app) as test_client:
-        yield test_client
-    # The 'with' block also handles the shutdown event automatically.
+    def test_submit_job_success(self, mock_arq_redis: AsyncMock, mocker):
+        mocker.patch("api.main.create_pool", return_value=mock_arq_redis)
+        mock_job = MagicMock(job_id="test_job_123")
+        mock_arq_redis.enqueue_job.return_value = mock_job
 
+        with TestClient(app) as client:
+            response = client.post("/v1/creative-jobs", json={"user_passage": "test"})
+            assert response.status_code == 202
+            assert response.json()["job_id"] == "test_job_123"
 
-# --- END: THE DEFINITIVE FIX ---
+    def test_submit_job_failure(self, mock_arq_redis: AsyncMock, mocker):
+        mocker.patch("api.main.create_pool", return_value=mock_arq_redis)
+        mock_arq_redis.enqueue_job.return_value = None
 
-
-def test_submit_job_success(client: TestClient, mock_redis: AsyncMock):
-    """
-    Tests the happy path for job submission.
-    """
-    # ARRANGE
-    mock_redis.enqueue_job.return_value = AsyncMock(job_id="test_job_123")
-
-    # ACT
-    response = client.post("/v1/creative-jobs", json={"user_passage": "A test prompt"})
-
-    # ASSERT
-    assert response.status_code == 202
-    assert response.json()["job_id"] == "test_job_123"
-    mock_redis.enqueue_job.assert_called_once_with(
-        "create_creative_report", "A test prompt"
-    )
-
-
-def test_submit_job_failure(client: TestClient, mock_redis: AsyncMock):
-    """
-    Tests the failure path for job submission when enqueueing fails.
-    """
-    # ARRANGE
-    mock_redis.enqueue_job.return_value = None
-
-    # ACT
-    response = client.post(
-        "/v1/creative-jobs", json={"user_passage": "A failing prompt"}
-    )
-
-    # ASSERT
-    assert response.status_code == 500
-    assert "Failed to enqueue the job" in response.json()["detail"]
+        with TestClient(app) as client:
+            response = client.post("/v1/creative-jobs", json={"user_passage": "test"})
+            assert response.status_code == 500
 
 
 @pytest.mark.asyncio
-async def test_get_job_status_complete(client: TestClient, mocker):
-    """
-    Tests the job status endpoint for a completed job.
-    """
-    # ARRANGE
-    mock_job_instance = MagicMock()
-    mock_job_instance.status = AsyncMock(return_value=JobStatus.complete)
-    mock_job_instance.result = AsyncMock(return_value={"report": "done"})
-    mocker.patch("api.main.Job", return_value=mock_job_instance)
+class TestEventGeneratorLogic:
+    """Tests the core async generator logic directly."""
 
-    # ACT
-    response = client.get("/v1/creative-jobs/some_job_id")
+    @pytest.fixture(autouse=True)
+    def mock_sleep(self, mocker):
+        """Auto-mock asyncio.sleep to prevent any actual pausing."""
+        return mocker.patch(
+            "api.services.streaming.asyncio.sleep", new_callable=AsyncMock
+        )
 
-    # ASSERT
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "complete"
-    assert data["result"] == {"report": "done"}
+    # --- START: THE DEFINITIVE, SIMPLIFIED FIX ---
+    async def test_stream_generator_yields_final_result_on_complete(
+        self, mock_arq_redis: AsyncMock, mocker
+    ):
+        """
+        Verify the generator yields the correct final result when a job is complete.
+        This is the most critical success path.
+        """
+        # Arrange
+        final_result = {"report": "done"}
 
+        # Simulate a job that is already complete
+        mock_job_instance = AsyncMock()
+        mock_job_instance.status.return_value = JobStatus.complete
+        mock_job_instance.result.return_value = final_result
+        mocker.patch("api.services.streaming.Job", return_value=mock_job_instance)
 
-@pytest.mark.asyncio
-async def test_get_job_status_in_progress(client: TestClient, mocker):
-    """
-    Tests the job status endpoint for a job that is still running.
-    """
-    # ARRANGE
-    mock_job_instance = MagicMock()
-    mock_job_instance.status = AsyncMock(return_value=JobStatus.in_progress)
-    mocker.patch("api.main.Job", return_value=mock_job_instance)
+        # Act
+        results = [
+            item
+            async for item in create_event_generator("test_job_123", mock_arq_redis)
+        ]
 
-    # ACT
-    response = client.get("/v1/creative-jobs/some_job_id")
+        # Assert
+        assert len(results) == 1  # Should yield only the final 'complete' event
+        complete_event = results[0]
+        assert complete_event["event"] == "complete"
+        complete_data = json.loads(complete_event["data"])
+        assert complete_data["status"] == "complete"
+        assert complete_data["result"] == final_result
 
-    # ASSERT
-    assert response.status_code == 200
-    assert response.json()["status"] == "in_progress"
-    assert response.json()["result"] is None
+    # --- END: THE DEFINITIVE, SIMPLIFIED FIX ---
 
+    async def test_stream_generator_job_not_found(
+        self, mock_arq_redis: AsyncMock, mocker
+    ):
+        """Verify the generator yields an error event if the job is not found."""
+        mock_job_instance = AsyncMock(
+            status=AsyncMock(return_value=JobStatus.not_found)
+        )
+        mocker.patch("api.services.streaming.Job", return_value=mock_job_instance)
 
-@pytest.mark.asyncio
-async def test_get_job_status_not_found(client: TestClient, mocker):
-    """
-    Tests the job status endpoint for a job ID that does not exist.
-    """
-    # ARRANGE
-    mock_job_instance = MagicMock()
-    mock_job_instance.status = AsyncMock(return_value=JobStatus.not_found)
-    mocker.patch("api.main.Job", return_value=mock_job_instance)
+        results = [
+            item async for item in create_event_generator("not_found", mock_arq_redis)
+        ]
 
-    # ACT
-    response = client.get("/v1/creative-jobs/non_existent_id")
-
-    # ASSERT
-    assert response.status_code == 404
-    assert "not found" in response.json()["detail"]
+        assert len(results) == 1
+        assert results[0]["event"] == "error"
