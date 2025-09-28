@@ -645,30 +645,25 @@ You are a Lead Photographer and Art Director. Your task is to synthesize all the
 
 # Prompts to generate detailed image generation prompts for the mood board and final garment shots.
 MOOD_BOARD_PROMPT_TEMPLATE = """
-A professional and atmospheric fashion designer's mood board, laid out on a raw concrete or linen surface. The board's purpose is to evoke the mood, story, and tactile world of a single garment: '{key_piece_name}'.
+A professional and atmospheric fashion designer's mood board, arranged as a top-down flat-lay on a raw concrete surface. The scene is lit by soft, diffused light.
 
-**Art Direction & Composition:**
-- The composition is a top-down flat-lay, arranged as a dynamic, slightly overlapping collage that suggests a creative work-in-progress.
-- The scene is lit by soft, diffused light, as if from a large studio window, creating a narrative and emotional mood.
+The board's creative direction is guided by the theme **'{overarching_theme}'** and evokes a mood of **{desired_mood_list}**.
 
-**Core Narrative Elements:**
-- **The Wearer:** A printed, Polaroid-style portrait of a professional {target_gender} fashion model of {target_model_ethnicity} ethnicity, with artistic and expressive features, representing the garment's wearer.
-- **The World:** A small, secondary, atmospheric photograph (perhaps 3x5 inches) that visually captures the essence of the collection's narrative setting.
-- **The Core Concept:** An abstract image, sketch, or textural photo that represents one of the core conceptual inspirations behind the collection (e.g., a close-up of brutalist architecture, a photo of a rare mineral, a page from a vintage sci-fi novel).
-- **The Point of Contrast:** A single, unexpected object or image that subtly hints at the collection's "antagonist synthesis" or innovative idea.
+The collage features these key narrative elements:
+- A central polaroid of the muse: a professional {target_gender} model of {target_model_ethnicity} ethnicity embodying the **'{influential_model_name}'** persona.
+- A small, atmospheric photo capturing the narrative setting: **'{narrative_setting}'**.
+- An abstract textural image hinting at the core inspiration: **'{core_concept_inspiration}'**.
+- A single, unexpected object hinting at the innovative idea: **'{antagonist_synthesis}'**.
 
-**Garment & Styling Elements:**
-- **Material Story:** Hyper-realistic, tactile fabric swatches with visible texture and drape. The selection should visually represent these key qualities:
-  {formatted_fabric_details}
-- **Color Story:** A focused color palette arranged with official, Pantone-like color chips for: {color_names}.
-- **Pattern & Print:** Printed samples or sketches of the key patterns used in the garment:
-  {formatted_pattern_details}
-- **Craftsmanship:** A small collection of physical hardware or macro-photographs showing key trims, such as: {details_trims}.
-- **Styling:** Key physical accessories, like {key_accessories}, interacting with other elements on the board.
+Key physical elements for the garment '{key_piece_name}':
+- Hyper-realistic, tactile fabric swatches: {formatted_fabric_details}
+- A focused palette of official Pantone color chips: {color_names}
+- Printed samples or sketches of key patterns: {formatted_pattern_details}
+- A small collection of physical hardware and trims: {details_trims}
+- Key styling accessories, such as: {key_accessories}
 
-**Final Image Style:**
-- The final image should be a professional studio photograph: editorial, tactile, atmospheric, and rich with narrative detail.
-- **Negative Prompts:** Avoid text, words, letters, logos, brand names, and any likeness of recognizable public figures. The image must be clean and professional.
+Final image style: editorial, tactile, atmospheric, rich with narrative detail, professional studio photograph.
+Negative prompts: avoid text, words, letters, logos, brand names, recognizable public figures.
 """
 
 

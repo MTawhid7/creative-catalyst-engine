@@ -44,17 +44,12 @@ GEMINI_DEFAULT_TIMEOUT_SECONDS = 60
 
 
 # --- 4. Unified Resilience & Retry Configuration ---
-# --- START: THE DEFINITIVE REFACTOR ---
-# The number of times to retry a low-level, transient network or server error.
-RETRY_NETWORK_ATTEMPTS = 5
+# The number of times to retry a single model on a transient network/server error
+# before failing over to the next model.
+MODEL_RETRY_ATTEMPTS = 3
 
-# The number of times to retry a high-level, expensive AI content generation
-# that fails validation or returns an empty response.
-RETRY_AI_CONTENT_ATTEMPTS = 3
-
-# The base delay (in seconds) for the exponential backoff calculation.
-RETRY_BACKOFF_DELAY_SECONDS = 5
-# --- END: THE DEFINITIVE REFACTOR ---
+# The base delay (in seconds) for the exponential backoff calculation between retries.
+RETRY_BACKOFF_BASE_DELAY = 5
 
 
 # --- 5. Caching Configuration ---

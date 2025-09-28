@@ -104,9 +104,9 @@ class NanoBananaGeneration(BaseImageGenerator):
             .split()
         )
 
-        for attempt in range(settings.RETRY_AI_CONTENT_ATTEMPTS):
+        for attempt in range(settings.MODEL_RETRY_ATTEMPTS):
             self.logger.info(
-                f"Generating image for: '{garment_name}' ({prompt_type}) - Attempt {attempt + 1}/{settings.RETRY_AI_CONTENT_ATTEMPTS}..."
+                f"Generating image for: '{garment_name}' ({prompt_type}) - Attempt {attempt + 1}/{settings.MODEL_RETRY_ATTEMPTS}..."
             )
             try:
                 # --- START: THE DEFINITIVE FIX ---
@@ -186,14 +186,14 @@ class NanoBananaGeneration(BaseImageGenerator):
             except Exception as e:
                 self.logger.error(
                     f"❌ Gemini API call failed for '{garment_name}' on attempt {attempt + 1}: {e}",
-                    exc_info=(attempt == settings.RETRY_AI_CONTENT_ATTEMPTS - 1),
+                    exc_info=(attempt == settings.MODEL_RETRY_ATTEMPTS - 1),
                 )
 
-            if attempt < settings.RETRY_AI_CONTENT_ATTEMPTS - 1:
-                await asyncio.sleep(settings.RETRY_BACKOFF_DELAY_SECONDS)
+            if attempt < settings.MODEL_RETRY_ATTEMPTS - 1:
+                await asyncio.sleep(settings.RETRY_BACKOFF_BASE_DELAY)
 
         self.logger.error(
-            f"❌ All {settings.RETRY_AI_CONTENT_ATTEMPTS} attempts to generate an image for '{garment_name}' failed."
+            f"❌ All {settings.MODEL_RETRY_ATTEMPTS} attempts to generate an image for '{garment_name}' failed."
         )
 
     def _load_prompts_from_file(self, context: RunContext) -> dict:

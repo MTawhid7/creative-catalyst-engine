@@ -71,6 +71,7 @@ class ReportAssembler:
             "target_age_group",
             "target_model_ethnicity",
             "antagonist_synthesis",
+            "desired_mood",
         ]
         for key in brief_keys_to_copy:
             if key not in report_data or not report_data[key]:

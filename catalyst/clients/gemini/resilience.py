@@ -7,7 +7,7 @@ delays) for the Gemini API client.
 
 import random
 from google.api_core import exceptions as google_exceptions
-from ... import settings  # Import settings to make max delay configurable
+from ... import settings
 
 
 def should_retry(e: Exception) -> bool:
@@ -19,7 +19,6 @@ def should_retry(e: Exception) -> bool:
     on a subsequent attempt. It no longer handles content-level errors.
     """
     # Check for specific, known-retryable Google API exception types.
-    # This is the most robust and preferred method.
     if isinstance(
         e,
         (
@@ -33,7 +32,6 @@ def should_retry(e: Exception) -> bool:
         return True
 
     # As a fallback, check for a common "service unavailable" string.
-    # This can catch transient errors that don't map to a specific exception type.
     if "service unavailable" in str(e).lower():
         return True
 
@@ -44,18 +42,22 @@ def should_retry(e: Exception) -> bool:
 
 def calculate_backoff_delay(attempt: int) -> float:
     """
-    Calculates exponential backoff delay with jitter.
+    Calculates exponential backoff delay with jitter, based on the central settings.
 
     This prevents a "thundering herd" problem where many clients retry at
     the exact same time after a service disruption.
     """
-    # Exponential backoff: 2^0, 2^1, 2^2, ...
-    base_delay = 2**attempt
+    # --- START: THE DEFINITIVE, CONFIGURABLE REFACTOR ---
+    base_delay = settings.RETRY_BACKOFF_BASE_DELAY
+
+    # Exponential backoff: base * 2^0, base * 2^1, base * 2^2, ...
+    exponential_delay = base_delay * (2**attempt)
+
     # Jitter: Add a random value to spread out retries.
     jitter = random.uniform(0.5, 1.5)
 
-    delay = base_delay + jitter
+    delay = exponential_delay + jitter
 
     # Cap the delay at a reasonable maximum to prevent excessively long waits.
-    # Note: We could make this maximum delay configurable in settings.py if needed.
     return min(delay, 60)
+    # --- END: THE DEFINITIVE, CONFIGURABLE REFACTOR ---
