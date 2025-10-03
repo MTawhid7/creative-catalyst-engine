@@ -5,6 +5,7 @@ enhanced demographic-aware deconstruction and image generation.
 """
 # -----------------------------------------------------------------------------
 # --- Stage 1: Brief Deconstruction & Enrichment Prompts ---
+# -----------------------------------------------------------------------------
 
 # A new prompt to intelligently deconstruct the user's passage into a structured brief.
 INTELLIGENT_DECONSTRUCTION_PROMPT = """
@@ -71,97 +72,37 @@ USER REQUEST:
 JSON OUTPUT:
 """
 
+# A new prompt to consolidate and enrich the brief with brand ethos and creative concepts.
+CONSOLIDATED_BRIEFING_PROMPT = """
+You are an expert Brand Strategist and Creative Director. Your task is to perform a deep analysis of the user's request and generate a multi-part creative foundation in a single JSON object.
 
-# A new prompt to analyze the user's underlying philosophy.
-ETHOS_ANALYSIS_PROMPT = """
-You are an expert Brand Strategist and fashion critic. Your primary task is to analyze a user's request and distill their unspoken design philosophy (the "ethos"). Your analysis must be decisive, insightful, and serve as a "Creative Compass" for a design team.
+**1. Distill the Brand Ethos:**
+   - Analyze the user's request to distill their unspoken design philosophy into a single, powerful paragraph.
+   - Determine the user's intent on these spectrums: Artisanal Craft vs. Mass-Market; Minimalism vs. Maximalism; Traditional Elegance vs. Subversive Rebellion; Historical Nostalgia vs. Speculative Futurism.
+   - Explain the "why" behind the fashion choice for the wearer, avoiding generic platitudes.
+
+**2. Expand the Core Theme:**
+   - Generate a list of 3-5 high-level, tangible, and diverse creative concepts that are a direct extension of the ethos and the core theme.
+   - Prioritize actionable concepts with strong visual or structural qualities (e.g., 'Japanese joinery techniques' is better than 'the concept of Zen').
+
+**3. Extract Search Keywords:**
+   - From the concepts you just generated, extract a list of 10-15 potent, searchable keywords relevant to fashion aesthetics, materials, or influential figures.
 
 **CRITICAL DIRECTIVES:**
-1.  **MAKE A STRATEGIC CHOICE:** Your most important task is to determine where the user's intent falls on the key creative spectrums that define a collection. You must analyze their language to infer their position on these core dichotomies:
-    *   **Philosophy:** Artisanal Craft vs. Mass-Market Appeal
-    *   **Aesthetic:** Minimalism vs. Maximalism
-    *   **Attitude:** Traditional Elegance vs. Subversive Rebellion
-    *   **Temporal Focus:** Historical Nostalgia vs. Speculative Futurism
-2.  **DISTILL THE CORE "WHY":** Synthesize your choices into a single, powerful paragraph. This ethos must explain the emotional goal or the problem this fashion choice solves for the wearer.
-3.  **BE INSIGHTFUL (NEGATIVE CONSTRAINT):** You are FORBIDDEN from using generic platitudes. Avoid vapid phrases like "looking good" or "feeling confident." Your analysis must have a unique point of view.
-4.  **INFER FROM FUNCTIONAL BRIEFS:** If a request is purely functional (e.g., "dresses for a festival"), you must infer the ethos of the event or subculture itself.
-5.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object with a single key: "ethos".
+- You MUST populate all fields in the JSON schema.
+- Your response MUST be ONLY the valid JSON object.
 
 ---
---- GOLD STANDARD EXAMPLE 1: PHILOSOPHICAL REQUEST ---
-USER REQUEST:
-"I prefer timeless, bespoke tailoring made from rare fabrics, with attention to every stitch. Exclusivity and craftsmanship are non-negotiable."
-
-JSON RESPONSE:
-{{
-  "ethos": "A pursuit of ultimate, understated luxury defined by unparalleled artisanal craft and traditional elegance. This reflects a discerning client who values intrinsic worth and a timeless aesthetic over fleeting trends, seeking the pinnacle of textile excellence."
-}}
---- END EXAMPLE 1 ---
---- GOLD STANDARD EXAMPLE 2: FUNCTIONAL REQUEST ---
-USER REQUEST:
-"Suggest some dresses for the upcoming Coachella."
-
-JSON RESPONSE:
-{{
-  "ethos": "A celebration of creative self-expression and unconstrained freedom, rooted in a subversive, rebellious attitude. The aesthetic is maximalist, tailored for a vibrant festival environment to create a visually impactful, photogenic statement that aligns with a bohemian subculture."
-}}
---- END EXAMPLE 2 ---
-
---- YOUR TASK ---
-USER REQUEST:
----
+**USER REQUEST:**
 {user_passage}
+
+**THEME HINT:**
+{theme_hint}
 ---
-JSON RESPONSE:
+**JSON OUTPUT (must conform to ConsolidatedBriefingModel schema):**
+{briefing_schema}
 """
 
-
-# A new prompt to enrich the brief with inferred details.
-THEME_EXPANSION_PROMPT = """
-You are a polymath creative director. Your task is to find 3-5 high-level, tangential concepts that illuminate a core fashion theme, using the provided Brand Ethos as your primary filter.
-
-**CRITICAL DIRECTIVES:**
-1.  **USE THE ETHOS AS A FILTER:** The concepts you choose MUST be a direct extension or metaphor for the values expressed in the Brand Ethos. Your most important task is to identify and DISCARD concepts that are thematically related but philosophically incorrect.
-2.  **PRIORITIZE ACTIONABLE CONCEPTS:** The concepts MUST be concrete and tangible. Favor ideas with strong visual, structural, material, or procedural qualities. For example, 'Japanese joinery techniques' is better than 'the concept of Zen'.
-3.  **ENSURE DIVERSITY OF FIELDS:** The final list MUST be drawn from at least three different domains (e.g., architecture, science, art history, industrial design).
-4.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object with a single key: "concepts".
-
----
---- GOLD STANDARD EXAMPLE ---
-USER BRIEF:
-- Theme: Arctic Minimalism
-- Garment: Outerwear
-- Attributes: functional, sustainable
-- Brand Ethos: The core ethos is one of ultimate luxury and uncompromising quality, focusing on artisanal, bespoke craftsmanship over fleeting trends.
-
-AI'S REASONING PROCESS (EMULATE THIS):
-- The theme is "Arctic Minimalism," but the ethos is about "artisanal craft" and "uncompromising quality."
-- A related but INCORRECT path would be "survivalist gear" or "mass-produced technical fabrics," as these lack the "artisanal luxury" component of the ethos. I will discard these.
-- I will find concepts from diverse fields that value minimalism, function, AND extreme craftsmanship.
-    - Architecture: Bauhaus architectural principles ("form follows function").
-    - Furniture Design: Shaker furniture (minimalist beauty, incredible craft).
-    - Industrial Design: Dieter Rams' principles of good design.
-- This list is diverse, actionable, and aligns perfectly with the ethos.
-
-FINAL JSON RESPONSE:
-{{
-  "concepts": [
-    "Bauhaus architectural principles",
-    "Shaker furniture design",
-    "Dieter Rams' principles of good design"
-  ]
-}}
---- END GOLD STANDARD EXAMPLE ---
-
---- YOUR TASK ---
-USER BRIEF:
-- Theme: {theme_hint}
-- Garment: {garment_type}
-- Attributes: {key_attributes}
-- Brand Ethos: {brand_ethos}
-
-JSON RESPONSE:
-"""
 
 # A new prompt to generate a "creative antagonist" concept.
 CREATIVE_ANTAGONIST_PROMPT = """
@@ -200,61 +141,10 @@ USER BRIEF:
 JSON RESPONSE:
 """
 
-# A new prompt to generate a rich keyword list from the concepts.
-KEYWORD_EXTRACTION_PROMPT = """
-You are an expert Fashion SEO Strategist and Cultural Research Analyst. Your task is to analyze a list of abstract concepts and generate a potent, diverse list of 10-15 searchable keywords to fuel a fashion design research engine.
-
-**CRITICAL DIRECTIVES:**
-1.  **CATEGORIZE YOUR THINKING:** For each input concept, you must generate keywords that fall into these three categories:
-    *   **Core Concepts:** The primary nouns and proper nouns (e.g., "Bauhaus," "Shaker furniture").
-    *   **Influential Figures/Brands:** Specific people, brands, or movements that are strongly associated with the concept (e.g., "Walter Gropius," "Mies van der Rohe").
-    *   **Aesthetic/Technical Terms:** Keywords describing the visual, structural, or material qualities of the concept (e.g., "minimalist craft," "kintsugi," "geometric forms").
-2.  **MAINTAIN FASHION RELEVANCE:** Every keyword MUST have relevance to aesthetics, materials, structure, or mood. Filter out any purely academic or technical terms that do not provide visual inspiration.
-3.  **AVOID REDUNDANCY:** Do not include simple synonyms. Each keyword should offer a unique search angle.
-4.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object with a single key: "keywords", containing the final, flat list of strings.
-
----
---- GOLD STANDARD EXAMPLE ---
-INPUT CONCEPTS:
-[
-  "Bauhaus architectural principles",
-  "Shaker furniture design",
-  "Japanese joinery techniques"
-]
-
-AI'S REASONING PROCESS (EMULATE THIS):
-- **Bauhaus:** Core Concept: "Bauhaus". Influential Figures: "Walter Gropius", "Mies van der Rohe". Aesthetic Terms: "geometric forms", "primary colors".
-- **Shaker furniture:** Core Concept: "Shaker furniture". Aesthetic Terms: "minimalist craft", "functionalism".
-- **Japanese joinery:** Core Concept: "Japanese joinery". Aesthetic Terms: "kintsugi", "woodworking aesthetics".
-- I will combine these into a single, de-duplicated, and potent list.
-
-FINAL JSON RESPONSE:
-{{
-  "keywords": [
-    "Bauhaus",
-    "Walter Gropius",
-    "Mies van der Rohe",
-    "geometric forms",
-    "primary colors",
-    "Shaker furniture",
-    "minimalist craft",
-    "functionalism",
-    "Japanese joinery",
-    "kintsugi",
-    "woodworking aesthetics"
-  ]
-}}
---- END GOLD STANDARD EXAMPLE ---
-
---- YOUR TASK ---
-INPUT CONCEPTS:
-{concepts_list}
-
-JSON RESPONSE:
-"""
 
 # -----------------------------------------------------------------------------
 # ---- Resilience Layer ----
+# -----------------------------------------------------------------------------
 
 
 FALLBACK_SYNTHESIS_PROMPT = """
@@ -277,7 +167,6 @@ You are the Head of Creative Strategy in a high-stakes situation. The primary, m
 
 # -----------------------------------------------------------------------------
 # --- Phase 1: Strategic Research Prompt ---
-# This prompt generates the foundational ResearchDossier.
 # -----------------------------------------------------------------------------
 
 # Prompts for the core synthesis steps: research, structuring, top-level synthesis, accessories, and key pieces.
@@ -353,103 +242,36 @@ You are a Lead Creative Strategist. Your task is to synthesize the entire Resear
 **JSON RESPONSE:**
 """
 
-CULTURAL_DRIVERS_PROMPT = """
-You are a Cultural Strategist and Trend Analyst. Your task is to analyze the provided Research Dossier and synthesize the 3-4 most important cultural drivers shaping the trend.
+# A new prompt to synthesize the research dossier into a deep creative analysis.
+CREATIVE_ANALYSIS_PROMPT = """
+You are a Senior Trend Analyst and Brand Strategist at a top-tier fashion intelligence agency. Your task is to perform a deep and holistic analysis of the provided Research Dossier and synthesize its findings into a structured JSON object covering three key areas.
+
+**1. Cultural Drivers (The "Why"):**
+   - Synthesize the 3-4 most important cultural drivers shaping the trend.
+   - For each driver, provide a concise name and an insightful paragraph explaining its specific impact on the fashion trend.
+
+**2. Influential Models (The "Who"):**
+   - Synthesize profiles for the 3-4 most important influential models, muses, or subcultures driving this trend.
+   - For each model, provide a concise name for the archetype and a description of their ethos, aesthetic, and connection to the trend.
+
+**3. Commercial Strategy (The "How"):**
+   - Distill the most important insights from the dossier into a single, concise paragraph summarizing the commercial strategy.
+   - Elegantly incorporate the core target consumer, the key marketing angle, and the overall product strategy.
 
 **CRITICAL DIRECTIVES:**
-1.  **SYNTHESIZE, DON'T JUST EXTRACT:** Analyze the *entire* dossier to identify the core drivers.
-2.  **STRUCTURE AS A LIST OF OBJECTS:** Your output must be a JSON object containing a list for `cultural_drivers`. Each item in the list must be an object with two string properties: `name` (the concise name of the cultural driver) and `description` (an insightful paragraph explaining its impact).
-3.  **RESILIENCE PROTOCOL:** If the dossier is sparse, use your expert internal knowledge, guided by the original `ENRICHED BRIEF`, to produce a complete, high-quality output.
-4.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object that adheres to the `CulturalDriversModel` schema.
-
-**SCHEMA DEFINITION for `CulturalDriversModel`:**
-{cultural_drivers_schema}
-
-**ENRICHED BRIEF (For Original User Intent):**
-{enriched_brief}
+- **Synthesize Holistically:** Your analysis for each section must be a fresh synthesis of the *entire* dossier, not just a copy of a single part.
+- **Resilience Protocol:** If any part of the dossier is sparse, you MUST use your expert internal knowledge, guided by the original `ENRICHED BRIEF`, to fill in the gaps and produce a complete, high-quality output for all fields.
+- **Strict JSON Output:** Your response MUST be ONLY the valid JSON object that adheres to the `CreativeAnalysisModel` schema.
 
 ---
 **RESEARCH DOSSIER (Your Source of Truth):**
 {research_dossier}
----
-**GOLD STANDARD EXAMPLE OUTPUT:**
-{{
-  "cultural_drivers": [
-    {{
-      "name": "The Rise of Quiet Luxury",
-      "description": "A societal shift away from conspicuous branding towards products whose value is communicated through exceptional materials and craftsmanship. This directly fuels the demand for ultra-luxury denim, as consumers seek the intrinsic value and understated confidence that comes from superior, logo-free garments."
-    }},
-    {{
-      "name": "The Influence of Wabi-Sabi",
-      "description": "A Japanese aesthetic centered on the acceptance of imperfection and the beauty of natural aging. In denim, this manifests as an appreciation for the natural patina of aged indigo and the subtle beauty of artisanal, hand-finished details."
-    }}
-  ]
-}}
----
-**JSON RESPONSE:**
-"""
-
-INFLUENTIAL_MODELS_PROMPT = """
-You are a Fashion Anthropologist and Brand Strategist. Your task is to analyze the provided Research Dossier and synthesize profiles for the 3-4 most important influential models, muses, or subcultures driving this trend.
-
-**CRITICAL DIRECTIVES:**
-1.  **SYNTHESIZE HOLISTICALLY:** Analyze the *entire* dossier to identify the key personas.
-2.  **STRUCTURE AS A LIST OF OBJECTS:** Your output must be a JSON object containing a list for `influential_models`. Each item in the list must be an object with two string properties: `name` (the concise name of the archetype) and `description` (an insightful paragraph explaining their ethos and connection to the trend).
-3.  **RESILIENCE PROTOCOL:** If the dossier is sparse, use your expert internal knowledge, guided by the original `ENRICHED BRIEF`, to produce a complete, high-quality output.
-4.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object that adheres to the `InfluentialModelsModel` schema.
-
-**SCHEMA DEFINITION for `InfluentialModelsModel`:**
-{influential_models_schema}
 
 **ENRICHED BRIEF (For Original User Intent):**
 {enriched_brief}
-
 ---
-**RESEARCH DOSSIER (Your Source of Truth):**
-{research_dossier}
----
-**GOLD STANDARD EXAMPLE OUTPUT:**
-{{
-  "influential_models": [
-    {{
-      "name": "The Scholarly Archivist",
-      "description": "A persona who prioritizes texture, quality, and intellectual rigor over fleeting trends. Their aesthetic is informed by academic and archival workwear, valuing timeless design and craftsmanship, as seen in brands like The Row and Lemaire."
-    }},
-    {{
-      "name": "The Street Style Intellectual",
-      "description": "Seen in the real-world adoption of heritage pieces in urban creative hubs, this persona recontextualizes classic garments with a modern, slightly irreverent sensibility, blending high-end tailoring with everyday items."
-    }}
-  ]
-}}
----
-**JSON RESPONSE:**
-"""
-
-COMMERCIAL_STRATEGY_PROMPT = """
-You are the Head of Commercial Strategy. Your task is to analyze the provided Research Dossier and synthesize its findings into a single, concise, and elegant paragraph summarizing the commercial strategy for the trend.
-
-**CRITICAL DIRECTIVES:**
-1.  **SYNTHESIZE, DON'T JUST LIST:** You must distill the most important insights from the `commercial_strategy_summary` and `market_manifestation_summary` in the dossier.
-2.  **FOCUS ON THE ESSENTIALS:** Your summary must elegantly incorporate the core target consumer, the key marketing angle, and the overall product strategy (e.g., investment pieces).
-3.  **RESILIENCE PROTOCOL:** If the dossier is sparse, use your expert internal knowledge, guided by the original `ENRICHED BRIEF`, to produce a complete, high-quality output.
-4.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object that adheres to the `CommercialStrategyModel` schema.
-
-**SCHEMA DEFINITION for `CommercialStrategyModel`:**
-{commercial_strategy_schema}
-
-**ENRICHED BRIEF (For Original User Intent):**
-{enriched_brief}
-
----
-**RESEARCH DOSSIER (Your Source of Truth):**
-{research_dossier}
----
-**GOLD STANDARD EXAMPLE OUTPUT:**
-{{
-  "commercial_strategy_summary": "The commercial strategy centers on positioning these garments as long-term investment pieces for a discerning, design-literate consumer. The core marketing message is 'The Luxury of Longevity,' focusing on craftsmanship and material provenance. This approach targets a post-logo consumer who defines luxury through quality and is willing to invest in pieces that offer both comfort and quiet confidence."
-}}
----
-**JSON RESPONSE:**
+**JSON OUTPUT (must conform to CreativeAnalysisModel schema):**
+{analysis_schema}
 """
 
 
@@ -571,25 +393,19 @@ You are the Head of Design for a world-class fashion intelligence agency. Your t
 NARRATIVE_SETTING_PROMPT = """
 You are a world-class Art Director and Set Designer. Your primary task is to synthesize all the provided context into a powerful, concise, and atmospheric setting description, optimized for an AI image generation model.
 
-**A. CREATIVE DIRECTION (Your Guiding Principles):**
-- **Brand Ethos:** {brand_ethos}
-- **Primary Focus:** For this task, you must derive your core inspiration from the `trend_narrative` and `visual_language_synthesis` within the dossier.
-
-**B. THE RESEARCH DOSSIER (Your Factual Foundation):**
+**A. THE RESEARCH DOSSIER (Your Factual Foundation):**
 {research_dossier}
 
-**C. CRITICAL DIRECTIVES & CREATIVE PROCESS (YOU MUST FOLLOW THIS EXACTLY):**
+**B. CRITICAL DIRECTIVES & CREATIVE PROCESS (YOU MUST FOLLOW THIS EXACTLY):**
 
 1.  **CHOOSE THE CORE ENVIRONMENT (Primary Filter):** You MUST first apply this strategic framework to determine the setting's environment. This is your most important decision.
     *   **The Nature-First Principle:** If the theme is tied to nature or organic elements, you MUST choose a **Natural** environment.
     *   **The Context-Is-King Principle:** If the theme is tied to a specific subculture or profession, you MUST choose an authentic **Urban** or **Interior** setting.
     *   **The Abstract-by-Design Principle:** Only choose an **Abstract/Conceptual** environment if the theme is explicitly surreal or avant-garde.
 
-2.  **REFINE WITH THE ETHOS (Secondary Filter):** Once you have chosen the environment, you must then use the **Brand Ethos** to add specific, brand-aligned details.
+2.  **SYNTHESIZE A CONCISE, HYPER-DETAILED NARRATIVE:** Your final description must be a single, atmospheric paragraph, strictly **under 50 words**. It must be dense with key visual and sensory details (light, texture, sound) that are unambiguous for an image generation model.
 
-3.  **SYNTHESIZE A CONCISE, HYPER-DETAILED NARRATIVE:** Your final description must be a single, atmospheric paragraph, strictly **under 50 words**. It must be dense with key visual and sensory details (light, texture, sound) that are unambiguous for an image generation model.
-
-4.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object that adheres to the `NarrativeSettingModel` schema provided below.
+3.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object that adheres to the `NarrativeSettingModel` schema provided below.
 
 **SCHEMA DEFINITION for `NarrativeSettingModel`:**
 {narrative_setting_schema}
@@ -642,6 +458,7 @@ You are a Lead Photographer and Art Director. Your task is to synthesize all the
 
 # -----------------------------------------------------------------------------
 # --- Stage 4: Image Prompt Generation Templates ---
+# -----------------------------------------------------------------------------
 
 # Prompts to generate detailed image generation prompts for the mood board and final garment shots.
 MOOD_BOARD_PROMPT_TEMPLATE = """

@@ -2,8 +2,7 @@
 
 """
 This module contains the PipelineOrchestrator, which executes the final,
-robust, multi-step synthesis pipeline with enhanced, readable logging,
-maximum concurrency, and a graceful failure model.
+robust, and now more efficient multi-step synthesis pipeline.
 """
 
 import json
@@ -15,12 +14,16 @@ from ..utilities.logger import get_logger
 from ..caching import cache_manager
 from .. import settings
 
-# Import all processors required for the pipeline
+# --- START: THE DEFINITIVE, CONSOLIDATED REFACTOR ---
+# Import the new, refactored processors
 from .processors.briefing import (
     BriefDeconstructionProcessor,
-    EthosClarificationProcessor,
-    BriefEnrichmentProcessor,
+    ConsolidatedBriefingProcessor,
+    CreativeAntagonistProcessor,
 )
+
+# --- END: THE DEFINITIVE, CONSOLIDATED REFACTOR ---
+
 from .processors.synthesis import (
     WebResearchProcessor,
     ReportSynthesisProcessor,
@@ -69,13 +72,13 @@ class PipelineOrchestrator:
         is_from_cache = False
 
         try:
-            # --- STAGE 1: BRIEFING ---
+            # --- STAGE 1: NEW, STREAMLINED BRIEFING (SEQUENTIAL) ---
             context.current_status = "Phase 1: Creative Briefing"
-            await asyncio.gather(
-                self._run_step(BriefDeconstructionProcessor(), context),
-                self._run_step(EthosClarificationProcessor(), context),
-            )
-            context = await self._run_step(BriefEnrichmentProcessor(), context)
+
+            # The briefing stage is now a clean, sequential flow.
+            context = await self._run_step(BriefDeconstructionProcessor(), context)
+            context = await self._run_step(ConsolidatedBriefingProcessor(), context)
+            context = await self._run_step(CreativeAntagonistProcessor(), context)
 
             # --- STAGE 2: CACHE CHECK ---
             context.current_status = "Phase 2: Checking Semantic Cache"

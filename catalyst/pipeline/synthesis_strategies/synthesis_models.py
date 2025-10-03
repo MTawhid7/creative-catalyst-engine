@@ -13,32 +13,20 @@ from ...models.trend_report import KeyPieceDetail
 resilient_config = ConfigDict(extra="ignore")
 
 
-# Use json_schema_extra in the ConfigDict to provide metadata. This is a more robust
-# pattern that separates validation from schema documentation and satisfies strict type checkers.
 class NamedDescriptionModel(BaseModel):
+    """A generic, Gemini-compatible model for a name/description pair."""
     model_config = ConfigDict(
         extra="ignore",
-        json_schema_extra={
-            "description": "A generic, Gemini-compatible model for a name/description pair."
-        },
+        json_schema_extra={"description": "A generic name/description pair."},
     )
-    name: str = Field(
-        ..., json_schema_extra={"description": "The concise name for the item."}
-    )
-    description: str = Field(
-        ..., json_schema_extra={"description": "The detailed description for the item."}
-    )
+    name: str = Field(..., json_schema_extra={"description": "The concise name for the item."})
+    description: str = Field(..., json_schema_extra={"description": "The detailed description for the item."})
 
 
 # --- Research Dossier Model ---
 
-
 class ResearchDossierModel(BaseModel):
-    """
-    The definitive, structured output of the WebResearchProcessor. It is designed
-    to be simple and robust, using flat strings for its primary fields.
-    """
-
+    """The definitive, structured output of the WebResearchProcessor."""
     model_config = resilient_config
     trend_narrative: Optional[str] = Field(default="")
     visual_language_colors: Optional[str] = Field(default="")
@@ -52,61 +40,36 @@ class ResearchDossierModel(BaseModel):
 
 # --- Builder Output Models ---
 
-
 class NarrativeSynthesisModel(BaseModel):
     """The output of the NarrativeSynthesisBuilder."""
-
     model_config = resilient_config
     overarching_theme: Optional[str] = Field(default="")
     trend_narrative_synthesis: Optional[str] = Field(default="")
 
 
-class CulturalDriversModel(BaseModel):
-    """The output of the CulturalDriversBuilder."""
 
+class CreativeAnalysisModel(BaseModel):
+    """The new, consolidated output of the CreativeAnalysisBuilder."""
     model_config = resilient_config
-    # --- START: THE DEFINITIVE FIX ---
-    # Changed to a list of the new, more elegant structured objects.
-    cultural_drivers: List[NamedDescriptionModel] = Field(default_factory=list)
-    # --- END: THE DEFINITIVE FIX ---
+    cultural_drivers: List[NamedDescriptionModel] = Field(..., description="A list of 3-4 key cultural drivers.")
+    influential_models: List[NamedDescriptionModel] = Field(..., description="A list of 3-4 key influential models or muses.")
+    commercial_strategy_summary: str = Field(..., description="A single, concise paragraph summarizing the commercial strategy.")
 
-
-class InfluentialModelsModel(BaseModel):
-    """The output of the InfluentialModelsBuilder."""
-
-    model_config = resilient_config
-    # --- START: THE DEFINITIVE FIX ---
-    # Changed to a list of the new, more elegant structured objects.
-    influential_models: List[NamedDescriptionModel] = Field(default_factory=list)
-    # --- END: THE DEFINITIVE FIX ---
-
-
-class CommercialStrategyModel(BaseModel):
-    """The output of the CommercialStrategyBuilder."""
-
-    model_config = resilient_config
-    commercial_strategy_summary: Optional[str] = Field(default="")
 
 
 class AccessoriesModel(BaseModel):
     """The output of the AccessoriesBuilder."""
-
     model_config = resilient_config
-    # --- START: THE DEFINITIVE FIX ---
-    # Changed to a list of the new, more elegant structured objects.
     accessories: List[NamedDescriptionModel] = Field(default_factory=list)
-    # --- END: THE DEFINITIVE FIX ---
 
 
 class SingleGarmentModel(BaseModel):
     """The output of the SingleGarmentBuilder, used iteratively."""
-
     model_config = resilient_config
     key_piece: KeyPieceDetail
 
 
 class NarrativeSettingModel(BaseModel):
     """The output of the NarrativeSettingBuilder."""
-
     model_config = resilient_config
     narrative_setting_description: Optional[str] = Field(default="")

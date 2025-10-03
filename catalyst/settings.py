@@ -53,7 +53,7 @@ RETRY_BACKOFF_BASE_DELAY = 5
 
 
 # --- 5. Caching Configuration ---
-EMBEDDING_MODEL_NAME = "embedding-001"
+EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 CHROMA_COLLECTION_NAME = "creative_catalyst_reports"
 CACHE_DISTANCE_THRESHOLD = 0.10
 CHROMA_SERVER_HOST = os.getenv("CHROMA_SERVER_HOST", "localhost")

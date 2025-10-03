@@ -1,8 +1,8 @@
 # catalyst/pipeline/processors/briefing.py
 
 """
-This module contains the processors for the briefing stage, now with
-fully schema-driven, structured outputs for all AI calls.
+This module contains the processors for the briefing stage, refactored for
+efficiency by consolidating multiple AI calls into a single, powerful step.
 """
 
 import json
@@ -20,26 +20,7 @@ from ...prompts import prompt_library
 from ...resilience import invoke_with_resilience, MaxRetriesExceededError
 
 
-# --- Pydantic models for structured output ---
-class ConceptsModel(BaseModel):
-    concepts: List[str] = Field(
-        ..., description="A list of 3-5 high-level creative concepts."
-    )
-
-
-class AntagonistSynthesisModel(BaseModel):
-    antagonist_synthesis: str = Field(
-        ...,
-        description="A single, innovative design synthesis that elevates the core theme.",
-    )
-
-
-class KeywordsModel(BaseModel):
-    keywords: List[str] = Field(..., description="A list of relevant search keywords.")
-
-
-class EthosModel(BaseModel):
-    ethos: str
+# --- Pydantic Models for Structured Output ---
 
 
 class StructuredBriefModel(BaseModel):
@@ -55,6 +36,29 @@ class StructuredBriefModel(BaseModel):
     target_model_ethnicity: str
     target_age_group: str
     desired_mood: List[str]
+
+
+# --- START: THE DEFINITIVE, CONSOLIDATED REFACTOR ---
+
+
+class ConsolidatedBriefingModel(BaseModel):
+    """The new, efficient model for the consolidated briefing step."""
+
+    ethos: str = Field(..., description="The distilled, single-paragraph brand ethos.")
+    expanded_concepts: List[str] = Field(
+        ..., description="A list of 3-5 high-level, tangential creative concepts."
+    )
+    search_keywords: List[str] = Field(
+        ...,
+        description="A list of 10-15 actionable search keywords derived from the concepts.",
+    )
+
+
+class AntagonistSynthesisModel(BaseModel):
+    antagonist_synthesis: str = Field(
+        ...,
+        description="A single, innovative design synthesis that elevates the core theme.",
+    )
 
 
 class BriefDeconstructionProcessor(BaseProcessor):
@@ -111,117 +115,65 @@ class BriefDeconstructionProcessor(BaseProcessor):
         return brief_data
 
 
-class EthosClarificationProcessor(BaseProcessor):
+class ConsolidatedBriefingProcessor(BaseProcessor):
     """
-    Pipeline Step 2: Analyzes the user's passage for an underlying brand ethos.
+    Pipeline Step 2: Efficiently performs ethos clarification, theme expansion,
+    and keyword extraction in a single, powerful AI call.
     """
-
     async def process(self, context: RunContext) -> RunContext:
-        self.logger.info("🔬 Analyzing user passage for deeper brand ethos...")
-        prompt = prompt_library.ETHOS_ANALYSIS_PROMPT.format(
-            user_passage=context.user_passage
-        )
+        self.logger.info("🔬 Performing consolidated briefing (ethos, concepts, keywords)...")
         try:
-            ethos_model = await invoke_with_resilience(
+            prompt = prompt_library.CONSOLIDATED_BRIEFING_PROMPT.format(
+                user_passage=context.user_passage,
+                theme_hint=context.enriched_brief.get("theme_hint", ""),
+                briefing_schema=json.dumps(ConsolidatedBriefingModel.model_json_schema())
+            )
+            briefing_model = await invoke_with_resilience(
                 ai_function=gemini.generate_content_async,
                 prompt=prompt,
-                response_schema=EthosModel,
+                response_schema=ConsolidatedBriefingModel,
             )
-            context.brand_ethos = ethos_model.ethos
-            self.logger.info("✅ Success: Distilled brand ethos.")
+
+            # Populate the context with the rich data from the single call
+            context.brand_ethos = briefing_model.ethos
+            context.enriched_brief["expanded_concepts"] = briefing_model.expanded_concepts
+
+            # Combine and de-duplicate keywords
+            search_keywords = set(context.enriched_brief.get("search_keywords", []))
+            if context.enriched_brief.get("theme_hint"):
+                search_keywords.add(context.enriched_brief["theme_hint"])
+            search_keywords.update(briefing_model.search_keywords)
+            context.enriched_brief["search_keywords"] = sorted(list(search_keywords))
+
+            self.logger.info("✅ Success: Consolidated briefing complete.")
         except MaxRetriesExceededError:
-            self.logger.warning(
-                "⚠️ Ethos analysis failed after all retries. Proceeding without it."
-            )
+            self.logger.warning("⚠️ Consolidated briefing failed. Proceeding with minimal data.")
             context.brand_ethos = ""
+            context.enriched_brief["expanded_concepts"] = []
+
         return context
 
-
-class BriefEnrichmentProcessor(BaseProcessor):
-    """Expands the initial brief with AI-driven creative concepts."""
-
-    # --- START: THE DEFINITIVE FIX ---
-    # The helper methods now return a safe default on failure instead of None.
-
-    async def _get_concepts(self, prompt_args: Dict) -> List[str]:
-        prompt = prompt_library.THEME_EXPANSION_PROMPT.format(**prompt_args)
+class CreativeAntagonistProcessor(BaseProcessor):
+    """
+    Pipeline Step 3: Generates the single, innovative "creative antagonist"
+    synthesis to provide a unique twist.
+    """
+    async def process(self, context: RunContext) -> RunContext:
+        self.logger.info("🎨 Generating creative antagonist synthesis...")
         try:
-            model = await invoke_with_resilience(
-                gemini.generate_content_async, prompt, ConceptsModel
+            prompt = prompt_library.CREATIVE_ANTAGONIST_PROMPT.format(
+                theme_hint=context.enriched_brief.get("theme_hint", "general fashion"),
+                brand_ethos=context.brand_ethos or "No specific ethos provided.",
             )
-            return model.concepts
-        except MaxRetriesExceededError:
-            self.logger.warning("Failed to generate concepts. Returning empty list.")
-            return []
-
-    async def _get_synthesis(self, prompt_args: Dict) -> str:
-        prompt = prompt_library.CREATIVE_ANTAGONIST_PROMPT.format(**prompt_args)
-        try:
             model = await invoke_with_resilience(
                 gemini.generate_content_async, prompt, AntagonistSynthesisModel
             )
-            return model.antagonist_synthesis
+            context.antagonist_synthesis = model.antagonist_synthesis
+            self.logger.info("✅ Success: Creative antagonist generated.")
         except MaxRetriesExceededError:
-            self.logger.warning(
-                "Failed to generate antagonist synthesis. Proceeding without it."
-            )
-            return ""
+            self.logger.warning("⚠️ Creative antagonist generation failed. Proceeding without it.")
+            context.antagonist_synthesis = ""
 
-    async def _get_keywords(self, concepts: List[str]) -> List[str]:
-        if not concepts:
-            return []
-        prompt = prompt_library.KEYWORD_EXTRACTION_PROMPT.format(
-            concepts_list=json.dumps(concepts)
-        )
-        try:
-            model = await invoke_with_resilience(
-                gemini.generate_content_async, prompt, KeywordsModel
-            )
-            return model.keywords
-        except MaxRetriesExceededError:
-            self.logger.warning("Failed to extract keywords. Returning empty list.")
-            return []
-
-    # --- END: THE DEFINITIVE FIX ---
-
-    async def process(self, context: RunContext) -> RunContext:
-        self.logger.info(
-            "⚙️ Enriching brief with AI-driven creative concepts and keywords..."
-        )
-        garment_type_raw = context.enriched_brief.get("garment_type", "clothing")
-        garment_type_str = (
-            ", ".join(garment_type_raw)
-            if isinstance(garment_type_raw, list)
-            else garment_type_raw
-        )
-
-        prompt_args = {
-            "theme_hint": context.enriched_brief.get("theme_hint", "general fashion"),
-            "garment_type": garment_type_str,
-            "key_attributes": ", ".join(
-                context.enriched_brief.get("key_attributes", [])
-            ),
-            "brand_ethos": context.brand_ethos or "No specific ethos provided.",
-        }
-
-        # Run concept and synthesis generation concurrently
-        concepts_list, synthesis_text = await asyncio.gather(
-            self._get_concepts(prompt_args),
-            self._get_synthesis(prompt_args),
-        )
-
-        keywords_list = await self._get_keywords(concepts_list)
-
-        context.antagonist_synthesis = synthesis_text
-        context.enriched_brief["expanded_concepts"] = concepts_list
-
-        search_keywords = set(context.enriched_brief.get("search_keywords", []))
-        if context.enriched_brief.get("theme_hint"):
-            search_keywords.add(context.enriched_brief["theme_hint"])
-        search_keywords.update(keywords_list)
-        context.enriched_brief["search_keywords"] = sorted(list(search_keywords))
-
-        self.logger.info(
-            f"✅ Success: Brief enriched. Found {len(context.enriched_brief.get('search_keywords', []))} keywords."
-        )
         return context
+
+# --- END: THE DEFINITIVE, CONSOLIDATED REFACTOR ---

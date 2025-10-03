@@ -12,7 +12,7 @@ from .exceptions import APIClientError
 # The client will send this text to the API.
 
 USER_PASSAGE = """
-I need a detailed report on the bespoke jacket tailoring process at a premier Savile Row atelier, highlighting the nuances of artisanal craftsmanship.
+What fashion trends are influencers wearing on Instagram?
 """
 
 # ===================================================================

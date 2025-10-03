@@ -17,7 +17,6 @@ from catalyst.resilience import MaxRetriesExceededError
 
 @pytest.fixture
 def run_context(tmp_path: Path) -> RunContext:
-    """Provides a fresh RunContext for each test."""
     return RunContext(user_passage="test", results_dir=tmp_path)
 
 
@@ -139,3 +138,60 @@ class TestKeyGarmentsProcessor:
         assert len(context.final_report["detailed_key_pieces"]) == 2
         assert context.final_report["detailed_key_pieces"][0]["name"] == "Garment 1"
         assert context.final_report["detailed_key_pieces"][1]["name"] == "Garment 3"
+
+
+@pytest.mark.asyncio
+class TestReportSynthesisProcessor:
+    """Tests for the refactored, more efficient ReportSynthesisProcessor."""
+
+    @pytest.fixture
+    def mock_builders(self, mocker) -> dict:
+        """Mocks the new, consolidated set of builder classes."""
+        # --- START: THE DEFINITIVE FIX ---
+        # Mock the new, efficient list of 4 builders.
+        builders = {
+            "NarrativeSynthesisBuilder": MagicMock(
+                build=AsyncMock(return_value={"narrative": "data"})
+            ),
+            "CreativeAnalysisBuilder": MagicMock(
+                build=AsyncMock(return_value={"analysis": "data"})
+            ),
+            "AccessoriesBuilder": MagicMock(
+                build=AsyncMock(return_value={"accessories": "data"})
+            ),
+            "NarrativeSettingBuilder": MagicMock(
+                build=AsyncMock(return_value={"setting": "data"})
+            ),
+        }
+        # --- END: THE DEFINITIVE FIX ---
+        for name, mock_instance in builders.items():
+            mocker.patch(
+                f"catalyst.pipeline.processors.synthesis.{name}",
+                return_value=mock_instance,
+            )
+        return builders
+
+    async def test_process_success(self, run_context: RunContext, mock_builders):
+        """Verify all 4 builders are called and their results are assembled."""
+        run_context.structured_research_context = {"key": "value"}
+        processor = ReportSynthesisProcessor()
+        context = await processor.process(run_context)
+
+        for name, mock_instance in mock_builders.items():
+            mock_instance.build.assert_awaited_once()
+
+        assert context.final_report["narrative"] == "data"
+        assert (
+            context.final_report["analysis"] == "data"
+        )  # Check for new consolidated data
+        assert context.final_report["accessories"] == "data"
+
+    async def test_process_skips_if_dossier_is_empty(
+        self, run_context: RunContext, mock_builders
+    ):
+        """Verify that no builders are called if the research context is empty."""
+        run_context.structured_research_context = {}
+        processor = ReportSynthesisProcessor()
+        context = await processor.process(run_context)
+        for name, mock_instance in mock_builders.items():
+            mock_instance.build.assert_not_called()
