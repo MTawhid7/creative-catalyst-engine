@@ -12,7 +12,7 @@ from .exceptions import APIClientError
 # The client will send this text to the API.
 
 USER_PASSAGE = """
-What fashion trends are influencers wearing on Instagram?
+What styles are trending among influencers on Instagram in 2025?
 """
 
 # ===================================================================

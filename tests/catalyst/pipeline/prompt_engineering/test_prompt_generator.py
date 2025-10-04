@@ -9,33 +9,20 @@ from catalyst.models.trend_report import (
     KeyPieceDetail,
     ReportNamedDescription,
 )
-from catalyst.pipeline.prompt_engineering.prompt_generator import (
-    PromptGenerator,
-    DEFAULT_STYLE_GUIDE,
-)
+from catalyst.pipeline.prompt_engineering.prompt_generator import PromptGenerator
 from catalyst.resilience import MaxRetriesExceededError
+from catalyst.pipeline.synthesis_strategies.synthesis_models import ArtDirectionModel
 
 
 @pytest.fixture
 def strategic_fashion_report() -> FashionTrendReport:
-    """A fixture designed to test strategic pairing and cycling."""
     return FashionTrendReport(
         prompt_metadata=PromptMetadata(run_id="strat-run", user_passage="test"),
         overarching_theme="Strategic Test Theme",
-        desired_mood=["Strategic", "Varied", "Cohesive"],
-        influential_models=[
-            ReportNamedDescription(name="Muse One", description="..."),
-            ReportNamedDescription(name="Muse Two", description="..."),
-        ],
-        cultural_drivers=[
-            ReportNamedDescription(name="Driver One", description="..."),
-            ReportNamedDescription(name="Driver Two", description="..."),
-        ],
-        detailed_key_pieces=[
-            KeyPieceDetail(key_piece_name="Garment Alpha"),
-            KeyPieceDetail(key_piece_name="Garment Beta"),
-            KeyPieceDetail(key_piece_name="Garment Gamma"),
-        ],
+        desired_mood=["Strategic"],
+        influential_models=[ReportNamedDescription(name="Muse One", description="...")],
+        cultural_drivers=[ReportNamedDescription(name="Driver One", description="...")],
+        detailed_key_pieces=[KeyPieceDetail(key_piece_name="Garment Alpha")],
         season=["FW"],
         year=[2025],
         region=["Global"],
@@ -46,64 +33,69 @@ def strategic_fashion_report() -> FashionTrendReport:
     )
 
 
+@pytest.fixture
+def mock_art_direction_model() -> ArtDirectionModel:
+    return ArtDirectionModel(
+        narrative_setting_description="A mock setting from the test.",
+        photographic_style="Test Camera Style",
+        lighting_style="Test Lighting Style",
+        film_aesthetic="Test Film Aesthetic",
+        negative_style_keywords="no, bad, things",
+    )
+
+
 @pytest.mark.asyncio
 class TestStrategicPromptGenerator:
-    """A rigorous test suite for the final, architecturally sound PromptGenerator."""
+    """A rigorous test suite for the final, refactored PromptGenerator."""
 
-    async def test_strategic_pairing_and_cycling(
-        self, strategic_fashion_report, mocker
+    async def test_generate_prompts_happy_path(
+        self, strategic_fashion_report, mock_art_direction_model, mocker
     ):
         """
-        The definitive test: verifies that garments are correctly and deterministically
-        paired with muses and inspirations, including the cycling logic.
+        Verify that the fields from the generated ArtDirectionModel are
+        correctly injected into the final garment prompt.
         """
         mocker.patch(
             "catalyst.pipeline.prompt_engineering.prompt_generator.invoke_with_resilience",
-            return_value=DEFAULT_STYLE_GUIDE,
+            return_value=mock_art_direction_model,
         )
         generator = PromptGenerator(
             report=strategic_fashion_report, research_dossier={}
         )
-        prompts = await generator.generate_prompts()
+        prompts, art_direction = await generator.generate_prompts()
 
-        # --- START: THE DEFINITIVE FIX ---
-        # The assertion strings must exactly match the template, including markdown.
-        prompt_alpha = prompts["Garment Alpha"]["mood_board"]
-        assert "embodying the **'Muse One'** persona" in prompt_alpha
-        assert "core inspiration: **'Driver One'**" in prompt_alpha
+        assert art_direction == mock_art_direction_model
 
-        prompt_beta = prompts["Garment Beta"]["mood_board"]
-        assert "embodying the **'Muse Two'** persona" in prompt_beta
-        assert "core inspiration: **'Driver Two'**" in prompt_beta
-
-        prompt_gamma = prompts["Garment Gamma"]["mood_board"]
-        assert "embodying the **'Muse One'** persona" in prompt_gamma
-        assert "core inspiration: **'Driver One'**" in prompt_gamma
-        # --- END: THE DEFINITIVE FIX ---
-
-    async def test_handles_empty_inspirational_lists(
-        self, strategic_fashion_report, mocker
-    ):
-        """
-        Verify that the generator provides safe, meaningful defaults if the
-        influential_models or cultural_drivers lists are empty.
-        """
-        strategic_fashion_report.influential_models = []
-        strategic_fashion_report.cultural_drivers = []
-
-        mocker.patch(
-            "catalyst.pipeline.prompt_engineering.prompt_generator.invoke_with_resilience",
-            return_value=DEFAULT_STYLE_GUIDE,
-        )
-        generator = PromptGenerator(
-            report=strategic_fashion_report, research_dossier={}
-        )
-        prompts = await generator.generate_prompts()
-
-        prompt_alpha = prompts["Garment Alpha"]["mood_board"]
-        # --- START: THE DEFINITIVE FIX ---
+        final_prompt = prompts["Garment Alpha"]["final_garment"]
+        # --- CHANGE: Assertions now match the exact Markdown format of the template ---
+        assert "-   **Photography:** Test Camera Style" in final_prompt
+        assert "-   **Lighting:** Test Lighting Style" in final_prompt
+        assert "-   **Aesthetic:** Test Film Aesthetic" in final_prompt
+        assert "-   **Setting:** A mock setting from the test." in final_prompt
         assert (
-            "embodying the **'a mysterious, artistic figure'** persona" in prompt_alpha
+            "-   **Stylistic Negative Keywords:** Avoid no, bad, things" in final_prompt
         )
-        assert "core inspiration: **'modern minimalist art'**" in prompt_alpha
-        # --- END: THE DEFINITIVE FIX ---
+
+    async def test_fallback_on_art_direction_failure(
+        self, strategic_fashion_report, mocker
+    ):
+        """
+        Verify that if the AI call for art direction fails, the system uses
+        a default (empty) model and still generates prompts.
+        """
+        mocker.patch(
+            "catalyst.pipeline.prompt_engineering.prompt_generator.invoke_with_resilience",
+            side_effect=MaxRetriesExceededError(ValueError("AI failed")),
+        )
+        generator = PromptGenerator(
+            report=strategic_fashion_report, research_dossier={}
+        )
+        prompts, art_direction = await generator.generate_prompts()
+
+        assert art_direction == ArtDirectionModel()
+
+        final_prompt = prompts["Garment Alpha"]["final_garment"]
+        # --- CHANGE: Assertions now match the empty state within the Markdown format ---
+        assert "-   **Photography:** " in final_prompt
+        assert "-   **Lighting:** " in final_prompt
+        assert "-   **Aesthetic:** " in final_prompt

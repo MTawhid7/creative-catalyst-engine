@@ -9,14 +9,12 @@ from catalyst.pipeline.synthesis_strategies.section_builders import (
     NarrativeSynthesisBuilder,
     CreativeAnalysisBuilder,  # New
     AccessoriesBuilder,
-    NarrativeSettingBuilder,
     SingleGarmentBuilder,
 )
 from catalyst.pipeline.synthesis_strategies.synthesis_models import (
     NarrativeSynthesisModel,
     CreativeAnalysisModel,  # New
     AccessoriesModel,
-    NarrativeSettingModel,
     SingleGarmentModel,
     NamedDescriptionModel,
 )

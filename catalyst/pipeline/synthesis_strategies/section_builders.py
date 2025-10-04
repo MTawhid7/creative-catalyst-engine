@@ -21,7 +21,6 @@ from .synthesis_models import (
     CreativeAnalysisModel,
     AccessoriesModel,
     SingleGarmentModel,
-    NarrativeSettingModel,
 )
 
 logger = get_logger(__name__)
@@ -169,29 +168,5 @@ class SingleGarmentBuilder:
         except MaxRetriesExceededError:
             self.logger.error(
                 "Failed to synthesize a single garment after all retries."
-            )
-            return None
-
-
-class NarrativeSettingBuilder(BaseSectionBuilder):
-    """Synthesizes the atmospheric narrative setting for the report."""
-
-    async def build(self) -> Dict[str, Any] | None:
-        self.logger.info("Synthesizing narrative setting...")
-        try:
-            prompt_args = self.base_prompt_args | {
-                "narrative_setting_schema": json.dumps(
-                    NarrativeSettingModel.model_json_schema(), indent=2
-                )
-            }
-            model = await invoke_with_resilience(
-                gemini.generate_content_async,
-                prompt_library.NARRATIVE_SETTING_PROMPT.format(**prompt_args),
-                NarrativeSettingModel,
-            )
-            return model.model_dump(mode="json")
-        except MaxRetriesExceededError:
-            self.logger.warning(
-                "Narrative setting synthesis failed. This section will be missing."
             )
             return None

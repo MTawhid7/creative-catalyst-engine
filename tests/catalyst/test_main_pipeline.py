@@ -10,18 +10,15 @@ from catalyst.context import RunContext
 from catalyst.resilience import MaxRetriesExceededError
 
 from catalyst.pipeline.processors.briefing import *
+
+# --- CHANGE: Import the new ArtDirectionModel ---
 from catalyst.pipeline.synthesis_strategies.synthesis_models import *
-from catalyst.pipeline.prompt_engineering.prompt_generator import (
-    CreativeStyleGuideModel,
-)
+from catalyst.models.trend_report import KeyPieceDetail
 
 
 @pytest.fixture
 def run_context(tmp_path: Path) -> RunContext:
     return RunContext(user_passage="A test passage.", results_dir=tmp_path)
-
-
-# --- START: THE DEFINITIVE FIX ---
 
 
 @pytest.fixture
@@ -58,14 +55,16 @@ def mock_responses() -> dict:
             commercial_strategy_summary="strat",
         ),
         AccessoriesModel: AccessoriesModel(accessories=[]),
-        NarrativeSettingModel: NarrativeSettingModel(
-            narrative_setting_description="setting"
-        ),
         SingleGarmentModel: SingleGarmentModel(
             key_piece=KeyPieceDetail(key_piece_name="Garment")
         ),
-        CreativeStyleGuideModel: CreativeStyleGuideModel(
-            art_direction="dir", negative_style_keywords="neg"
+        # --- CHANGE: Replace old models with the new ArtDirectionModel ---
+        ArtDirectionModel: ArtDirectionModel(
+            narrative_setting_description="A test setting.",
+            photographic_style="Test style",
+            lighting_style="Test lighting",
+            film_aesthetic="Test aesthetic",
+            negative_style_keywords="bad, stuff",
         ),
     }
 
@@ -78,6 +77,7 @@ def mock_ai_client(mocker, mock_responses: dict) -> AsyncMock:
         response_schema = kwargs.get("response_schema")
         model_instance = mock_responses.get(response_schema)
         if model_instance:
+            # The API returns a dictionary with a 'text' key containing the JSON string
             return {"text": model_instance.model_dump_json()}
         raise TypeError(f"Mock called with unconfigured schema: {response_schema}")
 
@@ -85,9 +85,6 @@ def mock_ai_client(mocker, mock_responses: dict) -> AsyncMock:
         "catalyst.resilience.invoker.gemini.generate_content_async",
         side_effect=side_effect,
     )
-
-
-# --- END: THE DEFINITIVE FIX ---
 
 
 @pytest.mark.asyncio
@@ -115,11 +112,9 @@ class TestRunPipeline:
         assert final_context.final_report is not None
         assert final_context.final_report["overarching_theme"] == "Final Theme"
 
-        # --- START: THE DEFINITIVE FIX ---
-        # The assertion is updated to the correct number of total AI calls.
-        # 3 (briefing) + 1 (research) + 4 (synthesis) + 3 (garments) + 1 (style guide) = 12
-        assert mock_ai_client.call_count == 12
-        # --- END: THE DEFINITIVE FIX ---
+        # --- CHANGE: Updated the assertion to the correct number of total AI calls. ---
+        # 3 (briefing) + 1 (research) + 3 (synthesis) + 3 (garments) + 1 (art direction) = 11
+        assert mock_ai_client.call_count == 11
 
     async def test_pipeline_cache_hit(
         self, run_context: RunContext, mock_ai_client, mocker
@@ -130,7 +125,8 @@ class TestRunPipeline:
             return_value=json.dumps(cached_report),
         )
         await run_pipeline(run_context)
-        assert mock_ai_client.call_count == 3  # Only the 3 briefing calls
+        # On a cache hit, only the initial briefing calls should run.
+        assert mock_ai_client.call_count == 3
 
     async def test_pipeline_graceful_failure_on_critical_step(
         self, run_context: RunContext, mock_ai_client, mock_responses, mocker

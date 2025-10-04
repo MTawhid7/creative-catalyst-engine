@@ -2,7 +2,7 @@
 
 import json
 import random
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from itertools import cycle
 
 from pydantic import BaseModel, Field
@@ -15,21 +15,11 @@ from ...models.trend_report import (
     PatternDetail,
     KeyPieceDetail,
 )
+from ..synthesis_strategies.synthesis_models import ArtDirectionModel
 from ...prompts import prompt_library
 from ...utilities.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-class CreativeStyleGuideModel(BaseModel):
-    art_direction: str = Field(...)
-    negative_style_keywords: str = Field(...)
-
-
-DEFAULT_STYLE_GUIDE = CreativeStyleGuideModel(
-    art_direction="A powerful, cinematic mood captured with a sharp 50mm prime lens. Lighting is soft and natural. The model has a confident, authentic presence that honors the garment's form.",
-    negative_style_keywords="blurry, poor quality, generic, boring, deformed",
-)
 
 
 class PromptGenerator:
@@ -97,42 +87,47 @@ class PromptGenerator:
             parts.append(f"It is lined with {piece.lining}.")
         return " ".join(parts) or "Constructed with clean, minimalist detailing."
 
-    async def _generate_creative_style_guide(self) -> CreativeStyleGuideModel:
-        self.logger.info("✍️ Generating Creative Style Guide from final report data...")
-        influential_models_str = ", ".join(
-            [item.name for item in self.report.influential_models]
-        )
+    async def _generate_art_direction(self) -> ArtDirectionModel:
+        """Generates the unified art direction using the new, optimized prompt."""
+        self.logger.info("✍️ Generating Unified Art Direction from final report data...")
         prompt_args = {
+            "enriched_brief": json.dumps(
+                self.report.model_dump(
+                    include={"overarching_theme", "desired_mood", "prompt_metadata"}
+                ),
+                indent=2,
+            ),
             "research_dossier": json.dumps(self.research_dossier, indent=2),
-            "overarching_theme": self.report.overarching_theme,
-            "refined_mood": self.research_dossier.get("trend_narrative", ""),
-            "influential_models": influential_models_str,
-            "brand_ethos": self.report.prompt_metadata.user_passage,
-            "style_guide_schema": json.dumps(
-                CreativeStyleGuideModel.model_json_schema(), indent=2
+            "art_direction_schema": json.dumps(
+                ArtDirectionModel.model_json_schema(), indent=2
             ),
         }
         try:
-            style_guide_model = await invoke_with_resilience(
+            # Use the new V4 prompt from our library
+            art_direction_model = await invoke_with_resilience(
                 ai_function=gemini.generate_content_async,
-                prompt=prompt_library.CREATIVE_STYLE_GUIDE_PROMPT.format(**prompt_args),
-                response_schema=CreativeStyleGuideModel,
+                prompt=prompt_library.ART_DIRECTION_PROMPT.format(
+                    **prompt_args
+                ),
+                response_schema=ArtDirectionModel,
             )
-            self.logger.info("✅ Success: Creative Style Guide generated.")
-            return style_guide_model
+            self.logger.info("✅ Success: Unified Art Direction generated.")
+            return art_direction_model
         except MaxRetriesExceededError:
-            self.logger.warning("⚠️ AI call for style guide failed. Using fallback.")
-            return DEFAULT_STYLE_GUIDE
+            self.logger.warning(
+                "⚠️ AI call for art direction failed. Using fallback defaults."
+            )
+            return ArtDirectionModel()
 
-    async def generate_prompts(self) -> Dict[str, Any]:
+    async def generate_prompts(self) -> Tuple[Dict[str, Any], ArtDirectionModel]:
         all_prompts = {}
-        style_guide_model = await self._generate_creative_style_guide()
+        art_direction_model = await self._generate_art_direction()
 
         if not self.report.detailed_key_pieces:
             self.logger.warning(
                 "No detailed key pieces found. Cannot generate image prompts."
             )
-            return {}
+            return {}, art_direction_model
 
         # Create cycling iterators for our inspirational elements.
         muse_cycle = cycle(
@@ -165,7 +160,7 @@ class PromptGenerator:
                     overarching_theme=self.report.overarching_theme,
                     desired_mood_list=desired_mood_list,
                     influential_model_name=current_muse,
-                    narrative_setting=self.report.narrative_setting_description,
+                    narrative_setting=art_direction_model.narrative_setting_description,
                     core_concept_inspiration=current_inspiration,
                     antagonist_synthesis=self.report.antagonist_synthesis
                     or "a surprising detail",
@@ -183,8 +178,11 @@ class PromptGenerator:
                     target_model_ethnicity=self.report.target_model_ethnicity,
                 ),
                 "final_garment": prompt_library.FINAL_GARMENT_PROMPT_TEMPLATE.format(
-                    art_direction=style_guide_model.art_direction,
-                    negative_style_keywords=style_guide_model.negative_style_keywords,
+                    photographic_style=art_direction_model.photographic_style,
+                    lighting_style=art_direction_model.lighting_style,
+                    film_aesthetic=art_direction_model.film_aesthetic,
+                    negative_style_keywords=art_direction_model.negative_style_keywords,
+                    narrative_setting_description=art_direction_model.narrative_setting_description,
                     key_piece_name=piece.key_piece_name,
                     garment_description_with_synthesis=piece.description,
                     visual_color_palette=self._get_visual_color_palette(piece),
@@ -197,7 +195,6 @@ class PromptGenerator:
                     visual_details_description=self._get_visual_details_description(
                         piece
                     ),
-                    narrative_setting=self.report.narrative_setting_description,
                     styling_description=" and ".join(piece.suggested_pairings[:2])
                     or "authentic styling",
                     target_gender=self.report.target_gender,
@@ -206,4 +203,4 @@ class PromptGenerator:
             }
             all_prompts[piece.key_piece_name or "untitled"] = piece_prompts
 
-        return all_prompts
+        return all_prompts, art_direction_model

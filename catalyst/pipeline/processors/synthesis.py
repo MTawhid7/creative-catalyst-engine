@@ -22,7 +22,6 @@ from ..synthesis_strategies.section_builders import (
     NarrativeSynthesisBuilder,
     CreativeAnalysisBuilder,  # New
     AccessoriesBuilder,
-    NarrativeSettingBuilder,
     SingleGarmentBuilder,
 )
 
@@ -91,7 +90,6 @@ class ReportSynthesisProcessor(BaseProcessor):
             NarrativeSynthesisBuilder(context, dossier),
             CreativeAnalysisBuilder(context, dossier),  # The new, efficient builder
             AccessoriesBuilder(context, dossier),
-            NarrativeSettingBuilder(context, dossier),
         ]
         # --- END: THE DEFINITIVE, CONSOLIDATED REFACTOR ---
 

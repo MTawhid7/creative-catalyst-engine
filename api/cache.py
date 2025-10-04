@@ -68,8 +68,6 @@ class L0KeyEntities(BaseModel):
         return v
 
 
-
-
 async def _generate_deterministic_key(user_passage: str) -> Optional[str]:
     """
     Makes a fast, RESILIENT AI call to extract core entities and builds a
@@ -90,8 +88,11 @@ async def _generate_deterministic_key(user_passage: str) -> Optional[str]:
         entities = entities_model.model_dump(exclude_unset=True)
 
         if not entities:
-            logger.warning("L0 key generation did not extract any entities.")
-            return None
+            logger.warning(
+                "L0 key generation did not extract any entities. Falling back to raw passage hash."
+            )
+            normalized_passage = user_passage.strip().lower()
+            return f"raw_passage_hash:{hashlib.sha256(normalized_passage.encode()).hexdigest()}"
 
         key_parts = []
         for key in sorted(entities.keys()):
@@ -120,7 +121,6 @@ async def _generate_deterministic_key(user_passage: str) -> Optional[str]:
 async def get_from_l0_cache(
     user_passage: str, redis_client: "ArqRedis"
 ) -> Optional[Dict[str, Any]]:
-    # ... (this function is unchanged)
     stable_key = await _generate_deterministic_key(user_passage)
     if not stable_key:
         return None
@@ -141,7 +141,6 @@ async def get_from_l0_cache(
 async def set_in_l0_cache(
     user_passage: str, result: Dict[str, Any], redis_client: "ArqRedis"
 ):
-    # ... (this function is unchanged)
     stable_key = await _generate_deterministic_key(user_passage)
     if not stable_key:
         logger.warning("Cannot set L0 cache because key generation failed.")

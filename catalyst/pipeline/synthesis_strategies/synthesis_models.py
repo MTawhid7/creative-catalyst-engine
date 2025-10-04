@@ -47,14 +47,12 @@ class NarrativeSynthesisModel(BaseModel):
     trend_narrative_synthesis: Optional[str] = Field(default="")
 
 
-
 class CreativeAnalysisModel(BaseModel):
     """The new, consolidated output of the CreativeAnalysisBuilder."""
     model_config = resilient_config
     cultural_drivers: List[NamedDescriptionModel] = Field(..., description="A list of 3-4 key cultural drivers.")
     influential_models: List[NamedDescriptionModel] = Field(..., description="A list of 3-4 key influential models or muses.")
     commercial_strategy_summary: str = Field(..., description="A single, concise paragraph summarizing the commercial strategy.")
-
 
 
 class AccessoriesModel(BaseModel):
@@ -69,7 +67,16 @@ class SingleGarmentModel(BaseModel):
     key_piece: KeyPieceDetail
 
 
-class NarrativeSettingModel(BaseModel):
-    """The output of the NarrativeSettingBuilder."""
-    model_config = resilient_config
+class ArtDirectionModel(BaseModel):
+    """
+    A unified model that defines the complete artistic and photographic
+    direction for the final garment image generation, optimized for the
+    Gemini NanoBanana model. All fields are optional to ensure resilience.
+    """
+
+    model_config = resilient_config  # Reuse the existing resilient config
     narrative_setting_description: Optional[str] = Field(default="")
+    photographic_style: Optional[str] = Field(default="")
+    lighting_style: Optional[str] = Field(default="")
+    film_aesthetic: Optional[str] = Field(default="")
+    negative_style_keywords: Optional[str] = Field(default="")

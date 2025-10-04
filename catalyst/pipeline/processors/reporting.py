@@ -73,7 +73,18 @@ class FinalOutputGeneratorProcessor(BaseProcessor):
                 report=validated_report,
                 research_dossier=context.structured_research_context,
             )
-            prompts_data = await prompt_generator.generate_prompts()
+            prompts_data, art_direction_model = (
+                await prompt_generator.generate_prompts()
+            )
+
+            # Inject the narrative setting into the final report for user visibility
+            if (
+                art_direction_model
+                and art_direction_model.narrative_setting_description
+            ):
+                context.final_report["narrative_setting_description"] = (
+                    art_direction_model.narrative_setting_description
+                )
 
             self.logger.info("💉 Injecting image prompts into the final report...")
             for piece in context.final_report.get("detailed_key_pieces", []):

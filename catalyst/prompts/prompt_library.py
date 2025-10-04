@@ -390,69 +390,47 @@ You are the Head of Design for a world-class fashion intelligence agency. Your t
 
 
 # A new prompt to create a rich, cinematic narrative setting.
-NARRATIVE_SETTING_PROMPT = """
-You are a world-class Art Director and Set Designer. Your primary task is to synthesize all the provided context into a powerful, concise, and atmospheric setting description, optimized for an AI image generation model.
+ART_DIRECTION_PROMPT = """
+You are an expert Art Director and Photographer. Your task is to generate a single, hyper-detailed JSON object, strictly conforming to the provided schema, optimized to guide the Gemini NanoBanana image generator.
 
-**A. THE RESEARCH DOSSIER (Your Factual Foundation):**
-{research_dossier}
+**INPUTS:**
+- Enriched Brief: {enriched_brief}
+- Research Dossier: {research_dossier}
 
-**B. CRITICAL DIRECTIVES & CREATIVE PROCESS (YOU MUST FOLLOW THIS EXACTLY):**
+**CRITICAL DIRECTIVES:**
 
-1.  **CHOOSE THE CORE ENVIRONMENT (Primary Filter):** You MUST first apply this strategic framework to determine the setting's environment. This is your most important decision.
-    *   **The Nature-First Principle:** If the theme is tied to nature or organic elements, you MUST choose a **Natural** environment.
-    *   **The Context-Is-King Principle:** If the theme is tied to a specific subculture or profession, you MUST choose an authentic **Urban** or **Interior** setting.
-    *   **The Abstract-by-Design Principle:** Only choose an **Abstract/Conceptual** environment if the theme is explicitly surreal or avant-garde.
+1.  **`narrative_setting_description`:**
+    - First, select the environment category using this strict framework:
+        - **Nature-First:** Use if the theme is tied to nature or organic elements.
+        - **Context-is-King:** Use if the theme is tied to a specific subculture, profession, or architecture.
+        - **Abstract-by-Design:** Use only if the theme is explicitly surreal or avant-garde.
+    - Then, write a single, atmospheric paragraph (≤50 words).
+    - *Example: "A windswept, black sand beach in Iceland under an overcast sky. Volcanic rock formations are shrouded in a low-hanging mist."*
 
-2.  **SYNTHESIZE A CONCISE, HYPER-DETAILED NARRATIVE:** Your final description must be a single, atmospheric paragraph, strictly **under 50 words**. It must be dense with key visual and sensory details (light, texture, sound) that are unambiguous for an image generation model.
+2.  **`photographic_style`:**
+    - Specify composition, camera, and lens. Be specific and professional.
+    - *Example 1: "Full-body portrait, centered, shot on a Phase One XF IQ4 with an 80mm lens at f/2.8."*
+    - *Example 2: "Candid medium shot, on a Leica M6 with a 35mm lens."*
 
-3.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object that adheres to the `NarrativeSettingModel` schema provided below.
+3.  **`lighting_style`:**
+    - Keep it minimal and natural to the scene. Avoid describing complex studio setups.
+    - *Example: "Soft, diffused morning light filtering through a dense canopy of leaves."*
 
-**SCHEMA DEFINITION for `NarrativeSettingModel`:**
-{narrative_setting_schema}
+4.  **`film_aesthetic`:**
+    - Specify a classic film stock or a modern digital look by name.
+    - *Example 1: "Kodak Portra 400 film aesthetic."*
+    - *Example 2: "A grainy, high-contrast Ilford HP5 black and white look."*
 
----
-**GOLD STANDARD EXAMPLE OUTPUT:**
-{{
-  "narrative_setting_description": "The dusty, forgotten backstage of a dimly lit music club. A single, bare bulb casts long shadows across peeling paint and torn band flyers. Worn velvet and tangled cables complete the raw, authentic scene."
-}}
----
-**JSON RESPONSE:**
-"""
+5.  **`negative_style_keywords`:**
+    - Provide a concise, comma-separated list of what would ruin the shot's mood.
+    - *Example: "soft-focus, warm tones, romantic, cluttered, smiling, oversaturated"*
 
+**FORMATTING:**
+- Your output MUST be ONLY a valid JSON object that strictly conforms to the provided schema.
 
-# A new prompt to create a technical and artistic call sheet for a photoshoot.
+**SCHEMA DEFINITION for `ArtDirectionModel`:**
+{art_direction_schema}
 
-CREATIVE_STYLE_GUIDE_PROMPT = """
-You are a Lead Photographer and Art Director. Your task is to synthesize all the provided context into a hyper-optimized "master prompt" (`art_direction`) and a set of strategic `negative_style_keywords`.
-
-**A. RESEARCH DOSSIER (Your Factual Foundation):**
-{research_dossier}
-
-**B. FINAL REPORT SYNTHESIS (Your Creative Focus):**
-- **Overarching Theme:** {overarching_theme}
-- **Refined Mood:** {refined_mood}
-- **Influential Models / Archetypes:** {influential_models}
-- **Brand Ethos:** {brand_ethos}
-
-**C. CRITICAL DIRECTIVES:**
-1.  **SYNTHESIZE, DON'T COPY:** Your output must be a creative synthesis of the dossier and the final report, not just a summary.
-2.  **CONSTRUCT THE MASTER PROMPT (`art_direction`):** Generate a single, dense paragraph (under 50 words) that follows this exact structure:
-    *   **Part 1 (Photography Style):** Start with the overall aesthetic, informed by the dossier's findings.
-    *   **Part 2 (Model Persona):** Describe the model's persona, directly inspired by the `Influential Models / Archetypes`.
-    *   **Part 3 (Lighting & Mood):** Describe the lighting in a technical and atmospheric way that evokes the `Refined Mood`.
-3.  **GENERATE STRATEGIC NEGATIVE KEYWORDS:** The `negative_style_keywords` must be a concise, comma-separated list of the 5-7 most critical visual styles to AVOID.
-4.  **STRICT JSON OUTPUT:** Your response MUST be ONLY a valid JSON object that adheres to the `CreativeStyleGuideModel` schema provided below.
-
-**SCHEMA DEFINITION for `CreativeStyleGuideModel`:**
-{style_guide_schema}
-
----
-**GOLD STANDARD EXAMPLE OUTPUT:**
-{{
-  "art_direction": "An editorial fashion photograph, sharp focus, high detail. The model embodies the quiet strength of a 'Scholarly Archivist,' with a grounded and powerful presence. Lighting is stark and directional, like that of a library reading room, creating deep, sculptural shadows that evoke a 'Considered' and 'Scholarly' mood.",
-  "negative_style_keywords": "ornate, frivolous, superficial, delicate, whimsical, soft-focus, romantic, chaotic"
-}}
----
 **JSON RESPONSE:**
 """
 
@@ -488,9 +466,12 @@ Negative prompts: avoid text, words, letters, logos, brand names, recognizable p
 FINAL_GARMENT_PROMPT_TEMPLATE = """
 An editorial fashion photograph for a high-end magazine. Full-body portrait. The image is photorealistic, cinematic, and tactile.
 
-**Art Direction:** {art_direction}
+**--- Art & Photographic Direction ---**
+-   **Photography:** {photographic_style}
+-   **Lighting:** {lighting_style}
+-   **Aesthetic:** {film_aesthetic}
 
-**--- GARMENT BRIEF ---**
+**--- Garment Brief ---**
 -   **Garment Name:** {key_piece_name}.
 -   **Core Concept & Description:** {garment_description_with_synthesis}.
 -   **Color Palette:** {visual_color_palette}.
@@ -498,12 +479,12 @@ An editorial fashion photograph for a high-end magazine. Full-body portrait. The
 -   **Pattern:** {visual_pattern_description}.
 -   **Key Details & Construction:** {visual_details_description}.
 
-**--- SCENE & STYLING ---**
--   **Setting:** {narrative_setting}.
+**--- Scene & Styling ---**
+-   **Setting:** {narrative_setting_description}.
 -   **Styling:** The look is completed with {styling_description}, styled to feel authentic and personally curated.
 -   **Model:** A professional {target_gender} fashion model of {target_model_ethnicity} ethnicity, posed in a dynamic, candid way that suggests natural movement.
 
-**--- FINAL EXECUTION NOTES ---**
+**--- Final Execution Notes ---**
 -   **Positive Keywords:** high-detail, authentic, shallow depth of field, clean finish, uniform color.
 -   **Stylistic Negative Keywords:** Avoid {negative_style_keywords}.
 -   **Quality Control Negative Keywords:** Avoid nsfw, deformed, extra limbs, poor quality, logo, text, mismatched, asymmetrical, inconsistent, blotchy, uneven, unfinished, frayed.
