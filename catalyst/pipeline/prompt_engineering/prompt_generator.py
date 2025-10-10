@@ -37,7 +37,6 @@ class PromptGenerator:
         """Creates a descriptive, grammatically correct list for the mood board."""
         lines = []
         for f in fabrics[:2]:
-            # Prioritize the texture, as it's often the most descriptive element.
             if f.texture:
                 desc = f"- A tactile swatch of fabric with a {f.texture.lower()}."
             elif f.material:
@@ -55,11 +54,28 @@ class PromptGenerator:
             lines.append(f"- A print sample featuring a '{p.motif}' motif.")
         return "\n  ".join(lines)
 
+    # --- START: REFINED HELPER FUNCTION 1 ---
     def _get_visual_fabric_description(self, piece: KeyPieceDetail) -> str:
+        """
+        Generates a grammatically correct, natural-language description of
+        the garment's primary fabric and texture.
+        """
         if not piece.fabrics:
             return "Crafted from a high-quality, modern textile."
         main_fabric = piece.fabrics[0]
-        return f"Crafted from a luxurious {main_fabric.texture or ''} {main_fabric.material or 'textile'} with a {main_fabric.drape or 'moderate'} drape."
+
+        base = f"Crafted from {main_fabric.material or 'a high-quality textile'}"
+        texture_desc = main_fabric.texture or ""
+
+        if texture_desc:
+            # Make sure the texture description flows grammatically.
+            if texture_desc[0].isupper():
+                texture_desc = texture_desc[0].lower() + texture_desc[1:]
+            return f"{base}, which has a {texture_desc}."
+        else:
+            return f"{base}."
+
+    # --- END: REFINED HELPER FUNCTION 1 ---
 
     def _get_visual_color_palette(self, piece: KeyPieceDetail) -> str:
         if not piece.colors:
@@ -73,19 +89,38 @@ class PromptGenerator:
             return f"A palette of {', '.join(color_names[:-1])}, with an accent of {color_names[-1]}."
         return f"A palette of {color_names[0]} and {color_names[1]}."
 
-    def _get_visual_pattern_description(self, piece: KeyPieceDetail) -> str:
-        if not piece.patterns:
-            return "A solid color, focusing on silhouette and texture."
-        main_pattern = piece.patterns[0]
-        return f"Features a '{main_pattern.motif or 'subtle'}' pattern, applied as a {main_pattern.placement or 'tonal accent'}."
-
+    # --- START: REFINED HELPER FUNCTION 2 ---
     def _get_visual_details_description(self, piece: KeyPieceDetail) -> str:
+        """
+        Generates a natural-language summary of the key construction details and lining.
+        """
         parts = []
         if piece.details_trims:
-            parts.append(f"Key details include {', '.join(piece.details_trims[:3])}.")
+            trims_list = piece.details_trims[:3]
+            if len(trims_list) > 1:
+                trims_str = ", ".join(trims_list[:-1]) + f", and {trims_list[-1]}"
+            else:
+                trims_str = trims_list[0]
+            parts.append(f"Key details include {trims_str}")
+
         if piece.lining:
-            parts.append(f"It is lined with {piece.lining}.")
-        return " ".join(parts) or "Constructed with clean, minimalist detailing."
+            lining_desc = piece.lining
+            # Append the lining description, ensuring it flows as a new sentence.
+            if not lining_desc.endswith("."):
+                parts.append(f"it is lined with {lining_desc.lower()}")
+            else:
+                parts.append(lining_desc)
+
+        if not parts:
+            return "Constructed with clean, minimalist detailing."
+
+        # Join the parts into a single, grammatically correct paragraph.
+        description = ". ".join(parts).capitalize().replace("..", ".")
+        if not description.endswith("."):
+            description += "."
+        return description
+
+    # --- END: REFINED HELPER FUNCTION 2 ---
 
     async def _generate_art_direction(self) -> ArtDirectionModel:
         """Generates the unified art direction using the new, optimized prompt."""
@@ -103,12 +138,9 @@ class PromptGenerator:
             ),
         }
         try:
-            # Use the new V4 prompt from our library
             art_direction_model = await invoke_with_resilience(
                 ai_function=gemini.generate_content_async,
-                prompt=prompt_library.ART_DIRECTION_PROMPT.format(
-                    **prompt_args
-                ),
+                prompt=prompt_library.ART_DIRECTION_PROMPT.format(**prompt_args),
                 response_schema=ArtDirectionModel,
             )
             self.logger.info("✅ Success: Unified Art Direction generated.")
@@ -129,7 +161,16 @@ class PromptGenerator:
             )
             return {}, art_direction_model
 
-        # Create cycling iterators for our inspirational elements.
+        # --- START: CLEANUP STEP FOR ARTIFACTS ---
+        cleaned_narrative_setting = (
+            art_direction_model.narrative_setting_description.replace(
+                "Context-is-King.", ""
+            ).strip()
+            if art_direction_model.narrative_setting_description
+            else ""
+        )
+        # --- END: CLEANUP STEP FOR ARTIFACTS ---
+
         muse_cycle = cycle(
             [model.name for model in self.report.influential_models]
             or ["a mysterious, artistic figure"]
@@ -155,12 +196,26 @@ class PromptGenerator:
             )
             color_names = ", ".join(filter(None, [c.name for c in piece.colors]))
 
+            if piece.patterns:
+                main_pattern = piece.patterns[0]
+                pattern_motif = main_pattern.motif or "Not specified"
+                pattern_artistic_style = (
+                    main_pattern.artistic_style or "As described in the garment concept"
+                )
+                technique = main_pattern.print_technique or "Applied"
+                placement = main_pattern.placement or "as a key accent"
+                pattern_technique_and_placement = f"{technique}, {placement}."
+            else:
+                pattern_motif = "Solid color"
+                pattern_artistic_style = "Focus on fabric texture and silhouette"
+                pattern_technique_and_placement = "No print or pattern applied."
+
             piece_prompts = {
                 "mood_board": prompt_library.MOOD_BOARD_PROMPT_TEMPLATE.format(
                     overarching_theme=self.report.overarching_theme,
                     desired_mood_list=desired_mood_list,
                     influential_model_name=current_muse,
-                    narrative_setting=art_direction_model.narrative_setting_description,
+                    narrative_setting=cleaned_narrative_setting,  # Use cleaned variable
                     core_concept_inspiration=current_inspiration,
                     antagonist_synthesis=self.report.antagonist_synthesis
                     or "a surprising detail",
@@ -182,16 +237,16 @@ class PromptGenerator:
                     lighting_style=art_direction_model.lighting_style,
                     film_aesthetic=art_direction_model.film_aesthetic,
                     negative_style_keywords=art_direction_model.negative_style_keywords,
-                    narrative_setting_description=art_direction_model.narrative_setting_description,
+                    narrative_setting_description=cleaned_narrative_setting,  # Use cleaned variable
                     key_piece_name=piece.key_piece_name,
                     garment_description_with_synthesis=piece.description,
                     visual_color_palette=self._get_visual_color_palette(piece),
                     visual_fabric_description=self._get_visual_fabric_description(
                         piece
                     ),
-                    visual_pattern_description=self._get_visual_pattern_description(
-                        piece
-                    ),
+                    pattern_motif=pattern_motif,
+                    pattern_artistic_style=pattern_artistic_style,
+                    pattern_technique_and_placement=pattern_technique_and_placement,
                     visual_details_description=self._get_visual_details_description(
                         piece
                     ),

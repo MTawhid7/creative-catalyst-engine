@@ -9,60 +9,83 @@ enhanced demographic-aware deconstruction and image generation.
 
 # A new prompt to intelligently deconstruct the user's passage into a structured brief.
 INTELLIGENT_DECONSTRUCTION_PROMPT = """
-You are an expert Creative Director. Your task is to deconstruct a user's request into a structured JSON creative brief, inferring all missing details with expert authority.
-
-**CRITICAL DIRECTIVES:**
-1.  **SYNTHESIZE THE CORE THEME:** Your most important task. Synthesize the user's core creative request into a clean, concise, and actionable `theme_hint`. This should be a summary, not a direct copy.
-2.  **BE BOLDLY SPECIFIC (NEGATIVE CONSTRAINTS):**
-    *   **Gender:** You MUST infer either "Male" or "Female". Do NOT use "Unisex" or "Gender-Neutral" unless explicitly requested.
-    *   **Ethnicity:** You MUST infer the single, most specific ethnicity that is demonstrably associated with the brief (e.g., via culture, region, or heritage). Do NOT use "Diverse" or other vague terms.
-    *   **Brand Category:** Infer a specific market segment. Examples: "Haute Couture," "Streetwear," "Resort Wear," "Avant-Garde Fashion."
-3.  **HANDLE MULTIPLE VALUES:** If the user requests multiple garments, regions, etc., you MUST return them as a list.
-4.  **INFER DEMOGRAPHICS:** Based on the inferred `target_audience`, you MUST choose the single most appropriate `target_age_group` from this list: "Child (4-12)", "Teen (13-19)", "Young Adult (20-30)", "Adult (30-50)", "Senior (50+)".
-5.  **DEFINE THE DESIRED MOOD:** Generate a `desired_mood` as a list of 3-5 evocative adjectives that capture the final atmosphere of the collection.
-6.  **STRICT JSON OUTPUT:** Your response MUST be ONLY the valid JSON object and nothing else.
+You are an expert Creative Director. Your task is to deconstruct a user's request into a single, precise JSON creative brief, strictly following the rules and schema below.
 
 ---
---- GOLD STANDARD EXAMPLE 1: INFERENCE & SYNTHESIS ---
-USER REQUEST:
-"A report on Cuban resort wear from the 1950s."
+## PRIORITY RULES (Follow These First)
 
-JSON OUTPUT:
+1.  **LITERAL INTENT PROTOCOL:**
+    *   You MUST preserve all specific, concrete subjects, motifs, or proper names from the user's request (e.g., 'Santa Claus,' 'Japanese dragon,' 'Eiffel Tower').
+    *   These are **non-negotiable** and MUST be included in the final `theme_hint`. Do not abstract or replace them.
+
+2.  **STRICT JSON FORMAT:**
+    *   Your output MUST be ONLY a single, valid JSON object. No extra text or commentary.
+
+---
+## INFERENCE RULES (How to Fill Blanks)
+
+-   **`theme_hint`**: A concise summary (10-15 words) that includes the non-negotiable literal elements.
+-   **`brand_category`**: Infer a single category. Use this map for guidance:
+    *   *keywords → category:* "street", "hoodie" → "Streetwear"; "red carpet", "runway" → "Haute Couture"; "luxury", "silk" → "Luxury".
+-   **`target_gender`**: You MUST infer either "Male" or "Female" unless the user explicitly requests "Unisex".
+-   **Ambiguity Handling**: If the user provides conflicting ideas (e.g., "minimalist with maximalist embroidery"), preserve both concepts in the `key_attributes` (e.g., ["Minimal silhouette", "Maximalist embroidery"]).
+
+---
+## GOLD STANDARD EXAMPLES (Follow This Format)
+
+--- EXAMPLE 1: HOLIDAY THEME ---
+USER: "A unisex hoodie combining Christmas motifs like Santa and reindeer with a Union Jack design."
+OUTPUT:
 {{
-  "theme_hint": "Timeless Cuban resort wear, circa 1950s",
-  "garment_type": "Resort Wear",
-  "brand_category": "Resort Fashion",
-  "target_audience": "Affluent older women seeking classic Cuban style",
-  "region": "Cuba",
-  "key_attributes": ["Vintage", "Elegant", "Vibrant", "Sun-drenched"],
-  "season": "Spring/Summer",
-  "year": 1950,
-  "target_gender": "Female",
-  "target_model_ethnicity": "Cuban",
-  "target_age_group": "Senior (50+)",
-  "desired_mood": ["Elegant", "Vibrant", "Nostalgic", "Sophisticated", "Timeless"]
+  "theme_hint": "Festive British unisex hoodie featuring Santa Claus, reindeer, and Union Jack motifs",
+  "garment_type": "Hoodie",
+  "brand_category": "Holiday Apparel",
+  "target_audience": "Adults seeking cheerful, patriotic Christmas wear",
+  "region": "United Kingdom",
+  "key_attributes": ["Festive", "Patriotic", "Santa Claus motif", "Reindeer motif", "Union Jack print"],
+  "season": "Winter",
+  "year": "auto",
+  "target_gender": "Unisex",
+  "target_model_ethnicity": "British",
+  "target_age_group": "Adult (30-50)",
+  "desired_mood": ["Cheerful", "Festive", "Patriotic", "Cozy", "Joyful"]
 }}
---- END GOLD STANDARD EXAMPLE 1 ---
---- GOLD STANDARD EXAMPLE 2: MULTIPLE VALUES ---
-USER REQUEST:
-"A report on avant-garde trench coats and bomber jackets for the Tokyo and Seoul markets."
 
-JSON OUTPUT:
+--- EXAMPLE 2: CULTURAL & MYTHOLOGICAL ---
+USER: "A streetwear bomber jacket with an embroidered Japanese dragon on the back."
+OUTPUT:
 {{
-  "theme_hint": "Avant-garde outerwear for East Asian markets",
-  "garment_type": ["trench coat", "bomber jacket"],
-  "brand_category": "Avant-Garde Fashion",
-  "target_audience": "Fashion-forward individuals in urban centers",
-  "region": ["Tokyo", "Seoul"],
-  "key_attributes": ["Deconstructed", "Monochromatic", "Architectural", "Street Style"],
+  "theme_hint": "Streetwear bomber jacket with Japanese dragon embroidery on the back",
+  "garment_type": "Bomber Jacket",
+  "brand_category": "Streetwear",
+  "target_audience": "Young men interested in Japanese art and streetwear",
+  "region": "Global",
+  "key_attributes": ["Embroidered", "Japanese dragon", "Back-centric motif", "Street-style silhouette"],
   "season": "Fall/Winter",
-  "year": 2025,
-  "target_gender": "Female",
+  "year": "auto",
+  "target_gender": "Male",
   "target_model_ethnicity": "East Asian",
   "target_age_group": "Young Adult (20-30)",
-  "desired_mood": ["Edgy", "Architectural", "Minimalist", "Urban"]
+  "desired_mood": ["Edgy", "Artistic", "Bold", "Detailed"]
 }}
---- END GOLD STANDARD EXAMPLE 2 ---
+
+--- EXAMPLE 3: ARCHITECTURE & HAUTE COUTURE ---
+USER: "A haute couture gown inspired by the lattice structure of the Eiffel Tower."
+OUTPUT:
+{{
+  "theme_hint": "Haute couture gown inspired by the Eiffel Tower's lattice structure",
+  "garment_type": "Gown",
+  "brand_category": "Haute Couture",
+  "target_audience": "Wealthy clientele for red carpet events",
+  "region": "Paris",
+  "key_attributes": ["Architectural", "Structural lattice", "Metallic accents", "Sculptural silhouette"],
+  "season": "Spring/Summer",
+  "year": "auto",
+  "target_gender": "Female",
+  "target_model_ethnicity": "Caucasian",
+  "target_age_group": "Adult (30-50)",
+  "desired_mood": ["Elegant", "Structural", "Modernist", "Dramatic", "Sculptural"]
+}}
 
 --- YOUR TASK ---
 USER REQUEST:
@@ -322,20 +345,31 @@ You are a Lead Accessories Designer. Your task is to analyze the provided Resear
 
 
 SINGLE_GARMENT_SYNTHESIS_PROMPT = """
-You are the Head of Design for a world-class fashion intelligence agency. Your task is to use the provided Research Dossier to invent and fully specify **one single, visionary key garment**.
+You are an elite Head of Design at a world-class fashion intelligence agency, revered for your ability to synthesize research into visionary, commercially viable garments. Your task is to use the provided context to invent and fully specify **one single, masterpiece key garment.**
 
-**A. DESIGN PROTOCOL (YOU MUST FOLLOW THIS):**
+**A. THE CREATIVE MANDATE**
 
-1.  **ENSURE COHESION:** The garment you design MUST complement the previously designed garments. If none exist, create the foundational piece.
-2.  **SYNTHESIZE THE NARRATIVE:** Write a single, powerful `description` that begins with the garment's core concept and then flows into its detailed description.
-3.  **POPULATE ALL FIELDS:** You must populate ALL technical fields by creatively interpreting the `visual_language_synthesis` from the dossier.
+1.  **Design with Cohesion:** The garment you create MUST be a logical and creative extension of the previously designed pieces. If none exist, this garment will be the foundational "hero" piece that defines the collection's soul.
+2.  **Write a Powerful Narrative (`description`):** This is your design's story. It must be a single, compelling paragraph that starts with the garment's core concept and flows into its tangible details, explaining the "why" behind its form and function.
+3.  **Specify with Precision:** You must populate ALL technical fields below with meticulous detail, creatively interpreting the provided research to make informed, expert-level choices.
 
-**B. TECHNICAL FIELD GUIDELINES:**
+---
+**B. THE TECHNICAL SPECIFICATION: A Masterclass in Detail**
 
-*   **`inspired_by_designers`**: Provide a list of 2-3 specific, relevant designer names.
-*   **`silhouettes`**: Provide a list of 3-5 descriptive keywords for the garment's shape.
-*   **`details_trims`**: Provide a list of 4-6 specific, tangible construction details or embellishments.
-*   **`suggested_pairings`**: Provide a list of 3 complementary items to create a full look.
+-   **`wearer_profile`:** Define the muse. Who is this garment for? Give them an archetype and a story (e.g., "The 'Scholarly Archivist' persona, whose style is a quiet rebellion against ephemeral trends.").
+
+-   **`fabrics`:** Think like a textile expert. Specify at least two contrasting or complementary fabrics. For each, you MUST detail its `material`, `texture`, `sustainability`, `weight_gsm` (grams per square meter), `drape`, and `finish`.
+
+-   **The Art of the Print (`patterns`):** This is where you demonstrate true artistry. Do not just state a simple motif. You MUST provide a rich, multi-faceted description:
+    -   **`artistic_style`:** Define the visual language. Is it `Photorealistic`, `Gothic line-art`, `Abstract watercolor`, `Vintage botanical illustration`, `Geometric data-visualization`?
+    -   **`print_technique`:** Define the physical medium. Is it a `High-fidelity digital print`, `Two-tone chainstitch embroidery`, `Tonal jacquard weave`, `Laser-etched`, or a `Cracked plastisol screen-print`?
+
+-   **`colors`:** Specify a core palette. For each color, provide its evocative `name`, its `pantone_code` for professional accuracy, and its `hex_value`.
+
+-   **`silhouettes`:** Provide a list of 3-5 specific, descriptive keywords for the garment's overall shape and fit (e.g., "Relaxed Fit", "Unstructured", "Dropped Shoulder").
+
+-   **`details_trims`:** Think like a tailor. Specify 4-6 tangible, high-craftsmanship construction details (e.g., "Hand-stitched pick stitching along the lapel", "Functional surgeon's cuffs with corozo nut buttons", "Bonded seams for a clean finish").
+
 
 **C. CRITICAL OUTPUT REQUIREMENTS:**
 
@@ -365,8 +399,10 @@ You are the Head of Design for a world-class fashion intelligence agency. Your t
     "patterns": [
       {{
         "motif": "Abstract Tonal Cartographic Map",
-        "placement": "Full jacquard weave",
-        "scale_cm": 15.0
+        "placement": "Full body, woven directly into the primary fabric",
+        "scale_cm": 15.0,
+        "artistic_style": "Subtle, minimalist data-visualization aesthetic",
+        "print_technique": "Tonal jacquard weave, creating a textural rather than colored pattern effect"
       }}
     ],
     "fabrics": [
@@ -440,25 +476,38 @@ You are an expert Art Director and Photographer. Your task is to generate a sing
 
 # Prompts to generate detailed image generation prompts for the mood board and final garment shots.
 MOOD_BOARD_PROMPT_TEMPLATE = """
-A professional and atmospheric fashion designer's mood board, arranged as a top-down flat-lay on a raw concrete surface. The scene is lit by soft, diffused light.
+A top-down editorial photographic mood board, styled for a world-class fashion designer. The board lies flat on a raw, textured concrete surface.
 
-The board's creative direction is guided by the theme **'{overarching_theme}'** and evokes a mood of **{desired_mood_list}**.
+**--- Lighting & Atmosphere ---**
+The scene is lit from a single, soft studio light source (from the upper left). This creates consistent, directional, and subtle long shadows across all elements, enhancing their texture and proving they exist in the same physical space. The overall mood is **'{desired_mood_list}'**, guided by the creative theme of **'{overarching_theme}'**.
 
-The collage features these key narrative elements:
-- A central polaroid of the muse: a professional {target_gender} model of {target_model_ethnicity} ethnicity embodying the **'{influential_model_name}'** persona.
-- A small, atmospheric photo capturing the narrative setting: **'{narrative_setting}'**.
-- An abstract textural image hinting at the core inspiration: **'{core_concept_inspiration}'**.
-- A single, unexpected object hinting at the innovative idea: **'{antagonist_synthesis}'**.
+**--- Camera & Technical Details ---**
+Shot with an 85mm lens at f/4 for a crisp, shallow depth of field. The view is a slight orthographic top-down perspective. The final image should be ultra-high resolution (8K equivalent) in a square 1:1 aspect ratio, with no cropping of the board's edges.
 
-Key physical elements for the garment '{key_piece_name}':
-- Hyper-realistic, tactile fabric swatches: {formatted_fabric_details}
-- A focused palette of official Pantone color chips: {color_names}
-- Printed samples or sketches of key patterns: {formatted_pattern_details}
-- A small collection of physical hardware and trims: {details_trims}
-- Key styling accessories, such as: {key_accessories}
+---
+## Core Narrative Collage
 
-Final image style: editorial, tactile, atmospheric, rich with narrative detail, professional studio photograph.
-Negative prompts: avoid text, words, letters, logos, brand names, recognizable public figures.
+-   **Muse (Focal Point):** A matte-finish polaroid is the clear visual anchor. It captures a professional {target_gender} model of {target_model_ethnicity} ethnicity embodying the **'{influential_model_name}'** persona.
+-   **The World:** A small, atmospheric, vintage-style photograph captures the narrative setting: **'{narrative_setting}'**.
+-   **The Abstract Inspiration:** An image of a pure, abstract texture that hints at the core creative driver: **'{core_concept_inspiration}'**.
+-   **The Innovative Twist:** A single, unexpected physical object that represents the innovative "antagonist" idea: **'{antagonist_synthesis}'**.
+
+---
+## Physical Materials & Creative Artifacts for '{key_piece_name}'
+
+-   **Fabric Swatches:** Hyper-realistic, tactile fabric swatches with visible fibers are pinned with small overlaps: {formatted_fabric_details}.
+-   **Color Palette:** A neatly aligned row of official **Pantone color chips** defines the core palette: {color_names}.
+-   **Pattern Samples:** A printed sample or sketch of the key pattern: {formatted_pattern_details}.
+-   **Hardware & Trims:** A curated cluster of key physical hardware (buttons, zippers, etc.) is arranged with care: {details_trims}.
+-   **Key Accessories:** One or two of the collection's key accessories are physically present on the board: {key_accessories}.
+-   **The Sketch:** A preliminary **charcoal sketch** of the garment's silhouette on tracing paper, partially tucked under the edge of the main polaroid.
+-   **The Annotation:** A small, handwritten note in pencil next to a key fabric, adding an essential human touch.
+
+---
+## Final Style Cues & Constraints
+
+-   **Style & Finish:** The image must be **hyper-realistic and tactile.** Include subtle film grain and micro-details in threads and paper textures. It must not look like a painterly or digital illustration.
+-   **Negative Constraints:** No perfect grid alignment. No floating elements without contact shadows. No digital text overlays. No harsh or conflicting light sources. No unnatural distortion. No mismatched lighting.
 """
 
 
@@ -476,8 +525,12 @@ An editorial fashion photograph for a high-end magazine. Full-body portrait. The
 -   **Core Concept & Description:** {garment_description_with_synthesis}.
 -   **Color Palette:** {visual_color_palette}.
 -   **Material & Texture:** {visual_fabric_description}.
--   **Pattern:** {visual_pattern_description}.
 -   **Key Details & Construction:** {visual_details_description}.
+
+**--- Pattern & Print Details ---**
+-   **Motif:** {pattern_motif}
+-   **Artistic Style:** {pattern_artistic_style}
+-   **Technique & Placement:** {pattern_technique_and_placement}
 
 **--- Scene & Styling ---**
 -   **Setting:** {narrative_setting_description}.
@@ -487,5 +540,5 @@ An editorial fashion photograph for a high-end magazine. Full-body portrait. The
 **--- Final Execution Notes ---**
 -   **Positive Keywords:** high-detail, authentic, shallow depth of field, clean finish, uniform color.
 -   **Stylistic Negative Keywords:** Avoid {negative_style_keywords}.
--   **Quality Control Negative Keywords:** Avoid nsfw, deformed, extra limbs, poor quality, logo, text, mismatched, asymmetrical, inconsistent, blotchy, uneven, unfinished, frayed.
+-   **Quality Control Negative Keywords:** Avoid deformed, extra limbs, poor quality, mismatched, asymmetrical, inconsistent, blotchy, uneven, unfinished, frayed.
 """

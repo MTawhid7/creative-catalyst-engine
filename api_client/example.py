@@ -12,7 +12,7 @@ from .exceptions import APIClientError
 # The client will send this text to the API.
 
 USER_PASSAGE = """
-What styles are trending among influencers on Instagram in 2025?
+Generate a cheerful and family-friendly unisex hoodie. CRITICAL: The design must explicitly feature traditional illustrations of Santa Claus and reindeer integrated with the Union Jack flag. The overall mood must be joyful and festive, avoiding any references to punk, street art, or other rebellious subcultures.
 """
 
 # ===================================================================

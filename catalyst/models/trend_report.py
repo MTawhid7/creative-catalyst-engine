@@ -36,6 +36,14 @@ class PatternDetail(BaseModel):
     # Make this a standard optional field. The prompt will be responsible for
     # only providing a value for repeating patterns.
     scale_cm: Optional[Union[float, str]] = None
+    artistic_style: Optional[str] = Field(
+        default="",
+        description="The artistic style of the print (e.g., 'Vintage botanical illustration', 'Geometric abstract', 'Photorealistic').",
+    )
+    print_technique: Optional[str] = Field(
+        default="",
+        description="The physical application method (e.g., 'High-fidelity digital print', 'Chainstitch embroidery', 'Jacquard weave').",
+    )
 
 
 class FabricDetail(BaseModel):
