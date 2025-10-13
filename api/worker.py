@@ -39,7 +39,9 @@ async def _publish_status(redis_client: ArqRedis, job_id: str, context: RunConte
     await redis_client.set(status_key, context.current_status, ex=60)
 
 
-async def create_creative_report(ctx: dict, user_passage: str) -> Dict[str, Any]:
+async def create_creative_report(
+    ctx: dict, user_passage: str, variation_seed: int = 0
+) -> Dict[str, Any]:
     """
     The main ARQ task. It now runs the core pipeline and a status publisher
     concurrently for real-time progress updates.
@@ -55,17 +57,27 @@ async def create_creative_report(ctx: dict, user_passage: str) -> Dict[str, Any]
     job_id = ctx["job_id"]
     setup_logging_run_id(job_id)
 
-    logger.info(f"Received creative brief for processing: '{user_passage[:100]}...'")
+    logger.info(
+        f"Received creative brief for processing: '{user_passage[:100]}...' (Seed: {variation_seed})"
+    )
 
     try:
-        cached_result = await get_from_l0_cache(user_passage, redis_client)
+        # --- CHANGE: Pass the seed to the cache check ---
+        cached_result = await get_from_l0_cache(
+            user_passage, variation_seed, redis_client
+        )
         if cached_result:
-            # The cleanup is no longer needed here as it ran at the start.
             return cached_result
     except Exception as e:
         logger.error(f"⚠️ An error occurred during L0 cache check: {e}", exc_info=True)
 
-    context = RunContext(user_passage=user_passage, results_dir=Path("/app/results"))
+    # --- CHANGE: Initialize RunContext with the seed ---
+    # NOTE: This requires updating the RunContext class in 'catalyst/context.py'
+    context = RunContext(
+        user_passage=user_passage,
+        results_dir=Path("/app/results"),
+        variation_seed=variation_seed,
+    )
 
     publisher_task = asyncio.create_task(_publish_status(redis_client, job_id, context))
     pipeline_task = asyncio.create_task(run_pipeline(context))
@@ -89,8 +101,8 @@ async def create_creative_report(ctx: dict, user_passage: str) -> Dict[str, Any]
         "artifacts_path": str(context.results_dir),
     }
 
-    await set_in_l0_cache(user_passage, final_result, redis_client)
-    # The cleanup function has been removed from the end of the task.
+    await set_in_l0_cache(user_passage, variation_seed, final_result, redis_client)
+
     return final_result
 
 

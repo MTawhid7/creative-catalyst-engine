@@ -37,8 +37,14 @@ class StructuredBriefModel(BaseModel):
     target_age_group: str
     desired_mood: List[str]
 
-
-# --- START: THE DEFINITIVE, CONSOLIDATED REFACTOR ---
+    # --- START: NEW FIELDS FOR DYNAMIC GENERATION ---
+    generation_strategy: str = Field(
+        description="The strategy to use: 'collection', 'variations', or 'specified_items'."
+    )
+    explicit_garments: Optional[List[str]] = Field(
+        None, description="A list of specific garments the user requested, if any."
+    )
+    # --- END: NEW FIELDS ---
 
 
 class ConsolidatedBriefingModel(BaseModel):
@@ -116,48 +122,43 @@ class BriefDeconstructionProcessor(BaseProcessor):
 
 
 class ConsolidatedBriefingProcessor(BaseProcessor):
-    """
-    Pipeline Step 2: Efficiently performs ethos clarification, theme expansion,
-    and keyword extraction in a single, powerful AI call.
-    """
     async def process(self, context: RunContext) -> RunContext:
-        self.logger.info("🔬 Performing consolidated briefing (ethos, concepts, keywords)...")
+        self.logger.info(
+            "🔬 Performing consolidated briefing (ethos, concepts, keywords)..."
+        )
         try:
             prompt = prompt_library.CONSOLIDATED_BRIEFING_PROMPT.format(
                 user_passage=context.user_passage,
                 theme_hint=context.enriched_brief.get("theme_hint", ""),
-                briefing_schema=json.dumps(ConsolidatedBriefingModel.model_json_schema())
+                briefing_schema=json.dumps(
+                    ConsolidatedBriefingModel.model_json_schema()
+                ),
             )
             briefing_model = await invoke_with_resilience(
                 ai_function=gemini.generate_content_async,
                 prompt=prompt,
                 response_schema=ConsolidatedBriefingModel,
             )
-
-            # Populate the context with the rich data from the single call
             context.brand_ethos = briefing_model.ethos
-            context.enriched_brief["expanded_concepts"] = briefing_model.expanded_concepts
-
-            # Combine and de-duplicate keywords
+            context.enriched_brief["expanded_concepts"] = (
+                briefing_model.expanded_concepts
+            )
             search_keywords = set(context.enriched_brief.get("search_keywords", []))
             if context.enriched_brief.get("theme_hint"):
                 search_keywords.add(context.enriched_brief["theme_hint"])
             search_keywords.update(briefing_model.search_keywords)
             context.enriched_brief["search_keywords"] = sorted(list(search_keywords))
-
             self.logger.info("✅ Success: Consolidated briefing complete.")
         except MaxRetriesExceededError:
-            self.logger.warning("⚠️ Consolidated briefing failed. Proceeding with minimal data.")
+            self.logger.warning(
+                "⚠️ Consolidated briefing failed. Proceeding with minimal data."
+            )
             context.brand_ethos = ""
             context.enriched_brief["expanded_concepts"] = []
-
         return context
 
+
 class CreativeAntagonistProcessor(BaseProcessor):
-    """
-    Pipeline Step 3: Generates the single, innovative "creative antagonist"
-    synthesis to provide a unique twist.
-    """
     async def process(self, context: RunContext) -> RunContext:
         self.logger.info("🎨 Generating creative antagonist synthesis...")
         try:
@@ -171,9 +172,8 @@ class CreativeAntagonistProcessor(BaseProcessor):
             context.antagonist_synthesis = model.antagonist_synthesis
             self.logger.info("✅ Success: Creative antagonist generated.")
         except MaxRetriesExceededError:
-            self.logger.warning("⚠️ Creative antagonist generation failed. Proceeding without it.")
+            self.logger.warning(
+                "⚠️ Creative antagonist generation failed. Proceeding without it."
+            )
             context.antagonist_synthesis = ""
-
         return context
-
-# --- END: THE DEFINITIVE, CONSOLIDATED REFACTOR ---

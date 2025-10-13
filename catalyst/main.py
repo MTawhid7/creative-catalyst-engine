@@ -1,5 +1,3 @@
-# catalyst/main.py
-
 import os
 import shutil
 from datetime import datetime
@@ -14,13 +12,10 @@ from .caching import cache_manager
 logger = get_logger(__name__)
 
 
-# --- START: DEFINITIVE REFACTOR FOR GRANULAR STATUS ---
 async def run_pipeline(context: RunContext) -> RunContext:
     """
     The core, reusable function that executes the entire creative pipeline.
-    It now accepts a pre-initialized RunContext object.
     """
-    # The context is now created by the worker, so we just use it.
     setup_logging_run_id(context.run_id)
     logger.info("================== RUN ID: %s ==================", context.run_id)
     logger.info("      CREATIVE CATALYST ENGINE - PROCESS STARTED         ")
@@ -30,7 +25,6 @@ async def run_pipeline(context: RunContext) -> RunContext:
     try:
         is_from_cache = await orchestrator.run(context)
 
-        # This block now only runs if the orchestrator SUCCEEDS.
         if context.final_report:
             timestamp_str = datetime.now().strftime("%Y%m%d-%H%M%S")
             slug = context.theme_slug or "untitled"
@@ -54,9 +48,15 @@ async def run_pipeline(context: RunContext) -> RunContext:
 
             if not is_from_cache:
                 logger.info("⚙️ Storing new artifacts in permanent L1 cache...")
+
+                # --- START: DEFINITIVE FIX for Attribute Error ---
+                # The method name has a leading underscore, indicating it is a
+                # private helper method. This corrects the AttributeError.
                 semantic_key = cache_manager._create_semantic_key(
-                    context.enriched_brief
+                    context.enriched_brief, context.variation_seed
                 )
+                # --- END: DEFINITIVE FIX ---
+
                 doc_id = hashlib.sha256(semantic_key.encode("utf-8")).hexdigest()
                 artifact_dest_path = settings.ARTIFACT_CACHE_DIR / doc_id
 
@@ -67,7 +67,7 @@ async def run_pipeline(context: RunContext) -> RunContext:
                         "cached_results_path": doc_id,
                     }
                     await cache_manager.add_to_report_cache_async(
-                        context.enriched_brief, payload_to_cache
+                        context.enriched_brief, payload_to_cache, context.variation_seed
                     )
                     logger.info(
                         f"✅ Successfully stored artifacts in L1 cache: '{doc_id}'"
@@ -84,13 +84,8 @@ async def run_pipeline(context: RunContext) -> RunContext:
         logger.critical(
             "❌ PIPELINE FAILED with an unrecoverable error.", exc_info=True
         )
-        # The original exception must be re-raised to signal a true failure
-        # to the calling worker and the test suite.
         raise
 
     logger.info("      CREATIVE PROCESS FINISHED for Run ID: %s", context.run_id)
     logger.info("=========================================================")
     return context
-
-
-# --- END: DEFINITIVE REFACTOR FOR GRANULAR STATUS ---

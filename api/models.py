@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 
 class JobRequest(BaseModel):
     user_passage: str
+    variation_seed: int = 0
 
 
 class JobResponse(BaseModel):

@@ -24,7 +24,13 @@ logger = get_logger(__name__)
 )
 async def submit_job(request: JobRequest, http_request: Request) -> JobResponse:
     redis: ArqRedis = http_request.app.state.redis
-    job = await redis.enqueue_job("create_creative_report", request.user_passage)
+
+    # Enqueue the job with both parameters. ARQ will pass these as arguments
+    # to the 'create_creative_report' worker function.
+    job = await redis.enqueue_job(
+        "create_creative_report", request.user_passage, request.variation_seed
+    )
+
     if not job:
         raise HTTPException(status_code=500, detail="Failed to enqueue the job.")
     return JobResponse(job_id=job.job_id, status="queued")

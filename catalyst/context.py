@@ -18,10 +18,14 @@ class RunContext:
     contain any operational logic or logging.
     """
 
-    def __init__(self, user_passage: str, results_dir: Path):
+    # --- CHANGE: Add 'variation_seed' to the constructor ---
+    def __init__(self, user_passage: str, results_dir: Path, variation_seed: int = 0):
         # The run_id is a unique identifier for logging and the initial temp folder.
         self.run_id: str = str(uuid.uuid4()).split("-")[0]
         self.user_passage: str = user_passage
+
+        # --- ADD: Store the variation_seed ---
+        self.variation_seed: int = variation_seed
 
         # This will be populated with the human-readable theme slug later.
         self.theme_slug: str = ""
@@ -29,30 +33,21 @@ class RunContext:
         # The initial folder is temporary and will be renamed at the end of the run.
         self.results_dir: Path = results_dir / self.run_id
 
-        self.artifacts: Dict[str, Any] = {"inputs": {"user_passage": user_passage}}
+        # --- CHANGE: Include the seed in the initial artifacts ---
+        self.artifacts: Dict[str, Any] = {
+            "inputs": {"user_passage": user_passage, "variation_seed": variation_seed}
+        }
 
         # --- Pipeline Data Fields ---
         self.enriched_brief: Dict = {}
         self.brand_ethos: str = ""
         self.antagonist_synthesis: str = ""
-
-        # --- START: THE DEFINITIVE FIX ---
-        # The structured_research_context is now correctly typed as a dictionary.
-        # Its default value is changed from an empty string to an empty dictionary.
         self.structured_research_context: Dict[str, Any] = {}
-        # --- END: THE DEFINITIVE FIX ---
-
         self.final_report: Dict = {}
 
-        # --- START: GRANULAR STATUS TRACKING FIELDS ---
-        # A human-readable string representing the current stage of the pipeline.
-        # This will be updated by the orchestrator and published by the worker.
+        # --- Granular Status Tracking Fields ---
         self.current_status: str = "Initializing..."
-
-        # A flag to signal to background tasks (like the status publisher)
-        # that the main pipeline has finished processing.
         self.is_complete: bool = False
-        # --- END: GRANULAR STATUS TRACKING FIELDS ---
 
     def record_artifact(self, step_name: str, data: Any):
         """Records the output of a processor for debugging purposes."""
@@ -61,22 +56,17 @@ class RunContext:
     def save_artifacts(self):
         """
         Saves all recorded artifacts to a JSON file.
-        This method is designed to not fail silently and will raise exceptions
-        on file errors, to be caught by the calling orchestrator.
         """
         self.results_dir.mkdir(parents=True, exist_ok=True)
         artifact_path = self.results_dir / "debug_run_artifacts.json"
 
         with open(artifact_path, "w", encoding="utf-8") as f:
-            # The default=str is a safeguard for objects that are not JSON serializable
             json.dump(self.artifacts, f, indent=2, default=str)
 
     def save_dossier_artifact(self):
         """
-        Saves the structured research dossier to its own dedicated JSON file
-        for easier debugging and quality analysis.
+        Saves the structured research dossier to its own dedicated JSON file.
         """
-        # Only proceed if the dossier exists and is a non-empty dictionary
         if not self.structured_research_context or not isinstance(
             self.structured_research_context, dict
         ):
@@ -88,7 +78,6 @@ class RunContext:
             with open(dossier_path, "w", encoding="utf-8") as f:
                 json.dump(self.structured_research_context, f, indent=2)
         except Exception as e:
-            # This should not be a critical failure that stops the pipeline
             print(f"Warning: Failed to save research dossier artifact: {e}")
 
     def to_dict(self) -> Dict[str, Any]:
@@ -96,6 +85,8 @@ class RunContext:
         return {
             "run_id": self.run_id,
             "user_passage": self.user_passage,
+            # --- ADD: Include the seed in the log dictionary ---
+            "variation_seed": self.variation_seed,
             "enriched_brief": self.enriched_brief,
             "brand_ethos": self.brand_ethos,
             "antagonist_synthesis": self.antagonist_synthesis,
@@ -103,6 +94,5 @@ class RunContext:
             "final_report_keys": (
                 list(self.final_report.keys()) if self.final_report else []
             ),
-            # Add the new status field to our debug output.
             "current_status": self.current_status,
         }

@@ -33,13 +33,13 @@ class CreativeCatalystClient:
         self.submit_url = f"{self.base_url}/v1/creative-jobs"
 
     def _get_stream_url(self, job_id: str) -> str:
-        """Constructs the URL for the job status stream."""
         return f"{self.submit_url}/{job_id}/stream"
 
-    def _submit_job(self, passage: str) -> str:
+    # --- CHANGE: Update helper to accept and send the seed ---
+    def _submit_job(self, passage: str, variation_seed: int) -> str:
         """Helper function to submit the job and return the job ID."""
-        print(f"Submitting job to {self.submit_url}...")
-        payload = {"user_passage": passage}
+        print(f"Submitting job to {self.submit_url} with seed {variation_seed}...")
+        payload = {"user_passage": passage, "variation_seed": variation_seed}
         response = requests.post(self.submit_url, json=payload, timeout=15)
         response.raise_for_status()
         job_data = response.json()
@@ -48,25 +48,23 @@ class CreativeCatalystClient:
             raise JobSubmissionError("API did not return a job_id.")
         return job_id
 
+    # --- CHANGE: Update public method to accept the seed ---
     def get_creative_report_stream(
-        self, passage: str
+        self, passage: str, variation_seed: int = 0
     ) -> Generator[Dict[str, Any], None, None]:
         """
         Submits a creative brief and YIELDS real-time status updates.
-        The final yielded object will contain the full report.
         """
         try:
-            job_id = self._submit_job(passage)
+            # --- CHANGE: Pass the seed to the submit helper ---
+            job_id = self._submit_job(passage, variation_seed)
             yield {"event": "job_submitted", "job_id": job_id}
 
             stream_url = self._get_stream_url(job_id)
             print(f"📡 Connecting to event stream at {stream_url}...")
-
             response = requests.get(stream_url, stream=True, timeout=360)
             response.raise_for_status()
-
-            client = SSEClient(response.iter_content()) # type: ignore
-
+            client = SSEClient((chunk for chunk in response.iter_content()))
             for event in client.events():
                 data = json.loads(event.data)
                 if event.event == "progress":
@@ -81,13 +79,10 @@ class CreativeCatalystClient:
                     raise JobSubmissionError(
                         data.get("detail", "Stream failed with an error event")
                     )
-
             raise JobSubmissionError(
                 "Stream ended unexpectedly without a 'complete' event."
             )
 
-        # --- START: THE DEFINITIVE FIX ---
-        # Catch the directly imported, real exception classes.
         except RequestsConnectionError as e:
             raise APIConnectionError(f"Could not connect to the API: {e}") from e
         except HTTPError as e:
@@ -97,4 +92,3 @@ class CreativeCatalystClient:
             ) from e
         except ReadTimeout as e:
             raise APIConnectionError("Connection to the event stream timed out.") from e
-        # --- END: THE DEFINITIVE FIX ---

@@ -2,12 +2,12 @@
 
 """
 This module contains the self-contained, single-responsibility "Builder"
-strategies for the report, now fully decoupled from the `brand_ethos` context.
+strategies for the report.
 """
 
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from catalyst import settings
 from ...clients import gemini
@@ -27,14 +27,12 @@ logger = get_logger(__name__)
 
 
 class BaseSectionBuilder(ABC):
-    """Abstract base class for a dossier-informed report section builder."""
-
+    # ... (This class remains unchanged) ...
     def __init__(self, context: RunContext, research_dossier: Dict[str, Any]):
         self.context = context
         self.brief = context.enriched_brief
         self.dossier = research_dossier
         self.logger = get_logger(self.__class__.__name__)
-        # The base arguments are now simplified and decoupled from the context's attributes.
         self.base_prompt_args = {
             "research_dossier": json.dumps(self.dossier, indent=2),
             "enriched_brief": json.dumps(self.brief, indent=2),
@@ -42,16 +40,10 @@ class BaseSectionBuilder(ABC):
 
     @abstractmethod
     async def build(self) -> Dict[str, Any] | None:
-        """Builds a specific section of the report."""
         pass
 
 
-# --- Concrete Builder Implementations ---
-
-
 class NarrativeSynthesisBuilder(BaseSectionBuilder):
-    """Synthesizes the comprehensive strategic narrative for the report."""
-
     async def build(self) -> Dict[str, Any] | None:
         self.logger.info("Synthesizing strategic narrative...")
         try:
@@ -67,18 +59,11 @@ class NarrativeSynthesisBuilder(BaseSectionBuilder):
             )
             return model.model_dump()
         except MaxRetriesExceededError:
-            self.logger.warning(
-                "Narrative synthesis failed. This section will be missing critical data."
-            )
+            self.logger.warning("Narrative synthesis failed.")
             return None
 
 
 class CreativeAnalysisBuilder(BaseSectionBuilder):
-    """
-    An efficient, consolidated builder that synthesizes cultural drivers,
-    influential models, and commercial strategy in a single AI call.
-    """
-
     async def build(self) -> Dict[str, Any] | None:
         self.logger.info("Synthesizing consolidated creative analysis...")
         try:
@@ -94,10 +79,7 @@ class CreativeAnalysisBuilder(BaseSectionBuilder):
             )
             return model.model_dump(mode="json")
         except MaxRetriesExceededError:
-            self.logger.warning(
-                "Consolidated creative analysis failed. Using safe defaults."
-            )
-            # Return a valid structure with empty values to prevent downstream errors
+            self.logger.warning("Consolidated creative analysis failed.")
             return {
                 "cultural_drivers": [],
                 "influential_models": [],
@@ -106,8 +88,6 @@ class CreativeAnalysisBuilder(BaseSectionBuilder):
 
 
 class AccessoriesBuilder(BaseSectionBuilder):
-    """Synthesizes the full suite of accessories for the report."""
-
     async def build(self) -> Dict[str, Any] | None:
         self.logger.info("Synthesizing accessories suite...")
         try:
@@ -123,9 +103,7 @@ class AccessoriesBuilder(BaseSectionBuilder):
             )
             return model.model_dump(mode="json")
         except MaxRetriesExceededError:
-            self.logger.warning(
-                "Accessories synthesis failed. Using empty list as fallback."
-            )
+            self.logger.warning("Accessories synthesis failed.")
             return {"accessories": []}
 
 
@@ -140,31 +118,56 @@ class SingleGarmentBuilder:
         self.base_prompt_args = {
             "research_dossier": json.dumps(self.dossier, indent=2),
             "enriched_brief": json.dumps(self.brief, indent=2),
-            "brand_ethos": self.context.brand_ethos,
         }
 
     async def build(
-        self, previously_designed_garments: List[Dict[str, Any]]
+        self,
+        previously_designed_garments: List[Dict[str, Any]],
+        variation_seed_override: Optional[int] = None,
+        specific_garment_override: Optional[str] = None,
     ) -> Dict[str, Any] | None:
-        self.logger.info(
-            f"Synthesizing garment #{len(previously_designed_garments) + 1}..."
+        seed_to_use = (
+            variation_seed_override
+            if variation_seed_override is not None
+            else self.context.variation_seed
         )
+
+        self.logger.info(
+            f"Synthesizing garment #{len(previously_designed_garments) + 1} with effective seed {seed_to_use}..."
+        )
+
         try:
-            prompt_args = self.base_prompt_args | {
-                "previously_designed_garments": json.dumps(
-                    previously_designed_garments, indent=2
-                ),
-                "single_garment_schema": json.dumps(
-                    SingleGarmentModel.model_json_schema(), indent=2
-                ),
-            }
+            if seed_to_use == 0:
+                prompt_template = prompt_library.SINGLE_GARMENT_SYNTHESIS_PROMPT
+                prompt_args = self.base_prompt_args.copy()
+            else:
+                prompt_template = prompt_library.VARIANT_GARMENT_SYNTHESIS_PROMPT
+                prompt_args = self.base_prompt_args.copy()
+                # --- START: DEFINITIVE FIX for TypeError ---
+                # The prompt's .format() method expects string values. The integer
+                # seed is converted to a string to prevent a TypeError.
+                prompt_args["variation_seed"] = str(seed_to_use)
+                # --- END: DEFINITIVE FIX ---
+
+            prompt_args["previously_designed_garments"] = json.dumps(
+                previously_designed_garments, indent=2
+            )
+            prompt_args["single_garment_schema"] = json.dumps(
+                SingleGarmentModel.model_json_schema(), indent=2
+            )
+            prompt_args["specific_garment_to_design"] = (
+                specific_garment_override
+                or "None. You have the creative freedom to invent a suitable garment."
+            )
+
             model = await invoke_with_resilience(
                 gemini.generate_content_async,
-                prompt_library.SINGLE_GARMENT_SYNTHESIS_PROMPT.format(**prompt_args),
+                prompt_template.format(**prompt_args),
                 SingleGarmentModel,
                 model_name=settings.GEMINI_PRO_MODEL_NAME,
             )
             return model.model_dump(mode="json")
+
         except MaxRetriesExceededError:
             self.logger.error(
                 "Failed to synthesize a single garment after all retries."

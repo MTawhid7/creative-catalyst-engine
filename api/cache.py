@@ -19,10 +19,8 @@ from . import prompts as api_prompts
 logger = get_logger(__name__)
 
 
-# Define the expected structure for the L0 key entities.
-# The values can be a mix of types, so we use 'Any'.
+# L0KeyEntities model remains the same...
 class L0KeyEntities(BaseModel):
-    # These fields are now guaranteed to be lists of strings or None.
     brand: Optional[List[str]] = None
     garment_type: Optional[List[str]] = None
     theme: Optional[List[str]] = None
@@ -44,7 +42,6 @@ class L0KeyEntities(BaseModel):
     )
     @classmethod
     def _normalize_string_fields_to_list(cls, v: Any) -> Optional[List[str]]:
-        """If a single string is passed, wrap it in a list."""
         if v is None:
             return None
         if isinstance(v, str):
@@ -55,57 +52,47 @@ class L0KeyEntities(BaseModel):
     @field_validator("year", mode="before")
     @classmethod
     def _normalize_year_to_list(cls, v: Any) -> Optional[List[Union[int, str]]]:
-        """
-        Accepts a single int, a single string, or a list, and ensures the
-        output is always a list.
-        """
         if v is None:
             return None
-        # If it's a single item (int or string), wrap it in a list.
         if isinstance(v, (str, int)):
             return [v] if v else None
-        # If it's already a list, pass it through.
         return v
 
 
-async def _generate_deterministic_key(user_passage: str) -> Optional[str]:
-    """
-    Makes a fast, RESILIENT AI call to extract core entities and builds a
-    stable, deterministic key string from them.
-    """
+# --- CHANGE: Update the function to accept the variation_seed ---
+async def _generate_deterministic_key(
+    user_passage: str, variation_seed: int
+) -> Optional[str]:
     try:
         prompt = api_prompts.L0_KEY_GENERATION_PROMPT.format(user_passage=user_passage)
-
         entities_model = await invoke_with_resilience(
             ai_function=l0_gemini_client.generate_content_async,
             prompt=prompt,
             response_schema=L0KeyEntities,
         )
-
-        # Use .model_dump() with exclude_unset=True. This will correctly
-        # omit any fields that were not explicitly set by the AI's response,
-        # such as the default 'key_attributes=[]'.
         entities = entities_model.model_dump(exclude_unset=True)
 
         if not entities:
-            logger.warning(
-                "L0 key generation did not extract any entities. Falling back to raw passage hash."
-            )
             normalized_passage = user_passage.strip().lower()
-            return f"raw_passage_hash:{hashlib.sha256(normalized_passage.encode()).hexdigest()}"
+            raw_hash = hashlib.sha256(normalized_passage.encode()).hexdigest()
+            # --- ADD: Include the seed in the fallback key as well ---
+            return f"raw_passage_hash:{raw_hash}|seed:{variation_seed}"
 
         key_parts = []
         for key in sorted(entities.keys()):
             value = entities[key]
             if isinstance(value, list):
-                # Use str() to handle mixed types like int/str in year
                 key_parts.append(f"{key}:{sorted([str(v) for v in value])}")
             else:
                 key_parts.append(f"{key}:{value}")
 
         stable_key = "|".join(key_parts)
-        logger.info(f"Generated deterministic L0 key: '{stable_key}'")
-        return stable_key
+
+        # --- ADD: Append the variation seed to the stable key to make it unique ---
+        stable_key_with_seed = f"{stable_key}|seed:{variation_seed}"
+
+        logger.info(f"Generated deterministic L0 key: '{stable_key_with_seed}'")
+        return stable_key_with_seed
 
     except MaxRetriesExceededError:
         logger.error("❌ Failed to generate deterministic L0 key after all retries.")
@@ -118,10 +105,11 @@ async def _generate_deterministic_key(user_passage: str) -> Optional[str]:
         return None
 
 
+# --- CHANGE: Update cache functions to accept and use the variation_seed ---
 async def get_from_l0_cache(
-    user_passage: str, redis_client: "ArqRedis"
+    user_passage: str, variation_seed: int, redis_client: "ArqRedis"
 ) -> Optional[Dict[str, Any]]:
-    stable_key = await _generate_deterministic_key(user_passage)
+    stable_key = await _generate_deterministic_key(user_passage, variation_seed)
     if not stable_key:
         return None
     try:
@@ -139,9 +127,12 @@ async def get_from_l0_cache(
 
 
 async def set_in_l0_cache(
-    user_passage: str, result: Dict[str, Any], redis_client: "ArqRedis"
+    user_passage: str,
+    variation_seed: int,
+    result: Dict[str, Any],
+    redis_client: "ArqRedis",
 ):
-    stable_key = await _generate_deterministic_key(user_passage)
+    stable_key = await _generate_deterministic_key(user_passage, variation_seed)
     if not stable_key:
         logger.warning("Cannot set L0 cache because key generation failed.")
         return

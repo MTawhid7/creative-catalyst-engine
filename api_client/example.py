@@ -8,12 +8,19 @@ from .exceptions import APIClientError
 # ===================================================================
 #  --- TEST CONFIGURATION ---
 # ===================================================================
-# This is the primary variable you should change to test new prompts.
-# The client will send this text to the API.
+# This script can now test all generation strategies and variations.
+#    CHOOSE YOUR SEED: Set the variation_seed to get different creative results.
+#    - Seed 0 is the default, canonical collection.
+#    - Seeds 1, 2, 3... will generate creative alternatives.
 
-USER_PASSAGE = """
-Generate a cheerful and family-friendly unisex hoodie. CRITICAL: The design must explicitly feature traditional illustrations of Santa Claus and reindeer integrated with the Union Jack flag. The overall mood must be joyful and festive, avoiding any references to punk, street art, or other rebellious subcultures.
+
+PROMPT = """
+Which graphic T-shirts are trending this summer among Gen Z?
 """
+
+
+# --- VARIATION SEED ---
+VARIATION_SEED = 1  # Change this to 1, 2, etc., to get new creative variations
 
 # ===================================================================
 
@@ -34,15 +41,11 @@ def download_images(image_urls: list[str], download_dir: Path):
             filename = url.split("/")[-1]
             save_path = download_dir / filename
             print(f"Downloading {filename}...")
-
             response = requests.get(url, timeout=30)
             response.raise_for_status()
-
             with open(save_path, "wb") as f:
                 f.write(response.content)
-
             print(f"✅ Successfully saved to {save_path}")
-
         except requests.exceptions.RequestException as e:
             print(f"❌ Failed to download {url}. Error: {e}")
         except Exception as e:
@@ -54,17 +57,22 @@ def download_images(image_urls: list[str], download_dir: Path):
 def main():
     """
     A demonstration of how to use the CreativeCatalystClient to get a report
-    and download the associated images.
+    and download the associated images, now with support for variation seeds.
     """
     client = CreativeCatalystClient()
-    print("--- Starting Creative Catalyst API Client Demo ---")
-    print(f"--- Target API Server: {client.base_url} ---")
+    print("--- 🚀 Starting Creative Catalyst API Client Demo ---")
+    print(f"--- 🎯 Target API Server: {client.base_url} ---")
     final_report = None
     all_image_urls = []
 
     try:
-        # Iterate over the new generator-based stream method.
-        for update in client.get_creative_report_stream(USER_PASSAGE):
+        # --- UPDATED: The client now sends the prompt AND the variation seed ---
+        print("\n--- 📤 Submitting Job ---")
+        stream = client.get_creative_report_stream(
+            PROMPT, variation_seed=VARIATION_SEED
+        )
+
+        for update in stream:
             event_type = update.get("event")
             if event_type == "job_submitted":
                 print(f"Job submitted with ID: {update.get('job_id')}")
@@ -79,11 +87,19 @@ def main():
             print("Stream finished without a final report.")
             return
 
-        print(f"Theme: {final_report.get('final_report', {}).get('overarching_theme')}")
+        report_content = final_report.get("final_report", {})
+        strategy = report_content.get("enriched_brief", {}).get("generation_strategy")
+
+        print("\n--- 📊 Job Summary ---")
+        print(f"Theme: {report_content.get('overarching_theme')}")
+        print(f"Generation Strategy Used: {strategy}")
         print(f"Server Artifacts Path: {final_report.get('artifacts_path')}")
 
-        key_pieces = final_report.get("final_report", {}).get("detailed_key_pieces", [])
-        for piece in key_pieces:
+        key_pieces = report_content.get("detailed_key_pieces", [])
+        print(f"Generated {len(key_pieces)} key piece(s):")
+        for i, piece in enumerate(key_pieces):
+            piece_name = piece.get("key_piece_name", f"Untitled Piece {i+1}")
+            print(f"  - {piece_name}")
             if piece.get("final_garment_image_url"):
                 all_image_urls.append(piece["final_garment_image_url"])
             if piece.get("mood_board_image_url"):

@@ -77,11 +77,15 @@ class ReportAssembler:
             if key not in report_data or not report_data[key]:
                 report_data[key] = self.brief.get(key)
 
-        # --- START: THE DEFINITIVE FIX ---
-        # Explicitly normalize the fields that might be single values before validation.
-        # This is more robust and clearer than a Pydantic validator for this specific task.
+        # --- START: THE DEFINITIVE FIX for ValidationError ---
+        # Explicitly normalize fields that should be lists but might be returned
+        # as single values by the AI. This prevents Pydantic validation errors.
         for key in ["season", "year", "region"]:
-            if key in report_data and not isinstance(report_data[key], list):
+            if (
+                key in report_data
+                and report_data[key]
+                and not isinstance(report_data[key], list)
+            ):
                 report_data[key] = [report_data[key]]
         # --- END: THE DEFINITIVE FIX ---
 
