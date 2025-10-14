@@ -7,7 +7,7 @@ robust, and now more efficient multi-step synthesis pipeline.
 
 import json
 import asyncio
-import shutil  # <-- Import shutil
+import shutil
 from catalyst.context import RunContext
 from catalyst.pipeline.synthesis_strategies.report_assembler import ReportAssembler
 from .base_processor import BaseProcessor
@@ -25,7 +25,15 @@ from .processors.synthesis import (
     ReportSynthesisProcessor,
     KeyGarmentsProcessor,
 )
-from .processors.reporting import FinalOutputGeneratorProcessor
+
+# --- START: ASSEMBLER REFACTOR ---
+# Import the new FinalValidationProcessor
+from .processors.reporting import (
+    FinalOutputGeneratorProcessor,
+    FinalValidationProcessor,
+)
+
+# --- END: ASSEMBLER REFACTOR ---
 from .processors.generation import get_image_generator
 
 
@@ -67,7 +75,6 @@ class PipelineOrchestrator:
 
             # --- STAGE 2: CACHE CHECK ---
             context.current_status = "Phase 2: Checking Semantic Cache"
-
             cached_payload_json = None
             if context.variation_seed == 0:
                 self.logger.info("Variation seed is 0. Checking L1 semantic cache...")
@@ -84,11 +91,6 @@ class PipelineOrchestrator:
                 cached_payload = json.loads(cached_payload_json)
                 context.final_report = cached_payload.get("final_report", {})
                 is_from_cache = True
-
-                # --- START: THE DEFINITIVE ARTIFACT RESTORATION FIX ---
-                # When a cache hit occurs, we must restore the physical artifacts
-                # (images, etc.) from the permanent artifact_cache into the
-                # current run's temporary directory so they can be served.
                 cached_artifact_path_id = cached_payload.get("cached_results_path")
                 if cached_artifact_path_id:
                     source_path = settings.ARTIFACT_CACHE_DIR / cached_artifact_path_id
@@ -107,9 +109,7 @@ class PipelineOrchestrator:
                     self.logger.warning(
                         "⚠️ Cache payload is missing 'cached_results_path'. Cannot restore artifacts."
                     )
-                # --- END: THE DEFINITIVE ARTIFACT RESTORATION FIX ---
-
-                return is_from_cache  # Now we can safely return
+                return is_from_cache
 
             # --- STAGE 3: SYNTHESIS ---
             context.current_status = "Phase 3: Research & Synthesis"
@@ -118,23 +118,16 @@ class PipelineOrchestrator:
             context = await self._run_step(ReportSynthesisProcessor(), context)
             context = await self._run_step(KeyGarmentsProcessor(), context)
 
-            assembler = ReportAssembler(context)
-            final_report_dict = assembler._finalize_and_validate_report(
-                context.final_report
-            )
-            if final_report_dict:
-                context.final_report = final_report_dict
-            else:
-                raise RuntimeError(
-                    "The final assembled report failed Pydantic validation."
-                )
-
-            # --- STAGE 4: FINAL OUTPUT GENERATION ---
+            # --- STAGE 4: FINAL VALIDATION & OUTPUT GENERATION ---
             context.current_status = "Phase 4: Finalizing Output"
             try:
+                # --- START: ASSEMBLER REFACTOR ---
+                # The awkward assembler call is replaced with a clean, dedicated pipeline step.
                 output_processors: list[BaseProcessor] = [
-                    FinalOutputGeneratorProcessor()
+                    FinalValidationProcessor(),
+                    FinalOutputGeneratorProcessor(),
                 ]
+                # --- END: ASSEMBLER REFACTOR ---
                 if settings.ENABLE_IMAGE_GENERATION:
                     context.current_status = "Phase 5: Generating Images"
                     output_processors.append(get_image_generator())

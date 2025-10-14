@@ -1,3 +1,5 @@
+# catalyst/main.py
+
 import os
 import shutil
 from datetime import datetime
@@ -46,39 +48,18 @@ async def run_pipeline(context: RunContext) -> RunContext:
             os.symlink(final_folder_name, latest_link_path, target_is_directory=True)
             logger.info(f"✅ Results finalized: '{final_folder_name}'")
 
+            # --- START: THE DEFINITIVE ENCAPSULATION REFACTOR ---
+            # If the result was newly generated (not from cache), add it to the
+            # L1 cache. The cache_manager now handles all details of this process,
+            # including copying the physical artifacts.
             if not is_from_cache:
-                logger.info("⚙️ Storing new artifacts in permanent L1 cache...")
-
-                # --- START: DEFINITIVE FIX for Attribute Error ---
-                # The method name has a leading underscore, indicating it is a
-                # private helper method. This corrects the AttributeError.
-                semantic_key = cache_manager._create_semantic_key(
-                    context.enriched_brief, context.variation_seed
+                await cache_manager.add_to_report_cache_async(
+                    brief=context.enriched_brief,
+                    final_report=context.final_report,
+                    variation_seed=context.variation_seed,
+                    source_artifact_path=final_path,
                 )
-                # --- END: DEFINITIVE FIX ---
-
-                doc_id = hashlib.sha256(semantic_key.encode("utf-8")).hexdigest()
-                artifact_dest_path = settings.ARTIFACT_CACHE_DIR / doc_id
-
-                try:
-                    shutil.copytree(final_path, artifact_dest_path, dirs_exist_ok=True)
-                    payload_to_cache = {
-                        "final_report": context.final_report,
-                        "cached_results_path": doc_id,
-                    }
-                    await cache_manager.add_to_report_cache_async(
-                        context.enriched_brief, payload_to_cache, context.variation_seed
-                    )
-                    logger.info(
-                        f"✅ Successfully stored artifacts in L1 cache: '{doc_id}'"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"❌ Failed to add to L1 cache. Rolling back file copy.",
-                        exc_info=True,
-                    )
-                    if artifact_dest_path.exists():
-                        shutil.rmtree(artifact_dest_path)
+            # --- END: THE DEFINITIVE ENCAPSULATION REFACTOR ---
 
     except Exception as e:
         logger.critical(

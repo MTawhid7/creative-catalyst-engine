@@ -15,12 +15,12 @@ from .exceptions import APIClientError
 
 
 PROMPT = """
-Which graphic T-shirts are trending this summer among Gen Z?
+Show me a dress collection for the Holi festival in India, inspired by the colors and joy of the event.
 """
 
 
 # --- VARIATION SEED ---
-VARIATION_SEED = 1  # Change this to 1, 2, etc., to get new creative variations
+VARIATION_SEED = 0  # Change this to 1, 2, etc., to get new creative variations
 
 # ===================================================================
 

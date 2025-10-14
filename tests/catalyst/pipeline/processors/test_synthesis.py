@@ -72,11 +72,8 @@ class TestKeyGarmentsProcessor:
     def mock_garment_builder(self, mocker) -> AsyncMock:
         mock_builder_instance = MagicMock()
 
-        # The first argument is now positional, so we name it `_` to signify it's handled by position.
-        async def stateful_side_effect(_, **kwargs):
-            # We can get the list from call_args if needed, but for this simple side effect, it's not.
-            # Let's count calls instead to generate unique names.
-            garment_num = mock_builder_instance.build.call_count
+        async def stateful_side_effect(*, previously_designed_garments, **kwargs):
+            garment_num = len(previously_designed_garments) + 1
             return {"key_piece": {"name": f"Garment {garment_num}"}}
 
         mock_builder_instance.build = AsyncMock(side_effect=stateful_side_effect)
@@ -96,21 +93,21 @@ class TestKeyGarmentsProcessor:
         await processor.process(run_context)
 
         assert mock_garment_builder.call_count == 3
-        # FIX: The test must now expect the list as a POSITIONAL argument.
+        # FIX: The test now correctly asserts the keyword-based call signature.
         mock_garment_builder.assert_has_awaits(
             [
                 call(
-                    [],
+                    previously_designed_garments=[],
                     variation_seed_override=0,
                     specific_garment_override=None,
                 ),
                 call(
-                    [{"name": "Garment 1"}],
+                    previously_designed_garments=[{"name": "Garment 1"}],
                     variation_seed_override=1,
                     specific_garment_override=None,
                 ),
                 call(
-                    [
+                    previously_designed_garments=[
                         {"name": "Garment 1"},
                         {"name": "Garment 2"},
                     ],
@@ -128,21 +125,24 @@ class TestKeyGarmentsProcessor:
         processor = KeyGarmentsProcessor()
         await processor.process(run_context)
         assert mock_garment_builder.call_count == 3
-        # FIX: The test must now expect the list as a POSITIONAL argument.
+        # FIX: The test now correctly asserts the keyword-based call signature.
         mock_garment_builder.assert_has_awaits(
             [
                 call(
-                    [],
+                    previously_designed_garments=[],
                     variation_seed_override=0,
                     specific_garment_override=None,
                 ),
                 call(
-                    [{"name": "Garment 1"}],
+                    previously_designed_garments=[{"name": "Garment 1"}],
                     variation_seed_override=1,
                     specific_garment_override=None,
                 ),
                 call(
-                    [{"name": "Garment 1"}, {"name": "Garment 2"}],
+                    previously_designed_garments=[
+                        {"name": "Garment 1"},
+                        {"name": "Garment 2"},
+                    ],
                     variation_seed_override=2,
                     specific_garment_override=None,
                 ),
@@ -160,16 +160,16 @@ class TestKeyGarmentsProcessor:
         processor = KeyGarmentsProcessor()
         await processor.process(run_context)
         assert mock_garment_builder.call_count == 2
-        # FIX: The test must now expect the list as a POSITIONAL argument.
+        # FIX: The test now correctly asserts the keyword-based call signature.
         mock_garment_builder.assert_has_awaits(
             [
                 call(
-                    [],
+                    previously_designed_garments=[],
                     variation_seed_override=None,
                     specific_garment_override="Test Coat",
                 ),
                 call(
-                    [{"name": "Garment 1"}],
+                    previously_designed_garments=[{"name": "Garment 1"}],
                     variation_seed_override=None,
                     specific_garment_override="Test Trousers",
                 ),

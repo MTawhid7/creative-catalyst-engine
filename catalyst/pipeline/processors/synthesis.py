@@ -107,9 +107,9 @@ class KeyGarmentsProcessor(BaseProcessor):
             for i in range(3):
                 self.logger.info(f"Designing variation #{i+1} of 3...")
                 current_history = copy.deepcopy(designed_garments)
-                # FIX: Pass the first argument positionally
+                # FIX: Use the explicit keyword argument
                 garment_data = await garment_builder.build(
-                    current_history,
+                    previously_designed_garments=current_history,
                     variation_seed_override=i,
                     specific_garment_override=None,
                 )
@@ -123,9 +123,9 @@ class KeyGarmentsProcessor(BaseProcessor):
             for garment_name in garments_to_design:
                 self.logger.info(f"Designing specified garment: '{garment_name}'...")
                 current_history = copy.deepcopy(designed_garments)
-                # FIX: Pass the first argument positionally
+                # FIX: Use the explicit keyword argument
                 garment_data = await garment_builder.build(
-                    current_history,
+                    previously_designed_garments=current_history,
                     variation_seed_override=None,
                     specific_garment_override=garment_name,
                 )
@@ -140,9 +140,9 @@ class KeyGarmentsProcessor(BaseProcessor):
             for i in range(3):
                 self.logger.info(f"Designing collection piece #{i+1} of 3...")
                 current_history = copy.deepcopy(designed_garments)
-                # FIX: Pass the first argument positionally
+                # FIX: Use the explicit keyword argument
                 garment_data = await garment_builder.build(
-                    current_history,
+                    previously_designed_garments=current_history,
                     variation_seed_override=i,
                     specific_garment_override=None,
                 )

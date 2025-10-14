@@ -19,6 +19,7 @@ from catalyst.utilities.logger import get_logger, setup_logging_run_id
 from api.cache import get_from_l0_cache, set_in_l0_cache
 from catalyst.main import run_pipeline
 from catalyst.context import RunContext
+from . import config as api_config  # Import the api config
 
 logger = get_logger(__name__)
 
@@ -119,7 +120,7 @@ def cleanup_old_results():
         sorted_dirs = sorted(all_dirs, key=lambda p: p.name, reverse=True)
 
         if len(sorted_dirs) > settings.KEEP_N_RESULTS:
-            dirs_to_delete = sorted_dirs[settings.KEEP_N_RESULTS:]
+            dirs_to_delete = sorted_dirs[settings.KEEP_N_RESULTS :]
             logger.info(
                 f"♻️ RESULTS CLEANUP: Deleting {len(dirs_to_delete)} oldest result folders."
             )
@@ -148,7 +149,12 @@ def _inject_public_urls(
             relative_path_str = piece.get(path_key)
             if relative_path_str:
                 filename = Path(relative_path_str).name
-                correct_path = f"results/{final_folder_name}/{filename}"
+                # --- START: URL PATH REFACTOR ---
+                # Use the constant from the config to build the URL path.
+                correct_path = (
+                    f"{api_config.RESULTS_MOUNT_PATH}/{final_folder_name}/{filename}"
+                )
+                # --- END: URL PATH REFACTOR ---
                 piece[url_key] = f"{base_url.rstrip('/')}/{correct_path}"
     logger.info("✅ Successfully injected all public image URLs.")
     return final_report

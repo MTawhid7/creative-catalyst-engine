@@ -120,12 +120,15 @@ class SingleGarmentBuilder:
             "enriched_brief": json.dumps(self.brief, indent=2),
         }
 
+    # --- START: THE DEFINITIVE SIGNATURE REFACTOR ---
     async def build(
         self,
+        *,
         previously_designed_garments: List[Dict[str, Any]],
         variation_seed_override: Optional[int] = None,
         specific_garment_override: Optional[str] = None,
     ) -> Dict[str, Any] | None:
+        # --- END: THE DEFINITIVE SIGNATURE REFACTOR ---
         seed_to_use = (
             variation_seed_override
             if variation_seed_override is not None
@@ -143,11 +146,7 @@ class SingleGarmentBuilder:
             else:
                 prompt_template = prompt_library.VARIANT_GARMENT_SYNTHESIS_PROMPT
                 prompt_args = self.base_prompt_args.copy()
-                # --- START: DEFINITIVE FIX for TypeError ---
-                # The prompt's .format() method expects string values. The integer
-                # seed is converted to a string to prevent a TypeError.
                 prompt_args["variation_seed"] = str(seed_to_use)
-                # --- END: DEFINITIVE FIX ---
 
             prompt_args["previously_designed_garments"] = json.dumps(
                 previously_designed_garments, indent=2

@@ -2,6 +2,7 @@
 
 import pytest
 from unittest.mock import AsyncMock
+from pathlib import Path
 
 from catalyst.caching import cache_manager
 
@@ -40,7 +41,6 @@ class TestCreateSemanticKey:
     )
     def test_semantic_key_creation(self, brief, seed, expected_key):
         """Verify the semantic key is stable, sorted, and includes the seed."""
-        # --- FIX: Pass the variation_seed to the function call ---
         assert cache_manager._create_semantic_key(brief, seed) == expected_key
 
 
@@ -67,7 +67,6 @@ class TestCacheManagerIntegration:
             return_value="cached_payload",
         )
 
-        # --- FIX: Pass the variation_seed ---
         result = await cache_manager.check_report_cache_async(mock_brief, seed)
 
         assert result == "cached_payload"
@@ -75,18 +74,37 @@ class TestCacheManagerIntegration:
 
     async def test_add_to_report_cache_async(self, mocker):
         """
-        Verify that add_to_report_cache_async generates a key with the seed
-        and calls report_cache.add with the correct key and payload.
+        Verify that add_to_report_cache_async now correctly orchestrates
+        copying artifacts and adding to the semantic cache.
         """
+        # Arrange
         mock_brief = {"theme_hint": "Test Theme"}
-        mock_payload = {"data": "some_report_data"}
+        mock_report = {"final_report": "some_data"}
         seed = 1
-        expected_key = "theme_hint: Test Theme | variation_seed: 1"
+        dummy_path = Path("/tmp/dummy_artifacts")
+
         mock_add = mocker.patch(
             "catalyst.caching.cache_manager.report_cache.add", new_callable=AsyncMock
         )
+        mock_copy = mocker.patch("catalyst.caching.cache_manager.shutil.copytree")
 
-        # --- FIX: Pass the variation_seed ---
-        await cache_manager.add_to_report_cache_async(mock_brief, mock_payload, seed)
+        # Act: Call the function with all required arguments
+        await cache_manager.add_to_report_cache_async(
+            brief=mock_brief,
+            final_report=mock_report,
+            variation_seed=seed,
+            source_artifact_path=dummy_path,
+        )
 
-        mock_add.assert_awaited_once_with(expected_key, mock_payload)
+        # Assert
+        mock_copy.assert_called_once()
+        mock_add.assert_awaited_once()
+
+        # Verify the payload passed to the underlying cache module is correct
+        call_args = mock_add.call_args[0]
+        semantic_key = call_args[0]
+        payload_to_cache = call_args[1]
+
+        assert semantic_key == "theme_hint: Test Theme | variation_seed: 1"
+        assert payload_to_cache["final_report"] == mock_report
+        assert "cached_results_path" in payload_to_cache

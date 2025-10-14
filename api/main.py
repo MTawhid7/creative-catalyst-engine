@@ -14,6 +14,7 @@ from arq.connections import ArqRedis, create_pool
 from .worker_settings import WorkerSettings
 from .routes.jobs import router as jobs_router  # Import the new router
 from catalyst.utilities.logger import get_logger
+from . import config as api_config  # Import the api config
 
 # Sentry, logging, etc. remains the same
 load_dotenv()
@@ -27,7 +28,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manages the application's lifespan, creating a Redis pool on startup."""
-    app.state.redis: ArqRedis = await create_pool(WorkerSettings.redis_settings) # type: ignore
+    app.state.redis: ArqRedis = await create_pool(WorkerSettings.redis_settings)  # type: ignore
     logger.info("ARQ Redis connection pool created.")
     yield
     await app.state.redis.close()
@@ -43,7 +44,14 @@ app = FastAPI(
 
 # Mount static files for serving results
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
-app.mount("/results", StaticFiles(directory=RESULTS_DIR), name="results")
+# --- START: URL PATH REFACTOR ---
+# Use the constant from the config for the mount path and name.
+app.mount(
+    f"/{api_config.RESULTS_MOUNT_PATH}",
+    StaticFiles(directory=RESULTS_DIR),
+    name=api_config.RESULTS_MOUNT_PATH,
+)
+# --- END: URL PATH REFACTOR ---
 
 # Include the job routes
 app.include_router(jobs_router)

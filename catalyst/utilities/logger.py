@@ -26,6 +26,33 @@ class ContextFilter(logging.Filter):
 
 
 # --- START: DEFINITIVE LOGGING REFACTOR ---
+class ColoredFormatter(logging.Formatter):
+    """A custom formatter to add color to log levels for readability."""
+
+    GREY = "\x1b[38;20m"
+    YELLOW = "\x1b[33;20m"
+    RED = "\x1b[31;20m"
+    BOLD_RED = "\x1b[31;1m"
+    GREEN = "\x1b[32;20m"
+    RESET = "\x1b[0m"
+
+    def __init__(self, fmt, datefmt=None):
+        super().__init__(fmt, datefmt)
+        base_fmt = self._fmt or ""
+        self.FORMATS = {
+            logging.DEBUG: self.GREY + base_fmt + self.RESET,
+            logging.INFO: self.GREEN + base_fmt + self.RESET,
+            logging.WARNING: self.YELLOW + base_fmt + self.RESET,
+            logging.ERROR: self.RED + base_fmt + self.RESET,
+            logging.CRITICAL: self.BOLD_RED + base_fmt + self.RESET,
+        }
+
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt, self.datefmt)
+        return formatter.format(record)
+
+
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -37,10 +64,10 @@ LOGGING_CONFIG = {
             "class": "pythonjsonlogger.json.JsonFormatter",
             "format": "%(asctime)s %(levelname)s %(name)s %(funcName)s %(lineno)d %(run_id)s %(message)s",
         },
-        # The console formatter now points to the class in its new, separate file.
-        # This breaks the circular import.
+        # The console formatter now points to the local class definition,
+        # breaking the circular import.
         "console_formatter": {
-            "()": "catalyst.utilities.log_formatter.ColoredFormatter",
+            "()": ColoredFormatter,
             "format": "%(asctime)s | %(levelname)-8s | [%(run_id)s] %(name)s:%(lineno)d - %(message)s",
             "datefmt": "%H:%M:%S",
         },
