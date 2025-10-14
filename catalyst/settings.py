@@ -40,6 +40,7 @@ if not DALLE_API_KEY:
 # --- 3. LLM Configuration ---
 GEMINI_MODEL_NAME = "gemini-2.5-flash"
 GEMINI_PRO_MODEL_NAME = "gemini-2.5-pro"
+IMAGE_GENERATION_MODEL_NAME = "gemini-2.5-flash-image"
 GEMINI_DEFAULT_TIMEOUT_SECONDS = 60
 
 

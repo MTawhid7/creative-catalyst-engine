@@ -2,9 +2,9 @@
 
 import pytest
 import json
-import base64  # <-- Import base64 to handle real image data
+import base64
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, call, ANY
 
 from catalyst.context import RunContext
 from catalyst.pipeline.processors.generation.nanobanana_generator import (
@@ -38,20 +38,13 @@ def prompts_file(run_context: RunContext) -> Path:
 @pytest.fixture
 def mock_client(mocker) -> MagicMock:
     """Creates a mock client instance with valid, realistic response data."""
-    # --- START: THE DEFINITIVE FIX ---
-    # Use the base64 representation of a real 1x1 transparent PNG.
-    # This is valid image data that Pillow can process successfully.
     one_pixel_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
     image_bytes = base64.b64decode(one_pixel_png_b64)
-
     mock_image_data = mocker.Mock(data=image_bytes)
-    # --- END: THE DEFINITIVE FIX ---
-
     mock_part = mocker.Mock(inline_data=mock_image_data)
     mock_content = mocker.Mock(parts=[mock_part])
     mock_candidate = mocker.Mock(content=mock_content)
     mock_response = AsyncMock(candidates=[mock_candidate])
-
     client = MagicMock()
     client.aio.models.generate_content = AsyncMock(return_value=mock_response)
     return client
@@ -64,13 +57,36 @@ class TestNanoBananaGenerationDI:
     async def test_process_happy_path_with_injected_client(
         self, run_context, prompts_file, mock_client
     ):
-        """Verify a successful run using an injected mock client."""
+        """Verify a successful default run using an injected mock client."""
         generator = NanoBananaGeneration(client=mock_client)
         await generator.process(run_context)
 
-        # The assertion is now correct: it should only be called once.
         mock_client.aio.models.generate_content.assert_called_once()
-        assert (run_context.results_dir / "test-jacket.png").exists()
+        # The default filename now includes the default temp (0.7) but no seed.
+        assert (run_context.results_dir / "test-jacket-t7.png").exists()
+
+    async def test_process_with_seed_and_temp_overrides(
+        self, run_context, prompts_file, mock_client
+    ):
+        """
+        Verify that seed and temperature overrides are used correctly, with the
+        seed modifying the prompt.
+        """
+        generator = NanoBananaGeneration(client=mock_client)
+        await generator.process(run_context, seed_override=5, temperature_override=1.5)
+
+        # --- START: THE DEFINITIVE TEST FIX ---
+        # Assert that the API was called with the prompt MODIFIED by the seed,
+        # and that the invalid 'seed' keyword argument is NOT present.
+        mock_client.aio.models.generate_content.assert_called_once_with(
+            model=settings.IMAGE_GENERATION_MODEL_NAME,
+            contents=["a test prompt --v 5"],  # Check for the modified prompt
+            config=ANY,
+        )
+        # --- END: THE DEFINITIVE TEST FIX ---
+
+        # Assert that the filename includes both suffixes
+        assert (run_context.results_dir / "test-jacket-s5-t15.png").exists()
 
     async def test_process_does_not_create_real_client_if_injected(
         self, run_context, prompts_file, mock_client, mocker

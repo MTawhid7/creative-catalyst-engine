@@ -5,6 +5,7 @@ import io
 import json
 import re
 from pathlib import Path
+from typing import Optional
 
 from google import genai
 from google.genai import types
@@ -19,21 +20,15 @@ from catalyst import settings
 class NanoBananaGeneration(BaseImageGenerator):
     """
     A versatile image generation strategy using the Google Gemini API,
-    refactored for dependency injection, lazy client creation, and unified settings.
+    now supporting prompt modification for variation and temperature for creativity.
     """
 
     def __init__(self, client=None):
-        """
-        Initializes the generator. An optional client can be injected for testing.
-        """
         super().__init__()
         self._client = client
         self._initialized_client = None
 
     def _get_client(self):
-        """
-        Lazily initializes and returns the Gemini client.
-        """
         if self._initialized_client:
             return self._initialized_client
         if self._client:
@@ -55,33 +50,41 @@ class NanoBananaGeneration(BaseImageGenerator):
         )
         return None
 
-    async def process(self, context: RunContext) -> RunContext:
-        """Orchestrates the image generation process for each key piece in the trend report."""
+    async def process(
+        self,
+        context: RunContext,
+        seed_override: Optional[int] = None,
+        temperature_override: Optional[float] = None,
+    ) -> RunContext:
         client = self._get_client()
         if not client:
-            self.logger.error(
-                "Halting generation: Gemini client is not initialized or is disabled."
-            )
+            self.logger.critical("❌ Gemini client is not available. Aborting generation.")
             return context
-
-        self.logger.info("🎨 Activating Nano Banana (Gemini) generation strategy...")
+        temp_to_use = temperature_override or 0.7
+        self.logger.info(
+            f"🎨 Activating Nano Banana generation with seed: {seed_override or 'default'}, temp: {temp_to_use}..."
+        )
         prompts_data = self._load_prompts_from_file(context)
         if not prompts_data:
-            self.logger.warning("Could not load prompts. Halting image generation.")
+            self.logger.warning("⚠️ No prompts found for image generation. Aborting.")
             return context
-
         tasks = [
             self._generate_and_save_image(
-                prompt_text, garment_name, context, p_type, client
+                prompt=prompt_text,
+                garment_name=garment_name,
+                context=context,
+                prompt_type=p_type,
+                client=client,
+                seed=seed_override,
+                temperature=temp_to_use,
             )
             for garment_name, prompts in prompts_data.items()
             for p_type, prompt_text in prompts.items()
             if prompt_text
         ]
         if not tasks:
-            self.logger.warning("No valid image generation tasks were created.")
+            self.logger.warning("⚠️ No valid image generation tasks created. Aborting.")
             return context
-
         self.logger.info(
             f"🚀 Launching {len(tasks)} image generation tasks in parallel..."
         )
@@ -96,21 +99,25 @@ class NanoBananaGeneration(BaseImageGenerator):
         context: RunContext,
         prompt_type: str,
         client,
+        seed: Optional[int],
+        temperature: float,
     ):
-        """Generates a single image with retries, saves it, and injects its relative path."""
+        """Generates a single image using prompt modification for seed and a specific temperature."""
         cleaned_prompt = " ".join(
             re.sub(r"\*\*.*?\*\*|^- ", "", prompt, flags=re.MULTILINE)
             .replace("\n", " ")
             .split()
         )
+        if seed is not None:
+            final_prompt = f"{cleaned_prompt} --v {seed}"
+        else:
+            final_prompt = cleaned_prompt
 
         for attempt in range(settings.MODEL_RETRY_ATTEMPTS):
             self.logger.info(
-                f"Generating image for: '{garment_name}' ({prompt_type}) - Attempt {attempt + 1}/{settings.MODEL_RETRY_ATTEMPTS}..."
+                f"Generating image for: '{garment_name}' ({prompt_type}) [Seed: {seed}, Temp: {temperature}] - Attempt {attempt + 1}/{settings.MODEL_RETRY_ATTEMPTS}..."
             )
             try:
-                # --- START: THE DEFINITIVE FIX ---
-                # Revert to the explicit, correct list of harm categories that the API accepts.
                 safety_settings = [
                     types.SafetySetting(
                         category=cat, threshold=HarmBlockThreshold.BLOCK_NONE
@@ -122,19 +129,20 @@ class NanoBananaGeneration(BaseImageGenerator):
                         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
                     ]
                 ]
-                # --- END: THE DEFINITIVE FIX ---
-
                 generation_config = types.GenerateContentConfig(
                     response_modalities=["TEXT", "IMAGE"],
                     safety_settings=safety_settings,
-                    temperature=0.7,
+                    temperature=temperature,
                 )
 
+                # --- START: IMAGE MODEL REFACTOR ---
+                # Use the model name from the central settings file.
                 response = await client.aio.models.generate_content(
-                    model="gemini-2.5-flash-image-preview",
-                    contents=[cleaned_prompt],
+                    model=settings.IMAGE_GENERATION_MODEL_NAME,
+                    contents=[final_prompt],
                     config=generation_config,
                 )
+                # --- END: IMAGE MODEL REFACTOR ---
 
                 if (
                     response.candidates
@@ -150,16 +158,21 @@ class NanoBananaGeneration(BaseImageGenerator):
                                 for c in garment_name.lower()
                                 if c.isalnum() or c in " -"
                             ).replace(" ", "-")
+
+                            suffix = f"-s{seed}" if seed is not None else ""
+                            suffix += f"-t{int(temperature*10)}"
+
                             image_filename = (
-                                f"{slug}-moodboard.png"
+                                f"{slug}-moodboard{suffix}.png"
                                 if prompt_type == "mood_board"
-                                else f"{slug}.png"
+                                else f"{slug}{suffix}.png"
                             )
                             image_path = Path(context.results_dir) / image_filename
                             image.save(image_path, "PNG")
                             self.logger.info(
                                 f"✅ Successfully saved image to '{image_path}'"
                             )
+
                             relative_path = (
                                 f"results/{context.results_dir.name}/{image_path.name}"
                             )
@@ -182,7 +195,6 @@ class NanoBananaGeneration(BaseImageGenerator):
                 self.logger.warning(
                     f"⚠️ Gemini API call for '{garment_name}' returned no image data on attempt {attempt + 1}."
                 )
-
             except Exception as e:
                 self.logger.error(
                     f"❌ Gemini API call failed for '{garment_name}' on attempt {attempt + 1}: {e}",
@@ -197,7 +209,6 @@ class NanoBananaGeneration(BaseImageGenerator):
         )
 
     def _load_prompts_from_file(self, context: RunContext) -> dict:
-        """Loads prompts from the JSON, or warns if it fails."""
         try:
             prompts_path = Path(context.results_dir) / settings.PROMPTS_FILENAME
             if prompts_path.exists():

@@ -31,7 +31,6 @@ def research_dossier() -> dict:
     return {"trend_narrative": "A test narrative."}
 
 
-# ... (TestConsolidatedBuilders and parts of TestUniqueBuilders remain unchanged) ...
 @pytest.mark.asyncio
 class TestConsolidatedBuilders:
     async def test_creative_analysis_builder_success(

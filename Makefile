@@ -131,9 +131,14 @@ debug:
 	@echo "🐞 Starting services in debug mode for VS Code attachment..."
 	docker compose --profile app -f docker-compose.yml -f docker-compose.debug.yml up --build
 
+# --- START: THE DEFINITIVE NETWORKING FIX ---
 run-client:
-	@echo "🚀 Running the example API client to submit a job..."
-	venv/bin/python -m api_client.example
+	@echo "🚀 Running the example API client inside a container to submit a job..."
+	docker compose run --rm \
+		-e CREATIVE_CATALYST_API_URL="http://api:9500" \
+		--entrypoint="" \
+		api python3 -m api_client.example
+# --- END: THE DEFINITIVE NETWORKING FIX ---
 
 # ===================================================================
 #  GIT WORKFLOW
@@ -221,4 +226,4 @@ release:
 
 tag:
 	@echo "🏷️  Tagging is a manual process to ensure high-quality release notes."
-	@echo "   Please see the 'Release & Tagging Workflow' section in WORKFLOW_GUIDE.md"```
+	@echo "   Please see the 'Release & Tagging Workflow' section in WORKFLOW_GUIDE.md"

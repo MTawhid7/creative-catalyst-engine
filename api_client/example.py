@@ -1,118 +1,146 @@
 # api_client/example.py
 
-import requests
-from pathlib import Path
 from .client import CreativeCatalystClient
 from .exceptions import APIClientError
 
 # ===================================================================
-#  --- TEST CONFIGURATION ---
+#  MASTER WORKFLOW DEMONSTRATION
 # ===================================================================
-# This script can now test all generation strategies and variations.
-#    CHOOSE YOUR SEED: Set the variation_seed to get different creative results.
-#    - Seed 0 is the default, canonical collection.
-#    - Seeds 1, 2, 3... will generate creative alternatives.
-
+# This script demonstrates the three primary ways to generate and vary
+# creative content with the API:
+#
+# 1.  **Canonical Generation (variation_seed=0):**
+#     The first, default, and cacheable result for a creative brief.
+#
+# 2.  **Conceptual Variation (variation_seed > 0):**
+#     Requests a completely new creative direction (new research, new text,
+#     new garments, new images) based on the same initial prompt.
+#
+# 3.  **Visual Variation (regenerate_images_stream):**
+#     Takes an existing report and regenerates ONLY the images with a new
+#     visual seed, providing a fast, new look for the same concept.
+# ===================================================================
 
 PROMPT = """
-Show me a dress collection for the Holi festival in India, inspired by the colors and joy of the event.
+A men's velvet tailcoat for a Venetian masquerade ball set in the Baroque era.
 """
-
-
-# --- VARIATION SEED ---
-VARIATION_SEED = 0  # Change this to 1, 2, etc., to get new creative variations
-
-# ===================================================================
-
-
-def download_images(image_urls: list[str], download_dir: Path):
-    """
-    Downloads images from a list of URLs into a specified directory.
-    """
-    if not image_urls:
-        print("--- No image URLs provided to download. ---")
-        return
-
-    print(f"\n--- 📥 Starting Image Download to '{download_dir}' ---")
-    download_dir.mkdir(exist_ok=True)
-
-    for url in image_urls:
-        try:
-            filename = url.split("/")[-1]
-            save_path = download_dir / filename
-            print(f"Downloading {filename}...")
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            with open(save_path, "wb") as f:
-                f.write(response.content)
-            print(f"✅ Successfully saved to {save_path}")
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Failed to download {url}. Error: {e}")
-        except Exception as e:
-            print(
-                f"❌ An unexpected error occurred while downloading {url}. Error: {e}"
-            )
 
 
 def main():
     """
-    A demonstration of how to use the CreativeCatalystClient to get a report
-    and download the associated images, now with support for variation seeds.
+    Demonstrates the full three-stage variation workflow.
     """
     client = CreativeCatalystClient()
-    print("--- 🚀 Starting Creative Catalyst API Client Demo ---")
-    print(f"--- 🎯 Target API Server: {client.base_url} ---")
-    final_report = None
-    all_image_urls = []
+    original_job_id = None
 
+    # ===================================================================
+    #  PART 1: Canonical Creative Report (variation_seed = 0)
+    # ===================================================================
+    print(
+        "--- 🚀 PART 1: Requesting the Canonical Creative Report (variation_seed=0) ---"
+    )
     try:
-        # --- UPDATED: The client now sends the prompt AND the variation seed ---
-        print("\n--- 📤 Submitting Job ---")
-        stream = client.get_creative_report_stream(
-            PROMPT, variation_seed=VARIATION_SEED
-        )
+        stream = client.get_creative_report_stream(PROMPT, variation_seed=0)
 
         for update in stream:
             event_type = update.get("event")
             if event_type == "job_submitted":
-                print(f"Job submitted with ID: {update.get('job_id')}")
+                original_job_id = update.get("job_id")
+                print(f"✅ Canonical job submitted with ID: {original_job_id}")
             elif event_type == "progress":
-                print(f"Progress: {update.get('status')}")
+                print(f"   Progress: {update.get('status')}")
             elif event_type == "complete":
-                final_report = update.get("result")
-                print("\n--- ✅ Final Report Received ---")
+                print("\n--- ✅ Canonical Report Received ---")
                 break
 
-        if not final_report:
-            print("Stream finished without a final report.")
-            return
+    except APIClientError as e:
+        print(f"\n--- ❌ An API Client Error Occurred During Part 1 ---")
+        print(f"   Error: {e}")
+        return  # Stop if the first part fails
+    except Exception as e:
+        print(f"\n--- ❌ An Unexpected Error Occurred During Part 1 ---")
+        print(f"   Error: {e}")
+        return
 
-        report_content = final_report.get("final_report", {})
-        strategy = report_content.get("enriched_brief", {}).get("generation_strategy")
+    # ===================================================================
+    #  PART 2: Conceptual Variation (variation_seed = 1)
+    # ===================================================================
+    print("\n" + "=" * 70)
+    input("✅ Part 1 complete. Press Enter to request a new CONCEPTUAL variation...")
+    print("=" * 70 + "\n")
 
-        print("\n--- 📊 Job Summary ---")
-        print(f"Theme: {report_content.get('overarching_theme')}")
-        print(f"Generation Strategy Used: {strategy}")
-        print(f"Server Artifacts Path: {final_report.get('artifacts_path')}")
+    print("--- 🚀 PART 2: Requesting a Conceptual Variation (variation_seed=1) ---")
+    print(
+        "   (This will run the full pipeline again to generate a new creative direction)"
+    )
+    try:
+        stream = client.get_creative_report_stream(PROMPT, variation_seed=1)
 
-        key_pieces = report_content.get("detailed_key_pieces", [])
-        print(f"Generated {len(key_pieces)} key piece(s):")
-        for i, piece in enumerate(key_pieces):
-            piece_name = piece.get("key_piece_name", f"Untitled Piece {i+1}")
-            print(f"  - {piece_name}")
-            if piece.get("final_garment_image_url"):
-                all_image_urls.append(piece["final_garment_image_url"])
-            if piece.get("mood_board_image_url"):
-                all_image_urls.append(piece["mood_board_image_url"])
-
-        download_images(all_image_urls, download_dir=Path("downloaded_images"))
+        for update in stream:
+            event_type = update.get("event")
+            if event_type == "job_submitted":
+                print(
+                    f"✅ Conceptual variation job submitted with ID: {update.get('job_id')}"
+                )
+            elif event_type == "progress":
+                print(f"   Progress: {update.get('status')}")
+            elif event_type == "complete":
+                print("\n--- ✅ New Conceptual Report Received ---")
+                break
 
     except APIClientError as e:
-        print(f"\n--- ❌ An API Client Error Occurred ---")
-        print(f"Error: {e}")
+        print(f"\n--- ❌ An API Client Error Occurred During Part 2 ---")
+        print(f"   Error: {e}")
     except Exception as e:
-        print(f"\n--- ❌ An Unexpected Error Occurred ---")
-        print(f"Error: {e}")
+        print(f"\n--- ❌ An Unexpected Error Occurred During Part 2 ---")
+        print(f"   Error: {e}")
+
+    # ===================================================================
+    #  PART 3: Visual Variation (Regenerate Images)
+    # ===================================================================
+    if not original_job_id:
+        print(
+            "\n--- ⚠️ Could not proceed to Part 3: No original job ID was captured. ---"
+        )
+        return
+
+    print("\n" + "=" * 70)
+    input(
+        "✅ Part 2 complete. Press Enter to request a new VISUAL variation for the original report..."
+    )
+    print("=" * 70 + "\n")
+
+    print(
+        f"--- 🚀 PART 3: Requesting a Visual Variation for Original Job '{original_job_id}' ---"
+    )
+    print("   (This will be much faster as it only regenerates the images)")
+    try:
+        regen_stream = client.regenerate_images_stream(
+            original_job_id=original_job_id,
+            seed=1,
+            temperature=1.2,  # Optional: make it a bit more creative
+        )
+
+        for update in regen_stream:
+            event_type = update.get("event")
+            if event_type == "job_submitted":
+                print(
+                    f"✅ Visual variation job submitted with NEW ID: {update.get('job_id')}"
+                )
+            elif event_type == "progress":
+                print(f"   Regeneration Progress: {update.get('status')}")
+            elif event_type == "complete":
+                print("\n--- ✅ New Visual Report Received ---")
+                break
+
+    except APIClientError as e:
+        print(f"\n--- ❌ An API Client Error Occurred During Part 3 ---")
+        print(f"   Error: {e}")
+    except Exception as e:
+        print(f"\n--- ❌ An Unexpected Error Occurred During Part 3 ---")
+        print(f"   Error: {e}")
+
+    print("\n--- 🎉 Workflow Demonstration Complete ---")
 
 
 if __name__ == "__main__":

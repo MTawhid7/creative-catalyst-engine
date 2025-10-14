@@ -91,7 +91,6 @@ class TestFinalOutputGeneratorProcessor:
             == "final_garment_prompt_jacket"
         )
 
-    # ... (other tests for failure cases remain the same) ...
     async def test_process_raises_error_on_empty_report(self, tmp_path: Path):
         context = RunContext(user_passage="test", results_dir=tmp_path)
         context.final_report = {}
