@@ -94,25 +94,22 @@ class CreativeCatalystClient:
         except ReadTimeout as e:
             raise APIConnectionError("Connection to the event stream timed out.") from e
 
-    # --- START: NEW METHOD FOR IMAGE REGENERATION ---
+
     def regenerate_images_stream(
         self,
         original_job_id: str,
-        seed: int,
-        temperature: Optional[float] = None,
+        temperature: float,
     ) -> Generator[Dict[str, Any], None, None]:
         """
         Submits a job to regenerate ONLY the images for a previous report
-        and YIELDS real-time status updates for the new job.
+        using a new temperature and yields real-time status updates.
         """
         try:
             regen_url = f"{self.submit_url}/{original_job_id}/regenerate-images"
             print(
-                f"Submitting image regeneration request to {regen_url} with seed {seed}..."
+                f"Submitting image regeneration request to {regen_url} with temp {temperature}..."
             )
-            payload: Dict[str, Any] = {"seed": seed}
-            if temperature is not None:
-                payload["temperature"] = temperature
+            payload = {"temperature": temperature}
 
             response = requests.post(regen_url, json=payload, timeout=15)
             response.raise_for_status()
@@ -124,18 +121,15 @@ class CreativeCatalystClient:
                 )
 
             yield {"event": "job_submitted", "job_id": new_job_id}
-
-            # Use the same refactored streaming helper for the new job
             yield from self._stream_job_events(new_job_id)
 
         except RequestsConnectionError as e:
             raise APIConnectionError(f"Could not connect to the API: {e}") from e
         except HTTPError as e:
             status_code = e.response.status_code if e.response else "unknown"
-            # Provide a more specific error message for 404
             if e.response and e.response.status_code == 404:
                 raise JobSubmissionError(
-                    f"API returned 404 Not Found. Is the original job ID '{original_job_id}' correct and has it completed successfully?"
+                    f"API returned 404 Not Found. Is the original job ID '{original_job_id}' correct?"
                 ) from e
             raise JobSubmissionError(
                 f"API returned an HTTP error: {status_code}"
@@ -143,4 +137,3 @@ class CreativeCatalystClient:
         except ReadTimeout as e:
             raise APIConnectionError("Connection to the event stream timed out.") from e
 
-    # --- END: NEW METHOD FOR IMAGE REGENERATION ---

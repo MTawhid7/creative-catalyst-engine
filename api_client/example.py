@@ -1,146 +1,106 @@
 # api_client/example.py
 
+from typing import Generator, Dict, Any, Optional
 from .client import CreativeCatalystClient
 from .exceptions import APIClientError
 
-# ===================================================================
-#  MASTER WORKFLOW DEMONSTRATION
-# ===================================================================
-# This script demonstrates the three primary ways to generate and vary
-# creative content with the API:
-#
-# 1.  **Canonical Generation (variation_seed=0):**
-#     The first, default, and cacheable result for a creative brief.
-#
-# 2.  **Conceptual Variation (variation_seed > 0):**
-#     Requests a completely new creative direction (new research, new text,
-#     new garments, new images) based on the same initial prompt.
-#
-# 3.  **Visual Variation (regenerate_images_stream):**
-#     Takes an existing report and regenerates ONLY the images with a new
-#     visual seed, providing a fast, new look for the same concept.
-# ===================================================================
-
 PROMPT = """
-A men's velvet tailcoat for a Venetian masquerade ball set in the Baroque era.
+A futuristic, eco-friendly denim jacket inspired by bioluminescent fungi.
 """
+
+# The progressive list of temperatures to cycle through for visual variations.
+TEMPERATURE_PROGRESSION = [1.0, 1.5, 2.0]
+
+
+def _handle_stream(stream: Generator[Dict[str, Any], None, None]) -> Optional[str]:
+    # ... (this helper function is unchanged) ...
+    job_id = None
+    try:
+        for update in stream:
+            event_type = update.get("event")
+            if event_type == "job_submitted":
+                job_id = update.get("job_id")
+                print(f"✅ Job successfully submitted with ID: {job_id}")
+            elif event_type == "progress":
+                print(f"   Progress: {update.get('status')}")
+            elif event_type == "complete":
+                print("\n--- ✅ Final Report Received ---")
+                break
+        return job_id
+    except APIClientError as e:
+        print(f"\n--- ❌ An API Client Error Occurred ---")
+        print(f"   Error: {e}")
+        return None
+    except Exception as e:
+        print(f"\n--- ❌ An Unexpected Error Occurred ---")
+        print(f"   Error: {e}")
+        return None
 
 
 def main():
-    """
-    Demonstrates the full three-stage variation workflow.
-    """
+    """Runs the interactive CLI loop for the simplified workflow."""
     client = CreativeCatalystClient()
-    original_job_id = None
-
-    # ===================================================================
-    #  PART 1: Canonical Creative Report (variation_seed = 0)
-    # ===================================================================
-    print(
-        "--- 🚀 PART 1: Requesting the Canonical Creative Report (variation_seed=0) ---"
-    )
-    try:
-        stream = client.get_creative_report_stream(PROMPT, variation_seed=0)
-
-        for update in stream:
-            event_type = update.get("event")
-            if event_type == "job_submitted":
-                original_job_id = update.get("job_id")
-                print(f"✅ Canonical job submitted with ID: {original_job_id}")
-            elif event_type == "progress":
-                print(f"   Progress: {update.get('status')}")
-            elif event_type == "complete":
-                print("\n--- ✅ Canonical Report Received ---")
-                break
-
-    except APIClientError as e:
-        print(f"\n--- ❌ An API Client Error Occurred During Part 1 ---")
-        print(f"   Error: {e}")
-        return  # Stop if the first part fails
-    except Exception as e:
-        print(f"\n--- ❌ An Unexpected Error Occurred During Part 1 ---")
-        print(f"   Error: {e}")
-        return
-
-    # ===================================================================
-    #  PART 2: Conceptual Variation (variation_seed = 1)
-    # ===================================================================
-    print("\n" + "=" * 70)
-    input("✅ Part 1 complete. Press Enter to request a new CONCEPTUAL variation...")
-    print("=" * 70 + "\n")
-
-    print("--- 🚀 PART 2: Requesting a Conceptual Variation (variation_seed=1) ---")
-    print(
-        "   (This will run the full pipeline again to generate a new creative direction)"
-    )
-    try:
-        stream = client.get_creative_report_stream(PROMPT, variation_seed=1)
-
-        for update in stream:
-            event_type = update.get("event")
-            if event_type == "job_submitted":
-                print(
-                    f"✅ Conceptual variation job submitted with ID: {update.get('job_id')}"
-                )
-            elif event_type == "progress":
-                print(f"   Progress: {update.get('status')}")
-            elif event_type == "complete":
-                print("\n--- ✅ New Conceptual Report Received ---")
-                break
-
-    except APIClientError as e:
-        print(f"\n--- ❌ An API Client Error Occurred During Part 2 ---")
-        print(f"   Error: {e}")
-    except Exception as e:
-        print(f"\n--- ❌ An Unexpected Error Occurred During Part 2 ---")
-        print(f"   Error: {e}")
-
-    # ===================================================================
-    #  PART 3: Visual Variation (Regenerate Images)
-    # ===================================================================
-    if not original_job_id:
-        print(
-            "\n--- ⚠️ Could not proceed to Part 3: No original job ID was captured. ---"
-        )
-        return
+    last_job_id = None
+    visual_variation_count = 0
 
     print("\n" + "=" * 70)
-    input(
-        "✅ Part 2 complete. Press Enter to request a new VISUAL variation for the original report..."
-    )
-    print("=" * 70 + "\n")
+    print("          CREATIVE CATALYST INTERACTIVE CLIENT")
+    print("=" * 70)
+    print(f'  Using Prompt: "{PROMPT.strip()}"')
 
-    print(
-        f"--- 🚀 PART 3: Requesting a Visual Variation for Original Job '{original_job_id}' ---"
-    )
-    print("   (This will be much faster as it only regenerates the images)")
-    try:
-        regen_stream = client.regenerate_images_stream(
-            original_job_id=original_job_id,
-            seed=1,
-            temperature=1.2,  # Optional: make it a bit more creative
-        )
+    while True:
+        print("\n" + "-" * 70)
+        print(f"  Last Successful Job ID: {last_job_id or 'None'}")
+        print("-" * 70)
 
-        for update in regen_stream:
-            event_type = update.get("event")
-            if event_type == "job_submitted":
+        print("  [1] Generate New Report (Canonical, default temp)")
+        print("  [2] Check Cache (run again)")
+        if last_job_id:
+            print("  [3] Generate Visual Variation (Images only, new temperature)")
+        print("  [4] Quit")
+        print("-" * 70)
+
+        choice = input("Enter your choice: ")
+
+        if choice == "1":
+            print("\n--- 🚀 [1] Requesting Canonical Report ---")
+            stream = client.get_creative_report_stream(PROMPT, variation_seed=0)
+            job_id = _handle_stream(stream)
+            if job_id:
+                last_job_id = job_id
+                visual_variation_count = 0  # Reset counter on new report
+
+        elif choice == "2":
+            print(f"\n--- 🚀 [2] Re-running prompt to check cache ---")
+            stream = client.get_creative_report_stream(PROMPT, variation_seed=0)
+            _handle_stream(stream)
+
+        elif choice == "3" and last_job_id:
+            if visual_variation_count >= len(TEMPERATURE_PROGRESSION):
                 print(
-                    f"✅ Visual variation job submitted with NEW ID: {update.get('job_id')}"
+                    f"--- ⚠️ All visual variations attempted. Max temperature {TEMPERATURE_PROGRESSION[-1]} reached. ---"
                 )
-            elif event_type == "progress":
-                print(f"   Regeneration Progress: {update.get('status')}")
-            elif event_type == "complete":
-                print("\n--- ✅ New Visual Report Received ---")
-                break
+                continue
 
-    except APIClientError as e:
-        print(f"\n--- ❌ An API Client Error Occurred During Part 3 ---")
-        print(f"   Error: {e}")
-    except Exception as e:
-        print(f"\n--- ❌ An Unexpected Error Occurred During Part 3 ---")
-        print(f"   Error: {e}")
+            temp_to_use = TEMPERATURE_PROGRESSION[visual_variation_count]
+            print(
+                f"\n--- 🚀 [3] Requesting Visual Variation #{visual_variation_count + 1} for Job '{last_job_id}' (temp={temp_to_use}) ---"
+            )
+            stream = client.regenerate_images_stream(
+                original_job_id=last_job_id, temperature=temp_to_use
+            )
+            # We don't capture the new job_id, we just get the result
+            _handle_stream(stream)
+            visual_variation_count += 1
 
-    print("\n--- 🎉 Workflow Demonstration Complete ---")
+        elif choice == "4":
+            print("--- 👋 Exiting client. ---")
+            break
+
+        else:
+            print(
+                "--- ⚠️ Invalid choice. Please select a valid option from the menu. ---"
+            )
 
 
 if __name__ == "__main__":

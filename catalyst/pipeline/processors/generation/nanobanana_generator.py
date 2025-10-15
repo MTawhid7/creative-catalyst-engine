@@ -51,10 +51,7 @@ class NanoBananaGeneration(BaseImageGenerator):
         return None
 
     async def process(
-        self,
-        context: RunContext,
-        seed_override: Optional[int] = None,
-        temperature_override: Optional[float] = None,
+        self, context: RunContext, temperature_override: Optional[float] = None,
     ) -> RunContext:
         client = self._get_client()
         if not client:
@@ -62,7 +59,7 @@ class NanoBananaGeneration(BaseImageGenerator):
             return context
         temp_to_use = temperature_override or 0.7
         self.logger.info(
-            f"🎨 Activating Nano Banana generation with seed: {seed_override or 'default'}, temp: {temp_to_use}..."
+            f"🎨 Activating Nano Banana generation with temp: {temp_to_use}..."
         )
         prompts_data = self._load_prompts_from_file(context)
         if not prompts_data:
@@ -75,8 +72,7 @@ class NanoBananaGeneration(BaseImageGenerator):
                 context=context,
                 prompt_type=p_type,
                 client=client,
-                seed=seed_override,
-                temperature=temp_to_use,
+                temperature=temp_to_use,  # Pass the final temp
             )
             for garment_name, prompts in prompts_data.items()
             for p_type, prompt_text in prompts.items()
@@ -99,7 +95,6 @@ class NanoBananaGeneration(BaseImageGenerator):
         context: RunContext,
         prompt_type: str,
         client,
-        seed: Optional[int],
         temperature: float,
     ):
         """Generates a single image using prompt modification for seed and a specific temperature."""
@@ -108,14 +103,10 @@ class NanoBananaGeneration(BaseImageGenerator):
             .replace("\n", " ")
             .split()
         )
-        if seed is not None:
-            final_prompt = f"{cleaned_prompt} --v {seed}"
-        else:
-            final_prompt = cleaned_prompt
 
         for attempt in range(settings.MODEL_RETRY_ATTEMPTS):
             self.logger.info(
-                f"Generating image for: '{garment_name}' ({prompt_type}) [Seed: {seed}, Temp: {temperature}] - Attempt {attempt + 1}/{settings.MODEL_RETRY_ATTEMPTS}..."
+                f"Generating image for: '{garment_name}' ({prompt_type}) [Temp: {temperature}] - Attempt {attempt + 1}/{settings.MODEL_RETRY_ATTEMPTS}..."
             )
             try:
                 safety_settings = [
@@ -139,7 +130,7 @@ class NanoBananaGeneration(BaseImageGenerator):
                 # Use the model name from the central settings file.
                 response = await client.aio.models.generate_content(
                     model=settings.IMAGE_GENERATION_MODEL_NAME,
-                    contents=[final_prompt],
+                    contents=[cleaned_prompt],
                     config=generation_config,
                 )
                 # --- END: IMAGE MODEL REFACTOR ---
@@ -159,8 +150,7 @@ class NanoBananaGeneration(BaseImageGenerator):
                                 if c.isalnum() or c in " -"
                             ).replace(" ", "-")
 
-                            suffix = f"-s{seed}" if seed is not None else ""
-                            suffix += f"-t{int(temperature*10)}"
+                            suffix = f"-t{int(temperature*10)}"
 
                             image_filename = (
                                 f"{slug}-moodboard{suffix}.png"

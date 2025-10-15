@@ -62,31 +62,32 @@ class TestNanoBananaGenerationDI:
         await generator.process(run_context)
 
         mock_client.aio.models.generate_content.assert_called_once()
-        # The default filename now includes the default temp (0.7) but no seed.
         assert (run_context.results_dir / "test-jacket-t7.png").exists()
 
-    async def test_process_with_seed_and_temp_overrides(
+    # --- START: THE DEFINITIVE TEST FIX ---
+    async def test_process_with_temp_override(
         self, run_context, prompts_file, mock_client
     ):
-        """
-        Verify that seed and temperature overrides are used correctly, with the
-        seed modifying the prompt.
-        """
+        """Verify that the temperature override is used correctly."""
         generator = NanoBananaGeneration(client=mock_client)
-        await generator.process(run_context, seed_override=5, temperature_override=1.5)
+        # Call the process method with only the temperature override
+        await generator.process(run_context, temperature_override=1.5)
 
-        # --- START: THE DEFINITIVE TEST FIX ---
-        # Assert that the API was called with the prompt MODIFIED by the seed,
-        # and that the invalid 'seed' keyword argument is NOT present.
+        # Assert that the API was called with the correct parameters
         mock_client.aio.models.generate_content.assert_called_once_with(
             model=settings.IMAGE_GENERATION_MODEL_NAME,
-            contents=["a test prompt --v 5"],  # Check for the modified prompt
+            contents=["a test prompt"],
             config=ANY,
         )
-        # --- END: THE DEFINITIVE TEST FIX ---
 
-        # Assert that the filename includes both suffixes
-        assert (run_context.results_dir / "test-jacket-s5-t15.png").exists()
+        # Verify the temperature was correctly set in the config object
+        config_arg = mock_client.aio.models.generate_content.call_args.kwargs["config"]
+        assert config_arg.temperature == 1.5
+
+        # Assert that the filename includes the correct suffix
+        assert (run_context.results_dir / "test-jacket-t15.png").exists()
+
+    # --- END: THE DEFINITIVE TEST FIX ---
 
     async def test_process_does_not_create_real_client_if_injected(
         self, run_context, prompts_file, mock_client, mocker

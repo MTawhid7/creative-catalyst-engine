@@ -25,21 +25,12 @@ class JobStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-# --- START: HYBRID REGENERATION REFACTOR ---
 class ImageRegenerationRequest(BaseModel):
     """The request model for regenerating images for an existing job."""
 
-    seed: int = Field(
-        ...,
-        gt=0,
-        description="The variation seed. Increment this (1, 2, 3...) to get a new, different image.",
-    )
-    temperature: Optional[float] = Field(
-        default=None,
+    temperature: float = Field(
+        default=1.0,
         gt=0,
         le=2.0,
-        description="Optional: Override the creativity level. Higher values (e.g., 1.5) are more experimental.",
+        description="The creativity level for the new images. Higher values are more experimental.",
     )
-
-
-# --- END: HYBRID REGENERATION REFACTOR ---

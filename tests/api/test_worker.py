@@ -98,12 +98,7 @@ class TestRegenerateImagesTask:
 
     @pytest.fixture
     def setup_mocks(self, mocker, tmp_path: Path):
-        # --- START: THE DEFINITIVE FILESYSTEM FIX ---
-        # 1. Temporarily point the application's settings to our test directory.
         mocker.patch.object(settings, "RESULTS_DIR", tmp_path)
-        # --- END: THE DEFINITIVE FILESYSTEM FIX ---
-
-        # 2. Create a fake original results directory inside the temp path.
         original_dir = tmp_path / "original_run"
         original_dir.mkdir()
         (original_dir / settings.TREND_REPORT_FILENAME).write_text(
@@ -112,39 +107,38 @@ class TestRegenerateImagesTask:
         (original_dir / settings.PROMPTS_FILENAME).write_text(
             json.dumps({"data": "prompts"})
         )
-
-        # 3. Mock filesystem operations that we don't want to actually execute.
         mocker.patch("api.worker.shutil.copy")
         mocker.patch("api.worker.shutil.move")
         mocker.patch(
             "builtins.open",
             mocker.mock_open(read_data=json.dumps({"final_report": {}})),
         )
-
         return {"original_dir": original_dir}
 
+    # --- START: THE DEFINITIVE TEST FIX ---
     async def test_regenerate_images_happy_path(
         self, mock_context, mock_image_generator, setup_mocks
     ):
         """Verify the regeneration task calls the image generator with correct overrides."""
         # Arrange
         original_job_id = "original_job_456"
-        seed = 2
         temp = 1.5
         mock_context["redis"].get.return_value = str(
             setup_mocks["original_dir"]
         ).encode()
 
-        # Act
-        await regenerate_images_task(mock_context, original_job_id, seed, temp)
+        # Act: Call the task with the correct signature (no seed)
+        await regenerate_images_task(mock_context, original_job_id, temp)
 
         # Assert
         mock_context["redis"].get.assert_awaited_once_with(
             f"job_results_path:{original_job_id}"
         )
 
-        # Verify the image generator was called with the correct override parameters
+        # Verify the image generator was called with only the temperature override
         mock_image_generator.process.assert_awaited_once()
         call_kwargs = mock_image_generator.process.call_args.kwargs
-        assert call_kwargs["seed_override"] == seed
+        assert "seed_override" not in call_kwargs
         assert call_kwargs["temperature_override"] == temp
+
+    # --- END: THE DEFINITIVE TEST FIX ---

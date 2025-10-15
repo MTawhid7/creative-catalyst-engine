@@ -42,31 +42,24 @@ async def regenerate_images(
     regen_request: ImageRegenerationRequest,
     http_request: Request,
 ) -> JobResponse:
-    """
-    Submits a new, lightweight job to regenerate only the images for a
-    previously completed creative report, using a new seed and optional temperature.
-    """
     redis: ArqRedis = http_request.app.state.redis
     if not await redis.exists(f"job_results_path:{original_job_id}"):
         raise HTTPException(
-            status_code=fastapi_status.HTTP_404_NOT_FOUND,
-            detail=f"No completed job found with ID '{original_job_id}'. Cannot regenerate images.",
+            status_code=404,
+            detail=f"No completed job found with ID '{original_job_id}'.",
         )
 
-    # Enqueue the new task with both seed and temperature
+    # Enqueue the task with only temperature
     job = await redis.enqueue_job(
         "regenerate_images_task",
         original_job_id,
-        regen_request.seed,
         regen_request.temperature,
     )
 
     if not job:
-        raise HTTPException(
-            status_code=500, detail="Failed to enqueue the image regeneration job."
-        )
+        raise HTTPException(status_code=500, detail="Failed to enqueue job.")
     logger.info(
-        f"Enqueued image regeneration for job '{original_job_id}' with new job ID '{job.job_id}', seed {regen_request.seed}, and temperature {regen_request.temperature or 'default'}."
+        f"Enqueued image regeneration for job '{original_job_id}' with new job ID '{job.job_id}' and temp {regen_request.temperature}."
     )
     return JobResponse(job_id=job.job_id, status="queued")
 

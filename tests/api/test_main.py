@@ -44,42 +44,43 @@ class TestJobSubmissionEndpoint:
                 "create_creative_report", payload["user_passage"], expected_seed
             )
 
-    # --- START: NEW TEST FOR REGENERATION ENDPOINT ---
+    # --- START: THE DEFINITIVE TEST FIX ---
     def test_regenerate_images_success(self, mock_arq_redis: AsyncMock, mocker):
         """Verify the regeneration endpoint enqueues the correct task and arguments."""
         mocker.patch("api.main.create_pool", return_value=mock_arq_redis)
-        mock_arq_redis.exists.return_value = True  # Simulate original job exists
+        mock_arq_redis.exists.return_value = True
         mock_job = MagicMock(job_id="regen_job_789")
         mock_arq_redis.enqueue_job.return_value = mock_job
 
         with TestClient(app) as client:
+            # The payload should only contain temperature now.
             response = client.post(
                 "/v1/creative-jobs/original_job_456/regenerate-images",
-                json={"seed": 2, "temperature": 1.5},
+                json={"temperature": 1.5},
             )
             assert response.status_code == 202
             assert response.json()["job_id"] == "regen_job_789"
 
-            # Verify the correct task and arguments were enqueued
+            # The enqueued task should only have the temperature argument.
             mock_arq_redis.enqueue_job.assert_awaited_once_with(
                 "regenerate_images_task",
                 "original_job_456",
-                2,
                 1.5,
             )
+
+    # --- END: THE DEFINITIVE TEST FIX ---
 
     def test_regenerate_images_job_not_found(self, mock_arq_redis: AsyncMock, mocker):
         """Verify a 404 is returned if the original job does not exist."""
         mocker.patch("api.main.create_pool", return_value=mock_arq_redis)
-        mock_arq_redis.exists.return_value = False  # Simulate original job NOT found
+        mock_arq_redis.exists.return_value = False
 
         with TestClient(app) as client:
             response = client.post(
-                "/v1/creative-jobs/nonexistent_job/regenerate-images", json={"seed": 1}
+                "/v1/creative-jobs/nonexistent_job/regenerate-images",
+                json={"temperature": 1.0},
             )
             assert response.status_code == 404
-
-    # --- END: NEW TEST FOR REGENERATION ENDPOINT ---
 
     def test_submit_job_failure(self, mock_arq_redis: AsyncMock, mocker):
         mocker.patch("api.main.create_pool", return_value=mock_arq_redis)
